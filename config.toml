@@ -1,0 +1,13 @@
+# Duck Client Configuration
+
+# The current version of the deployed service.
+current_version = "0.1.0"
+
+# The URL to the master manifest.json file on the update server.
+manifest_url = "http://127.0.0.1:8000/manifest.json"
+
+# The root directory for the docker-compose project.
+docker_dir = "./docker"
+
+# The directory where backups will be stored.
+backup_storage_dir = "./backups"

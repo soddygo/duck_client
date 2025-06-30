@@ -1,15 +1,13 @@
+pub mod api;
+pub mod api_config;
+pub mod backup;
 pub mod config;
 pub mod config_manager;
 pub mod constants;
+pub mod container;
 pub mod database;
 pub mod db;
-pub mod api;
-pub mod api_config;
-pub mod container;
-pub mod backup;
-pub mod upgrade;
 pub mod error;
+pub mod upgrade;
 
-pub use error::{Result, DuckError};
-
- 
+pub use error::{DuckError, Result};

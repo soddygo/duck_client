@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use std::fs;
+use crate::constants::{backup, config, docker, updates, version};
 use crate::error::Result;
-use crate::constants::{docker, backup, config, version, updates};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 use toml;
 
 /// 应用配置结构
@@ -58,11 +58,17 @@ impl Default for AppConfig {
                 compose_file: docker::get_compose_file_path_str(),
             },
             backup: BackupConfig {
-                storage_dir: backup::get_default_storage_dir().to_string_lossy().to_string(),
+                storage_dir: backup::get_default_storage_dir()
+                    .to_string_lossy()
+                    .to_string(),
             },
             cache: CacheConfig {
-                cache_dir: config::get_default_cache_dir().to_string_lossy().to_string(),
-                download_dir: config::get_default_download_dir().to_string_lossy().to_string(),
+                cache_dir: config::get_default_cache_dir()
+                    .to_string_lossy()
+                    .to_string(),
+                download_dir: config::get_default_download_dir()
+                    .to_string_lossy()
+                    .to_string(),
             },
             updates: UpdatesConfig {
                 check_frequency: updates::DEFAULT_CHECK_FREQUENCY.to_string(),
@@ -75,19 +81,15 @@ impl AppConfig {
     /// 智能查找并加载配置文件
     /// 按优先级查找：config.toml -> duck-client.toml -> .duck-client.toml
     pub fn find_and_load_config() -> Result<Self> {
-        let config_files = [
-            "config.toml",
-            "duck-client.toml", 
-            ".duck-client.toml"
-        ];
-        
+        let config_files = ["config.toml", "duck-client.toml", ".duck-client.toml"];
+
         for config_file in &config_files {
             if Path::new(config_file).exists() {
                 tracing::info!("找到配置文件: {}", config_file);
                 return Self::load_from_file(config_file);
             }
         }
-        
+
         // 如果没找到配置文件，创建默认配置
         tracing::warn!("未找到配置文件，创建默认配置: config.toml");
         let default_config = Self::default();
@@ -99,7 +101,7 @@ impl AppConfig {
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = fs::read_to_string(&path)?;
         let config: AppConfig = toml::from_str(&content)?;
-        
+
         Ok(config)
     }
 
@@ -113,7 +115,7 @@ impl AppConfig {
     /// 生成带注释的TOML配置
     fn to_toml_with_comments(&self) -> String {
         const TEMPLATE: &str = include_str!("../templates/config.toml.template");
-        
+
         TEMPLATE
             .replace("{client_version}", &self.versions.client)
             .replace("{docker_service_version}", &self.versions.docker_service)
@@ -144,12 +146,22 @@ impl AppConfig {
     }
 
     /// 获取指定版本的全量下载文件路径
-    pub fn get_version_download_file_path(&self, version: &str, download_type: &str, filename: &str) -> PathBuf {
-        self.get_version_download_dir(version, download_type).join(filename)
+    pub fn get_version_download_file_path(
+        &self,
+        version: &str,
+        download_type: &str,
+        filename: &str,
+    ) -> PathBuf {
+        self.get_version_download_dir(version, download_type)
+            .join(filename)
     }
 
     /// 确保指定版本的下载目录存在
-    pub fn ensure_version_download_dir(&self, version: &str, download_type: &str) -> Result<PathBuf> {
+    pub fn ensure_version_download_dir(
+        &self,
+        version: &str,
+        download_type: &str,
+    ) -> Result<PathBuf> {
         let dir = self.get_version_download_dir(version, download_type);
         fs::create_dir_all(&dir)?;
         Ok(dir)
@@ -160,4 +172,3 @@ impl AppConfig {
         PathBuf::from(&self.backup.storage_dir)
     }
 }
-

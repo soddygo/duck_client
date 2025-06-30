@@ -1,15 +1,12 @@
-use std::path::PathBuf;
 use client_core::{
-    api::ApiClient,
-    backup::BackupManager,
-    config::AppConfig,
-    database::Database,
-    container::DockerManager,
-    error::Result,
-    upgrade::UpgradeManager,
+    api::ApiClient, backup::BackupManager, config::AppConfig, container::DockerManager,
+    database::Database, error::Result, upgrade::UpgradeManager,
 };
+use std::path::PathBuf;
 
-use crate::cli::{Commands, DockerServiceCommand, AutoBackupCommand, AutoUpgradeDeployCommand, CheckUpdateCommand};
+use crate::cli::{
+    AutoBackupCommand, AutoUpgradeDeployCommand, CheckUpdateCommand, Commands, DockerServiceCommand,
+};
 use crate::commands;
 use tracing::info;
 
@@ -71,13 +68,13 @@ impl CliApp {
             Commands::ApiInfo => commands::run_api_info(self).await,
             Commands::Init { .. } => unreachable!(), // 已经在 main.rs 中处理
             Commands::CheckUpdate(check_update_cmd) => {
-                commands::handle_check_update_command(check_update_cmd).await.map_err(|e| {
-                    client_core::error::DuckError::custom(format!("检查更新失败: {}", e))
-                })
-            },
-            Commands::Upgrade { full, force } => {
-                commands::run_upgrade(self, full, force).await
+                commands::handle_check_update_command(check_update_cmd)
+                    .await
+                    .map_err(|e| {
+                        client_core::error::DuckError::custom(format!("检查更新失败: {}", e))
+                    })
             }
+            Commands::Upgrade { full, force } => commands::run_upgrade(self, full, force).await,
             Commands::Backup => commands::run_backup(self).await,
             Commands::ListBackups => commands::run_list_backups(self).await,
             Commands::Rollback { backup_id, force } => {
@@ -86,9 +83,7 @@ impl CliApp {
             Commands::DockerService(docker_cmd) => {
                 self.run_docker_service_command(docker_cmd).await
             }
-            Commands::Ducker { args } => {
-                commands::run_ducker(args).await
-            }
+            Commands::Ducker { args } => commands::run_ducker(args).await,
             Commands::AutoBackup(auto_backup_cmd) => {
                 self.run_auto_backup_command(auto_backup_cmd).await
             }
@@ -163,7 +158,10 @@ impl CliApp {
     }
 
     /// 运行自动升级部署相关命令
-    async fn run_auto_upgrade_deploy_command(&mut self, cmd: AutoUpgradeDeployCommand) -> Result<()> {
+    async fn run_auto_upgrade_deploy_command(
+        &mut self,
+        cmd: AutoUpgradeDeployCommand,
+    ) -> Result<()> {
         match cmd {
             AutoUpgradeDeployCommand::Run => {
                 info!("🚀 开始自动升级部署流程...");
@@ -179,4 +177,4 @@ impl CliApp {
             }
         }
     }
-} 
+}

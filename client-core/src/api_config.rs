@@ -1,7 +1,7 @@
+use crate::constants::api;
+use serde::{Deserialize, Serialize};
 /// API配置模块 - 内置服务器端点配置
 use std::fmt;
-use serde::{Deserialize, Serialize};
-use crate::constants::api;
 
 /// API端点配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +43,8 @@ impl Default for ApiConfig {
                 docker_check_version: api::endpoints::DOCKER_CHECK_VERSION.to_string(),
                 docker_update_version_list: api::endpoints::DOCKER_UPDATE_VERSION_LIST.to_string(),
                 docker_download_full: api::endpoints::DOCKER_DOWNLOAD_FULL.to_string(),
-                client_self_upgrade_history: api::endpoints::CLIENT_SELF_UPGRADE_HISTORY.to_string(),
+                client_self_upgrade_history: api::endpoints::CLIENT_SELF_UPGRADE_HISTORY
+                    .to_string(),
                 service_upgrade_history: api::endpoints::SERVICE_UPGRADE_HISTORY.to_string(),
                 telemetry: api::endpoints::TELEMETRY.to_string(),
             },
@@ -61,34 +62,36 @@ impl ApiConfig {
     pub fn get_client_register_url(&self) -> String {
         self.get_endpoint_url(&self.endpoints.client_register)
     }
-    
+
     /// 获取公告列表完整URL
     pub fn get_announcements_url(&self) -> String {
         self.get_endpoint_url(&self.endpoints.announcements)
     }
-    
+
     /// 获取Docker版本检查完整URL
     pub fn get_docker_check_version_url(&self) -> String {
         self.get_endpoint_url(&self.endpoints.docker_check_version)
     }
-    
+
     /// 获取Docker版本列表更新完整URL
     pub fn get_docker_update_version_list_url(&self) -> String {
         self.get_endpoint_url(&self.endpoints.docker_update_version_list)
     }
-    
+
     /// 获取Docker完整服务包下载完整URL
     pub fn get_docker_download_full_url(&self) -> String {
         self.get_endpoint_url(&self.endpoints.docker_download_full)
     }
-    
+
     /// 获取服务升级历史完整URL（替换service_name占位符）
     pub fn get_service_upgrade_history_url(&self, service_name: &str) -> String {
-        let endpoint = self.endpoints.service_upgrade_history
+        let endpoint = self
+            .endpoints
+            .service_upgrade_history
             .replace("{service_name}", service_name);
         self.get_endpoint_url(&endpoint)
     }
-    
+
     /// 获取遥测数据上报完整URL
     pub fn get_telemetry_url(&self) -> String {
         self.get_endpoint_url(&self.endpoints.telemetry)
@@ -118,4 +121,4 @@ impl fmt::Display for ApiConfig {
         }
         Ok(())
     }
-} 
+}

@@ -1,7 +1,7 @@
 use crate::{
-    database::{BackupRecord, BackupStatus, BackupType, Database},
+    DuckError, Result,
     container::DockerManager,
-    Result, DuckError,
+    database::{BackupRecord, BackupStatus, BackupType, Database},
 };
 use chrono::Utc;
 use std::path::{Path, PathBuf};
@@ -39,7 +39,11 @@ pub struct RestoreOptions {
 
 impl BackupManager {
     /// 创建新的备份管理器
-    pub fn new(storage_dir: PathBuf, database: Database, docker_manager: DockerManager) -> Result<Self> {
+    pub fn new(
+        storage_dir: PathBuf,
+        database: Database,
+        docker_manager: DockerManager,
+    ) -> Result<Self> {
         if !storage_dir.exists() {
             std::fs::create_dir_all(&storage_dir)?;
         }
@@ -69,45 +73,57 @@ impl BackupManager {
             BackupType::Manual => "manual",
             BackupType::PreUpgrade => "pre-upgrade",
         };
-        
+
         let backup_filename = format!(
             "backup_{}_v{}_{}.tar.gz",
-            backup_type_str,
-            options.service_version,
-            timestamp
+            backup_type_str, options.service_version, timestamp
         );
-        
+
         let backup_path = self.storage_dir.join(&backup_filename);
 
         tracing::info!("开始创建备份: {}", backup_path.display());
 
         // 执行备份
-        match self.perform_backup(&options.source_dirs, &backup_path, options.compression_level).await {
+        match self
+            .perform_backup(
+                &options.source_dirs,
+                &backup_path,
+                options.compression_level,
+            )
+            .await
+        {
             Ok(_) => {
                 tracing::info!("备份创建成功: {}", backup_path.display());
-                
+
                 // 记录到数据库
-                let record_id = self.database.create_backup_record(
-                    backup_path.to_string_lossy().to_string(),
-                    options.service_version,
-                    options.backup_type,
-                    BackupStatus::Completed,
-                ).await?;
+                let record_id = self
+                    .database
+                    .create_backup_record(
+                        backup_path.to_string_lossy().to_string(),
+                        options.service_version,
+                        options.backup_type,
+                        BackupStatus::Completed,
+                    )
+                    .await?;
 
                 // 获取创建的记录
-                self.database.get_backup_by_id(record_id).await?
+                self.database
+                    .get_backup_by_id(record_id)
+                    .await?
                     .ok_or_else(|| DuckError::Backup("无法获取刚创建的备份记录".to_string()))
             }
             Err(e) => {
                 tracing::error!("备份创建失败: {}", e);
-                
+
                 // 记录失败到数据库
-                self.database.create_backup_record(
-                    backup_path.to_string_lossy().to_string(),
-                    options.service_version,
-                    options.backup_type,
-                    BackupStatus::Failed,
-                ).await?;
+                self.database
+                    .create_backup_record(
+                        backup_path.to_string_lossy().to_string(),
+                        options.service_version,
+                        options.backup_type,
+                        BackupStatus::Failed,
+                    )
+                    .await?;
 
                 Err(e)
             }
@@ -121,8 +137,8 @@ impl BackupManager {
         backup_path: &Path,
         compression_level: u32,
     ) -> Result<()> {
-        use flate2::write::GzEncoder;
         use flate2::Compression;
+        use flate2::write::GzEncoder;
         use std::fs::File;
         use tar::Builder;
 
@@ -134,7 +150,7 @@ impl BackupManager {
         // 在后台线程中执行压缩操作，避免阻塞异步运行时
         let source_dirs = source_dirs.to_vec();
         let backup_path = backup_path.to_path_buf();
-        
+
         tokio::task::spawn_blocking(move || {
             let file = File::create(&backup_path)?;
             let compression = Compression::new(compression_level);
@@ -143,50 +159,59 @@ impl BackupManager {
 
             // 遍历所有源目录并添加到归档中
             for source_dir in &source_dirs {
-                let dir_name = source_dir.file_name()
+                let dir_name = source_dir
+                    .file_name()
                     .ok_or_else(|| DuckError::Backup("无法获取目录名".to_string()))?
                     .to_string_lossy();
-                
+
                 for entry in WalkDir::new(source_dir) {
-                    let entry = entry.map_err(|e| DuckError::Backup(format!("遍历目录失败: {}", e)))?;
+                    let entry =
+                        entry.map_err(|e| DuckError::Backup(format!("遍历目录失败: {}", e)))?;
                     let path = entry.path();
-                    
+
                     if path.is_file() {
-                        let relative_path = path.strip_prefix(source_dir)
+                        let relative_path = path
+                            .strip_prefix(source_dir)
                             .map_err(|e| DuckError::Backup(format!("计算相对路径失败: {}", e)))?;
-                        
+
                         // 在归档中保持目录结构：{dir_name}/{relative_path}
                         // 注意：tar归档内部使用Unix风格路径（/）是标准做法，跨平台兼容
                         let archive_path = if cfg!(windows) {
                             // 在Windows上，确保使用Unix风格的路径分隔符用于tar归档
-                            format!("{}/{}", dir_name, relative_path.display().to_string().replace('\\', "/"))
+                            format!(
+                                "{}/{}",
+                                dir_name,
+                                relative_path.display().to_string().replace('\\', "/")
+                            )
                         } else {
                             format!("{}/{}", dir_name, relative_path.display())
                         };
-                        
-                        archive.append_path_with_name(path, archive_path)
+
+                        archive
+                            .append_path_with_name(path, archive_path)
                             .map_err(|e| DuckError::Backup(format!("添加文件到归档失败: {}", e)))?;
                     }
                 }
             }
 
-            archive.finish()
+            archive
+                .finish()
                 .map_err(|e| DuckError::Backup(format!("完成归档失败: {}", e)))?;
 
             Ok::<(), DuckError>(())
-        }).await??;
+        })
+        .await??;
 
         Ok(())
     }
 
     /// 从备份恢复
-    pub async fn restore_from_backup(
-        &self,
-        backup_id: i64,
-        options: RestoreOptions,
-    ) -> Result<()> {
+    pub async fn restore_from_backup(&self, backup_id: i64, options: RestoreOptions) -> Result<()> {
         // 获取备份记录
-        let backup_record = self.database.get_backup_by_id(backup_id).await?
+        let backup_record = self
+            .database
+            .get_backup_by_id(backup_id)
+            .await?
             .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {}", backup_id)))?;
 
         let backup_path = PathBuf::from(&backup_record.file_path);
@@ -206,7 +231,10 @@ impl BackupManager {
         // 检查目标目录
         if options.target_dir.exists() {
             if options.force_overwrite {
-                tracing::warn!("目标目录 {} 已存在，将被清空和覆盖。", options.target_dir.display());
+                tracing::warn!(
+                    "目标目录 {} 已存在，将被清空和覆盖。",
+                    options.target_dir.display()
+                );
                 tokio::fs::remove_dir_all(&options.target_dir).await?;
             } else {
                 return Err(DuckError::Backup(
@@ -214,10 +242,11 @@ impl BackupManager {
                 ));
             }
         }
-        
+
         // 执行恢复
-        self.perform_restore(&backup_path, &options.target_dir).await?;
-        
+        self.perform_restore(&backup_path, &options.target_dir)
+            .await?;
+
         // 启动服务
         tracing::info!("恢复完成，正在启动服务...");
         self.docker_manager.start_services().await?;
@@ -244,11 +273,13 @@ impl BackupManager {
             let decoder = GzDecoder::new(file);
             let mut archive = Archive::new(decoder);
 
-            archive.unpack(&target_dir)
+            archive
+                .unpack(&target_dir)
                 .map_err(|e| DuckError::Backup(format!("解压归档失败: {}", e)))?;
 
             Ok::<(), DuckError>(())
-        }).await??;
+        })
+        .await??;
 
         Ok(())
     }
@@ -261,7 +292,10 @@ impl BackupManager {
     /// 删除备份
     pub async fn delete_backup(&self, backup_id: i64) -> Result<()> {
         // 获取备份记录
-        let backup_record = self.database.get_backup_by_id(backup_id).await?
+        let backup_record = self
+            .database
+            .get_backup_by_id(backup_id)
+            .await?
             .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {}", backup_id)))?;
 
         let backup_path = PathBuf::from(&backup_record.file_path);
@@ -280,7 +314,10 @@ impl BackupManager {
 
     /// 获取备份文件大小
     pub async fn get_backup_size(&self, backup_id: i64) -> Result<u64> {
-        let backup_record = self.database.get_backup_by_id(backup_id).await?
+        let backup_record = self
+            .database
+            .get_backup_by_id(backup_id)
+            .await?
             .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {}", backup_id)))?;
 
         let backup_path = PathBuf::from(&backup_record.file_path);
@@ -297,7 +334,10 @@ impl BackupManager {
 
     /// 验证备份文件完整性
     pub async fn verify_backup(&self, backup_id: i64) -> Result<bool> {
-        let backup_record = self.database.get_backup_by_id(backup_id).await?
+        let backup_record = self
+            .database
+            .get_backup_by_id(backup_id)
+            .await?
             .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {}", backup_id)))?;
 
         let backup_path = PathBuf::from(&backup_record.file_path);
@@ -323,7 +363,8 @@ impl BackupManager {
             }
 
             Ok::<bool, DuckError>(true)
-        }).await??;
+        })
+        .await??;
 
         Ok(result)
     }
@@ -349,19 +390,23 @@ impl BackupManager {
         for backup in backups {
             let old_path = PathBuf::from(&backup.file_path);
             if old_path.exists() {
-                let filename = old_path.file_name()
+                let filename = old_path
+                    .file_name()
                     .ok_or_else(|| DuckError::Backup("无法获取备份文件名".to_string()))?;
                 let new_path = new_storage_dir.join(filename);
 
                 // 移动文件
                 tokio::fs::rename(&old_path, &new_path).await?;
-                tracing::info!("迁移备份文件: {} -> {}", old_path.display(), new_path.display());
+                tracing::info!(
+                    "迁移备份文件: {} -> {}",
+                    old_path.display(),
+                    new_path.display()
+                );
 
                 // 更新数据库中的路径
-                self.database.update_backup_file_path(
-                    backup.id, 
-                    new_path.to_string_lossy().to_string()
-                ).await?;
+                self.database
+                    .update_backup_file_path(backup.id, new_path.to_string_lossy().to_string())
+                    .await?;
             }
         }
 
@@ -377,10 +422,10 @@ impl BackupManager {
     /// 估算目录大小
     pub async fn estimate_backup_size(&self, source_dir: &Path) -> Result<u64> {
         let source_dir = source_dir.to_path_buf();
-        
+
         let total_size = tokio::task::spawn_blocking(move || {
             let mut total = 0u64;
-            
+
             for entry in WalkDir::new(&source_dir) {
                 if let Ok(entry) = entry {
                     if entry.path().is_file() {
@@ -390,12 +435,12 @@ impl BackupManager {
                     }
                 }
             }
-            
+
             total
-        }).await?;
+        })
+        .await?;
 
         // 考虑压缩率，估算压缩后大小约为原大小的 30-50%
         Ok(total_size / 2)
     }
 }
-

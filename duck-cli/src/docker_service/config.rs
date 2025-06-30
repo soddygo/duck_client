@@ -8,4 +8,4 @@ impl DockerServiceConfig {
     pub fn new() -> Self {
         Self
     }
-} 
+}

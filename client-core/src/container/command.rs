@@ -1,5 +1,5 @@
-use crate::{Result, DuckError};
 use super::types::DockerManager;
+use crate::{DuckError, Result};
 use std::process::Stdio;
 use tokio::process::Command;
 
@@ -35,11 +35,16 @@ impl DockerManager {
         self.check_docker_status().await?;
 
         // 检查 docker-compose 或 docker compose 命令
-        let compose_available = which::which("docker-compose").is_ok() || 
-            self.run_docker_command(&["compose", "--version"]).await.is_ok();
+        let compose_available = which::which("docker-compose").is_ok()
+            || self
+                .run_docker_command(&["compose", "--version"])
+                .await
+                .is_ok();
 
         if !compose_available {
-            return Err(DuckError::Docker("Docker Compose 未安装或不可用".to_string()));
+            return Err(DuckError::Docker(
+                "Docker Compose 未安装或不可用".to_string(),
+            ));
         }
 
         Ok(())
@@ -61,7 +66,7 @@ impl DockerManager {
         let compose_path = self.compose_file.to_string_lossy().to_string();
         let mut cmd_args = vec!["compose", "-f", &compose_path];
         cmd_args.extend(args);
-        
+
         self.run_docker_command(&cmd_args).await
     }
 
@@ -92,4 +97,4 @@ impl DockerManager {
 
         Ok(output)
     }
-} 
+}

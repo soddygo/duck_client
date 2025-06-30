@@ -1,6 +1,6 @@
-use std::path::PathBuf;
-use clap::{Parser, Subcommand};
 use crate::project_info::{metadata, version_info};
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 /// 自动备份相关命令
 #[derive(Subcommand, Debug)]
@@ -34,7 +34,11 @@ pub enum AutoUpgradeDeployCommand {
         #[arg(help = "延迟时间数值，例如 2")]
         time: u32,
         /// 时间单位 (hours, minutes, days)
-        #[arg(long, default_value = "hours", help = "时间单位：hours(小时), minutes(分钟), days(天)")]
+        #[arg(
+            long,
+            default_value = "hours",
+            help = "时间单位：hours(小时), minutes(分钟), days(天)"
+        )]
         unit: String,
     },
     /// 显示当前自动升级配置
@@ -156,4 +160,4 @@ pub enum Commands {
     /// 自动升级部署
     #[command(subcommand)]
     AutoUpgradeDeploy(AutoUpgradeDeployCommand),
-} 
+}

@@ -18,7 +18,7 @@ impl Architecture {
             Architecture::Arm64 => "arm64",
         }
     }
-    
+
     /// 获取架构的显示名称
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -26,7 +26,7 @@ impl Architecture {
             Architecture::Arm64 => "ARM64 (AArch64)",
         }
     }
-    
+
     /// 从字符串解析架构
     pub fn from_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
@@ -47,7 +47,7 @@ impl std::fmt::Display for Architecture {
 pub fn detect_architecture() -> Architecture {
     let arch = std::env::consts::ARCH;
     info!("检测到系统架构: {}", arch);
-    
+
     let detected = match arch {
         "x86_64" => Architecture::Amd64,
         "aarch64" => Architecture::Arm64,
@@ -56,7 +56,7 @@ pub fn detect_architecture() -> Architecture {
             Architecture::Amd64
         }
     };
-    
+
     info!("映射到支持的架构: {}", detected.display_name());
     detected
 }
@@ -77,16 +77,20 @@ pub fn get_image_pattern(arch: Architecture) -> String {
 }
 
 /// 检查指定架构的镜像文件是否存在
-pub fn check_architecture_images_exist(images_dir: &std::path::Path, arch: Architecture) -> DockerServiceResult<Vec<std::path::PathBuf>> {
+pub fn check_architecture_images_exist(
+    images_dir: &std::path::Path,
+    arch: Architecture,
+) -> DockerServiceResult<Vec<std::path::PathBuf>> {
     if !images_dir.exists() {
-        return Err(DockerServiceError::FileSystem(
-            format!("镜像目录不存在: {}", images_dir.display())
-        ));
+        return Err(DockerServiceError::FileSystem(format!(
+            "镜像目录不存在: {}",
+            images_dir.display()
+        )));
     }
-    
+
     let pattern = get_image_pattern(arch);
     let mut found_images = Vec::new();
-    
+
     // 扫描目录查找匹配的镜像文件
     if let Ok(entries) = std::fs::read_dir(images_dir) {
         for entry in entries.flatten() {
@@ -101,46 +105,57 @@ pub fn check_architecture_images_exist(images_dir: &std::path::Path, arch: Archi
             }
         }
     }
-    
+
     if found_images.is_empty() {
-        warn!("未找到架构 {} 的镜像文件 (模式: {})", arch.display_name(), pattern);
+        warn!(
+            "未找到架构 {} 的镜像文件 (模式: {})",
+            arch.display_name(),
+            pattern
+        );
     } else {
-        info!("找到 {} 个架构 {} 的镜像文件", found_images.len(), arch.display_name());
+        info!(
+            "找到 {} 个架构 {} 的镜像文件",
+            found_images.len(),
+            arch.display_name()
+        );
     }
-    
+
     Ok(found_images)
 }
 
 /// 获取所有可用架构的镜像文件统计
-pub fn get_available_architectures(images_dir: &std::path::Path) -> DockerServiceResult<std::collections::HashMap<Architecture, Vec<std::path::PathBuf>>> {
+pub fn get_available_architectures(
+    images_dir: &std::path::Path,
+) -> DockerServiceResult<std::collections::HashMap<Architecture, Vec<std::path::PathBuf>>> {
     let mut result = std::collections::HashMap::new();
-    
+
     for &arch in &[Architecture::Amd64, Architecture::Arm64] {
         let images = check_architecture_images_exist(images_dir, arch)?;
         if !images.is_empty() {
             result.insert(arch, images);
         }
     }
-    
+
     if result.is_empty() {
-        return Err(DockerServiceError::ArchitectureDetection(
-            format!("在目录 {} 中未找到任何支持架构的镜像文件", images_dir.display())
-        ));
+        return Err(DockerServiceError::ArchitectureDetection(format!(
+            "在目录 {} 中未找到任何支持架构的镜像文件",
+            images_dir.display()
+        )));
     }
-    
+
     info!("可用架构统计:");
     for (arch, images) in &result {
         info!("  {} -> {} 个镜像文件", arch.display_name(), images.len());
     }
-    
+
     Ok(result)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn test_architecture_from_str() {
@@ -176,10 +191,12 @@ mod tests {
         fs::write(images_dir.join("another-amd64.tar"), b"fake image").unwrap();
         fs::write(images_dir.join("service-arm64.tar"), b"fake image").unwrap();
 
-        let amd64_images = check_architecture_images_exist(&images_dir, Architecture::Amd64).unwrap();
+        let amd64_images =
+            check_architecture_images_exist(&images_dir, Architecture::Amd64).unwrap();
         assert_eq!(amd64_images.len(), 2);
 
-        let arm64_images = check_architecture_images_exist(&images_dir, Architecture::Arm64).unwrap();
+        let arm64_images =
+            check_architecture_images_exist(&images_dir, Architecture::Arm64).unwrap();
         assert_eq!(arm64_images.len(), 1);
     }
-} 
+}

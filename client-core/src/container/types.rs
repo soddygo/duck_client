@@ -27,4 +27,4 @@ pub struct ServiceConfig {
 #[derive(Debug, Clone)]
 pub struct DockerManager {
     pub(crate) compose_file: PathBuf,
-} 
+}

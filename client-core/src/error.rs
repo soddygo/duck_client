@@ -99,4 +99,4 @@ impl DuckError {
     pub fn docker_service(msg: impl Into<String>) -> Self {
         Self::DockerService(msg.into())
     }
-} 
+}

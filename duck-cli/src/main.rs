@@ -1,6 +1,6 @@
 use clap::Parser;
 use client_core::DuckError;
-use duck_cli::{run_init, setup_logging, Cli, CliApp, Commands};
+use duck_cli::{Cli, CliApp, Commands, run_init, setup_logging};
 use std::error::Error;
 use tracing::error;
 
@@ -30,7 +30,7 @@ async fn main() {
             let mut is_config_not_found = false;
             while let Some(err) = source {
                 if err.downcast_ref::<DuckError>().is_some() {
-                     if let Some(DuckError::ConfigNotFound) = err.downcast_ref::<DuckError>() {
+                    if let Some(DuckError::ConfigNotFound) = err.downcast_ref::<DuckError>() {
                         is_config_not_found = true;
                         break;
                     }

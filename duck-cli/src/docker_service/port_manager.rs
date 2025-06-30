@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use std::net::{TcpListener, SocketAddr};
-use std::path::Path;
 use super::error::{DockerServiceError, DockerServiceResult};
 use serde_yaml::Value;
-use tracing::{info, warn, error};
+use std::collections::HashMap;
+use std::net::{SocketAddr, TcpListener};
+use std::path::Path;
+use tracing::{error, info, warn};
 
 /// 端口映射信息
 #[derive(Debug, Clone)]
@@ -54,14 +54,14 @@ impl PortManager {
             reserved_ports: Vec::new(),
         }
     }
-    
+
     /// 检查端口是否可用（实际检测系统端口占用）
     pub fn is_port_available(&self, port: u16) -> bool {
         // 检查是否在保留端口列表中
         if self.reserved_ports.contains(&port) {
             return false;
         }
-        
+
         // 先检查 0.0.0.0（所有接口），这是最严格的检查
         // 如果能绑定 0.0.0.0，说明端口确实可用
         match TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))) {
@@ -89,7 +89,7 @@ impl PortManager {
             }
         }
     }
-    
+
     /// 获取可用端口
     pub fn get_available_port(&self, preferred_port: u16) -> DockerServiceResult<u16> {
         if self.is_port_available(preferred_port) {
@@ -101,57 +101,69 @@ impl PortManager {
                     return Ok(port);
                 }
             }
-            Err(DockerServiceError::Configuration(
-                format!("无法找到从 {} 开始的可用端口", preferred_port)
-            ))
+            Err(DockerServiceError::Configuration(format!(
+                "无法找到从 {} 开始的可用端口",
+                preferred_port
+            )))
         }
     }
-    
+
     /// 保留端口
     pub fn reserve_port(&mut self, port: u16) {
         if !self.reserved_ports.contains(&port) {
             self.reserved_ports.push(port);
         }
     }
-    
+
     /// 从docker-compose.yml文件中解析端口映射
-    pub async fn parse_compose_ports(&self, compose_file_path: &Path) -> DockerServiceResult<Vec<PortMapping>> {
-        let content = std::fs::read_to_string(compose_file_path)
-            .map_err(|e| DockerServiceError::Configuration(
-                format!("无法读取docker-compose文件 {}: {}", compose_file_path.display(), e)
-            ))?;
-        
-        let yaml: Value = serde_yaml::from_str(&content)
-            .map_err(|e| DockerServiceError::Configuration(
-                format!("解析docker-compose文件失败: {}", e)
-            ))?;
-        
+    pub async fn parse_compose_ports(
+        &self,
+        compose_file_path: &Path,
+    ) -> DockerServiceResult<Vec<PortMapping>> {
+        let content = std::fs::read_to_string(compose_file_path).map_err(|e| {
+            DockerServiceError::Configuration(format!(
+                "无法读取docker-compose文件 {}: {}",
+                compose_file_path.display(),
+                e
+            ))
+        })?;
+
+        let yaml: Value = serde_yaml::from_str(&content).map_err(|e| {
+            DockerServiceError::Configuration(format!("解析docker-compose文件失败: {}", e))
+        })?;
+
         let mut port_mappings = Vec::new();
-        
+
         if let Some(services) = yaml.get("services").and_then(|s| s.as_mapping()) {
             for (service_name, service_config) in services {
                 let service_name = service_name.as_str().unwrap_or("unknown").to_string();
-                
+
                 if let Some(ports) = service_config.get("ports").and_then(|p| p.as_sequence()) {
                     for port_def in ports {
-                        if let Some(port_mapping) = self.parse_port_definition(port_def, &service_name)? {
+                        if let Some(port_mapping) =
+                            self.parse_port_definition(port_def, &service_name)?
+                        {
                             port_mappings.push(port_mapping);
                         }
                     }
                 }
             }
         }
-        
+
         Ok(port_mappings)
     }
-    
+
     /// 解析单个端口定义
-    fn parse_port_definition(&self, port_def: &Value, service_name: &str) -> DockerServiceResult<Option<PortMapping>> {
+    fn parse_port_definition(
+        &self,
+        port_def: &Value,
+        service_name: &str,
+    ) -> DockerServiceResult<Option<PortMapping>> {
         match port_def {
             Value::String(port_str) => {
                 // 格式: "8080:80" 或 "127.0.0.1:8080:80" 或 "8080:80/tcp"
                 let port_str = port_str.trim();
-                
+
                 // 提取协议
                 let (port_part, protocol) = if port_str.contains('/') {
                     let parts: Vec<&str> = port_str.split('/').collect();
@@ -159,21 +171,25 @@ impl PortManager {
                 } else {
                     (port_str, "tcp".to_string())
                 };
-                
+
                 // 解析端口映射
                 let ports: Vec<&str> = port_part.split(':').collect();
                 match ports.len() {
                     2 => {
                         // "8080:80"
-                        let host_port = ports[0].parse::<u16>()
-                            .map_err(|_| DockerServiceError::Configuration(
-                                format!("无效的主机端口: {}", ports[0])
-                            ))?;
-                        let container_port = ports[1].parse::<u16>()
-                            .map_err(|_| DockerServiceError::Configuration(
-                                format!("无效的容器端口: {}", ports[1])
-                            ))?;
-                        
+                        let host_port = ports[0].parse::<u16>().map_err(|_| {
+                            DockerServiceError::Configuration(format!(
+                                "无效的主机端口: {}",
+                                ports[0]
+                            ))
+                        })?;
+                        let container_port = ports[1].parse::<u16>().map_err(|_| {
+                            DockerServiceError::Configuration(format!(
+                                "无效的容器端口: {}",
+                                ports[1]
+                            ))
+                        })?;
+
                         Ok(Some(PortMapping {
                             host_port,
                             container_port,
@@ -183,15 +199,19 @@ impl PortManager {
                     }
                     3 => {
                         // "127.0.0.1:8080:80"
-                        let host_port = ports[1].parse::<u16>()
-                            .map_err(|_| DockerServiceError::Configuration(
-                                format!("无效的主机端口: {}", ports[1])
-                            ))?;
-                        let container_port = ports[2].parse::<u16>()
-                            .map_err(|_| DockerServiceError::Configuration(
-                                format!("无效的容器端口: {}", ports[2])
-                            ))?;
-                        
+                        let host_port = ports[1].parse::<u16>().map_err(|_| {
+                            DockerServiceError::Configuration(format!(
+                                "无效的主机端口: {}",
+                                ports[1]
+                            ))
+                        })?;
+                        let container_port = ports[2].parse::<u16>().map_err(|_| {
+                            DockerServiceError::Configuration(format!(
+                                "无效的容器端口: {}",
+                                ports[2]
+                            ))
+                        })?;
+
                         Ok(Some(PortMapping {
                             host_port,
                             container_port,
@@ -212,9 +232,10 @@ impl PortManager {
                         // 这种情况下没有主机端口映射，不需要检查冲突
                         Ok(None)
                     } else {
-                        Err(DockerServiceError::Configuration(
-                            format!("端口号超出范围: {}", port)
-                        ))
+                        Err(DockerServiceError::Configuration(format!(
+                            "端口号超出范围: {}",
+                            port
+                        )))
                     }
                 } else {
                     Ok(None)
@@ -226,63 +247,85 @@ impl PortManager {
             }
         }
     }
-    
+
     /// 检查docker-compose.yml中定义的端口是否有冲突
-    pub async fn check_compose_port_conflicts(&self, compose_file_path: &Path) -> DockerServiceResult<PortConflictReport> {
-        info!("开始检查docker-compose文件的端口冲突: {}", compose_file_path.display());
-        
+    pub async fn check_compose_port_conflicts(
+        &self,
+        compose_file_path: &Path,
+    ) -> DockerServiceResult<PortConflictReport> {
+        info!(
+            "开始检查docker-compose文件的端口冲突: {}",
+            compose_file_path.display()
+        );
+
         let port_mappings = self.parse_compose_ports(compose_file_path).await?;
         let mut conflicted_ports = Vec::new();
         let total_checked = port_mappings.len();
-        
+
         for mapping in &port_mappings {
             if !self.is_port_available(mapping.host_port) {
-                warn!("发现端口冲突: 端口 {} 已被占用 (服务: {})", mapping.host_port, mapping.service_name);
-                
+                warn!(
+                    "发现端口冲突: 端口 {} 已被占用 (服务: {})",
+                    mapping.host_port, mapping.service_name
+                );
+
                 conflicted_ports.push(PortConflict {
                     port: mapping.host_port,
                     service_name: mapping.service_name.clone(),
-                    mapping: format!("{}:{}/{}", mapping.host_port, mapping.container_port, mapping.protocol),
+                    mapping: format!(
+                        "{}:{}/{}",
+                        mapping.host_port, mapping.container_port, mapping.protocol
+                    ),
                 });
             } else {
-                info!("端口 {} 可用 (服务: {})", mapping.host_port, mapping.service_name);
+                info!(
+                    "端口 {} 可用 (服务: {})",
+                    mapping.host_port, mapping.service_name
+                );
             }
         }
-        
+
         let has_conflicts = !conflicted_ports.is_empty();
-        
+
         if has_conflicts {
-            error!("发现 {} 个端口冲突，共检查 {} 个端口", conflicted_ports.len(), total_checked);
+            error!(
+                "发现 {} 个端口冲突，共检查 {} 个端口",
+                conflicted_ports.len(),
+                total_checked
+            );
         } else {
-            info!("端口检查完成，没有发现冲突，共检查 {} 个端口", total_checked);
+            info!(
+                "端口检查完成，没有发现冲突，共检查 {} 个端口",
+                total_checked
+            );
         }
-        
+
         Ok(PortConflictReport {
             conflicted_ports,
             total_checked,
             has_conflicts,
         })
     }
-    
+
     /// 显示端口冲突报告
     pub fn print_conflict_report(&self, report: &PortConflictReport) {
         if report.has_conflicts {
             warn!("⚠️  发现端口冲突!");
             warn!("总计检查: {} 个端口映射", report.total_checked);
             warn!("冲突数量: {} 个", report.conflicted_ports.len());
-            
+
             warn!("冲突详情:");
             for conflict in &report.conflicted_ports {
                 warn!("  🔴 端口 {} 已被占用", conflict.port);
                 warn!("     服务: {}", conflict.service_name);
                 warn!("     映射: {}", conflict.mapping);
             }
-            
+
             info!("💡 解决建议:");
             info!("  1. 停止占用端口的其他进程");
             info!("  2. 修改docker-compose.yml中的端口映射");
             info!("  3. 使用以下命令查看端口占用情况:");
-            
+
             for conflict in &report.conflicted_ports {
                 info!("     lsof -i :{}", conflict.port);
             }
@@ -297,4 +340,4 @@ impl Default for PortManager {
     fn default() -> Self {
         Self::new()
     }
-} 
+}

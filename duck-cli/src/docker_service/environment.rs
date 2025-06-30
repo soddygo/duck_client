@@ -8,4 +8,4 @@ impl EnvironmentChecker {
     pub fn new() -> Self {
         Self
     }
-} 
+}

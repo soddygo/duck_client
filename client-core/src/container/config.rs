@@ -51,11 +51,11 @@ impl DockerManager {
         use std::fs;
 
         let content = fs::read_to_string(&self.compose_file)
-            .map_err(|e| DuckError::Docker(format!("读取compose文件失败: {}", e)))?;
+            .map_err(|e| DuckError::Docker(format!("读取compose文件失败: {e}")))?;
 
         // 尝试解析YAML
         let yaml: serde_yaml::Value = serde_yaml::from_str(&content)
-            .map_err(|e| DuckError::Docker(format!("解析compose文件失败: {}", e)))?;
+            .map_err(|e| DuckError::Docker(format!("解析compose文件失败: {e}")))?;
 
         // 导航到services部分
         let services = yaml
@@ -64,7 +64,7 @@ impl DockerManager {
 
         let service = services
             .get(service_name)
-            .ok_or_else(|| DuckError::Docker(format!("找不到服务: {}", service_name)))?;
+            .ok_or_else(|| DuckError::Docker(format!("找不到服务: {service_name}")))?;
 
         let restart = service
             .get("restart")

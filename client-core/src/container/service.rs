@@ -11,7 +11,7 @@ impl DockerManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(DuckError::Docker(format!("启动服务失败: {}", stderr)));
+            return Err(DuckError::Docker(format!("启动服务失败: {stderr}")));
         }
 
         // 等待服务启动并验证状态
@@ -28,7 +28,7 @@ impl DockerManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(DuckError::Docker(format!("停止服务失败: {}", stderr)));
+            return Err(DuckError::Docker(format!("停止服务失败: {stderr}")));
         }
 
         Ok(())
@@ -50,8 +50,7 @@ impl DockerManager {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(DuckError::Docker(format!(
-                "停止服务 {} 失败: {}",
-                service_name, stderr
+                "停止服务 {service_name} 失败: {stderr}"
             )));
         }
 
@@ -60,8 +59,7 @@ impl DockerManager {
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(DuckError::Docker(format!(
-                "启动服务 {} 失败: {}",
-                service_name, stderr
+                "启动服务 {service_name} 失败: {stderr}"
             )));
         }
 
@@ -78,7 +76,7 @@ impl DockerManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(DuckError::Docker(format!("获取服务状态失败: {}", stderr)));
+            return Err(DuckError::Docker(format!("获取服务状态失败: {stderr}")));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -117,7 +115,7 @@ impl DockerManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(DuckError::Docker(format!("获取日志失败: {}", stderr)));
+            return Err(DuckError::Docker(format!("获取日志失败: {stderr}")));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -253,15 +251,14 @@ impl DockerManager {
                             ));
                         }
                         return Err(DuckError::Docker(format!(
-                            "服务启动验证失败: {}",
-                            error_msg
+                            "服务启动验证失败: {error_msg}"
                         )));
                     }
                 }
                 Err(e) => {
                     tracing::warn!("获取服务状态失败: {}", e);
                     if attempt == max_attempts {
-                        return Err(DuckError::Docker(format!("无法获取服务状态: {}", e)));
+                        return Err(DuckError::Docker(format!("无法获取服务状态: {e}")));
                     }
                 }
             }

@@ -15,7 +15,7 @@ impl DockerManager {
         let output = self.run_docker_command(&["info"]).await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(DuckError::Docker(format!("Docker 服务未运行: {}", stderr)));
+            return Err(DuckError::Docker(format!("Docker 服务未运行: {stderr}")));
         }
 
         Ok(())

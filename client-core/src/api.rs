@@ -213,7 +213,7 @@ impl ApiClient {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
             error!("客户端注册失败: {} - {}", status, text);
-            Err(DuckError::Api(format!("注册失败: {} - {}", status, text)))
+            Err(DuckError::Api(format!("注册失败: {status} - {text}")))
         }
     }
 
@@ -224,7 +224,7 @@ impl ApiClient {
             .get_endpoint_url(&self.config.endpoints.announcements);
 
         if let Some(since_time) = since {
-            url = format!("{}?since={}", url, since_time);
+            url = format!("{url}?since={since_time}");
         }
 
         let response = self.build_request(&url).send().await?;
@@ -237,8 +237,7 @@ impl ApiClient {
             let text = response.text().await.unwrap_or_default();
             error!("获取公告失败: {} - {}", status, text);
             Err(DuckError::Api(format!(
-                "获取公告失败: {} - {}",
-                status, text
+                "获取公告失败: {status} - {text}"
             )))
         }
     }
@@ -272,8 +271,7 @@ impl ApiClient {
             let text = response.text().await.unwrap_or_default();
             error!("检查Docker版本失败: {} - {}", status, text);
             Err(DuckError::Api(format!(
-                "检查Docker版本失败: {} - {}",
-                status, text
+                "检查Docker版本失败: {status} - {text}"
             )))
         }
     }
@@ -294,8 +292,7 @@ impl ApiClient {
             let text = response.text().await.unwrap_or_default();
             error!("获取Docker版本列表失败: {} - {}", status, text);
             Err(DuckError::Api(format!(
-                "获取Docker版本列表失败: {} - {}",
-                status, text
+                "获取Docker版本列表失败: {status} - {text}"
             )))
         }
     }
@@ -314,7 +311,7 @@ impl ApiClient {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
             error!("下载Docker服务更新包失败: {} - {}", status, text);
-            return Err(DuckError::Api(format!("下载失败: {} - {}", status, text)));
+            return Err(DuckError::Api(format!("下载失败: {status} - {text}")));
         }
 
         // 获取文件大小
@@ -358,8 +355,7 @@ impl ApiClient {
                     let progress_bar = "█".repeat(filled) + &"░".repeat(bar_width - filled);
 
                     print!(
-                        "\r📦 下载进度: [{}] {:.1}% ({:.1}/{:.1} MB)",
-                        progress_bar, percentage, downloaded_mb, total_mb
+                        "\r📦 下载进度: [{progress_bar}] {percentage:.1}% ({downloaded_mb:.1}/{total_mb:.1} MB)"
                     );
                     io::stdout().flush().unwrap();
 
@@ -367,7 +363,7 @@ impl ApiClient {
                 } else {
                     // 没有总大小信息时，只显示已下载量
                     let downloaded_mb = downloaded as f64 / 1024.0 / 1024.0;
-                    print!("\r📦 下载进度: {:.1} MB", downloaded_mb);
+                    print!("\r📦 下载进度: {downloaded_mb:.1} MB");
                     io::stdout().flush().unwrap();
 
                     last_update = std::time::Instant::now();
@@ -385,14 +381,13 @@ impl ApiClient {
             let progress_bar = "█".repeat(bar_width);
 
             print!(
-                "\r📦 下载进度: [{}] 100.0% ({:.1}/{:.1} MB)",
-                progress_bar, downloaded_mb, total_mb
+                "\r📦 下载进度: [{progress_bar}] 100.0% ({downloaded_mb:.1}/{total_mb:.1} MB)"
             );
             io::stdout().flush().unwrap();
         } else {
             // 没有总大小信息时，显示最终下载量
             let downloaded_mb = downloaded as f64 / 1024.0 / 1024.0;
-            print!("\r📦 下载进度: {:.1} MB (完成)", downloaded_mb);
+            print!("\r📦 下载进度: {downloaded_mb:.1} MB (完成)");
             io::stdout().flush().unwrap();
         }
 

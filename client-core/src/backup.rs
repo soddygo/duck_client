@@ -166,13 +166,13 @@ impl BackupManager {
 
                 for entry in WalkDir::new(source_dir) {
                     let entry =
-                        entry.map_err(|e| DuckError::Backup(format!("遍历目录失败: {}", e)))?;
+                        entry.map_err(|e| DuckError::Backup(format!("遍历目录失败: {e}")))?;
                     let path = entry.path();
 
                     if path.is_file() {
                         let relative_path = path
                             .strip_prefix(source_dir)
-                            .map_err(|e| DuckError::Backup(format!("计算相对路径失败: {}", e)))?;
+                            .map_err(|e| DuckError::Backup(format!("计算相对路径失败: {e}")))?;
 
                         // 在归档中保持目录结构：{dir_name}/{relative_path}
                         // 注意：tar归档内部使用Unix风格路径（/）是标准做法，跨平台兼容
@@ -189,14 +189,14 @@ impl BackupManager {
 
                         archive
                             .append_path_with_name(path, archive_path)
-                            .map_err(|e| DuckError::Backup(format!("添加文件到归档失败: {}", e)))?;
+                            .map_err(|e| DuckError::Backup(format!("添加文件到归档失败: {e}")))?;
                     }
                 }
             }
 
             archive
                 .finish()
-                .map_err(|e| DuckError::Backup(format!("完成归档失败: {}", e)))?;
+                .map_err(|e| DuckError::Backup(format!("完成归档失败: {e}")))?;
 
             Ok::<(), DuckError>(())
         })
@@ -212,7 +212,7 @@ impl BackupManager {
             .database
             .get_backup_by_id(backup_id)
             .await?
-            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {}", backup_id)))?;
+            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {backup_id}")))?;
 
         let backup_path = PathBuf::from(&backup_record.file_path);
         if !backup_path.exists() {
@@ -275,7 +275,7 @@ impl BackupManager {
 
             archive
                 .unpack(&target_dir)
-                .map_err(|e| DuckError::Backup(format!("解压归档失败: {}", e)))?;
+                .map_err(|e| DuckError::Backup(format!("解压归档失败: {e}")))?;
 
             Ok::<(), DuckError>(())
         })
@@ -296,7 +296,7 @@ impl BackupManager {
             .database
             .get_backup_by_id(backup_id)
             .await?
-            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {}", backup_id)))?;
+            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {backup_id}")))?;
 
         let backup_path = PathBuf::from(&backup_record.file_path);
 
@@ -318,7 +318,7 @@ impl BackupManager {
             .database
             .get_backup_by_id(backup_id)
             .await?
-            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {}", backup_id)))?;
+            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {backup_id}")))?;
 
         let backup_path = PathBuf::from(&backup_record.file_path);
         if !backup_path.exists() {
@@ -338,7 +338,7 @@ impl BackupManager {
             .database
             .get_backup_by_id(backup_id)
             .await?
-            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {}", backup_id)))?;
+            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {backup_id}")))?;
 
         let backup_path = PathBuf::from(&backup_record.file_path);
         if !backup_path.exists() {

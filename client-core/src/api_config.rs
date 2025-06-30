@@ -117,7 +117,7 @@ impl fmt::Display for ApiConfig {
         writeln!(f, "服务器地址: {}", self.base_url)?;
         writeln!(f, "\n主要端点:")?;
         for (name, url) in self.get_endpoints_info() {
-            writeln!(f, "  {}: {}", name, url)?;
+            writeln!(f, "  {name}: {url}")?;
         }
         Ok(())
     }

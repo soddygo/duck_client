@@ -341,14 +341,18 @@ async fn install_downloaded_file(
 /// 安装可执行文件
 async fn install_executable(download_path: &PathBuf, current_exe: &PathBuf) -> Result<()> {
     // 在 Windows 上，需要特殊处理
-    if cfg!(target_os = "windows") {
+    #[cfg(target_os = "windows")]
+    {
         install_windows_executable(download_path, current_exe).await
-    } else {
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
         install_unix_executable(download_path, current_exe).await
     }
 }
 
 /// Windows 系统安装
+#[cfg(target_os = "windows")]
 async fn install_windows_executable(download_path: &PathBuf, current_exe: &PathBuf) -> Result<()> {
     // 创建备份
     let backup_path = current_exe.with_extension("exe.backup");
@@ -403,11 +407,7 @@ async fn install_unix_executable(download_path: &PathBuf, current_exe: &PathBuf)
     Ok(())
 }
 
-/// Windows 系统的Unix安装桩函数（不应该被调用）
-#[cfg(not(unix))]
-async fn install_unix_executable(_download_path: &PathBuf, _current_exe: &PathBuf) -> Result<()> {
-    Err(anyhow::anyhow!("此函数不应在非Unix系统上调用"))
-}
+
 
 /// 从压缩包安装
 async fn install_from_archive(

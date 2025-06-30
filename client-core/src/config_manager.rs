@@ -160,9 +160,9 @@ impl<'a> ConfigManager<'a> {
 
         let task_id = uuid::Uuid::new_v4().to_string();
         let task_json = serde_json::to_string(task)
-            .map_err(|e| crate::error::DuckError::custom(format!("序列化任务失败: {}", e)))?;
+            .map_err(|e| crate::error::DuckError::custom(format!("序列化任务失败: {e}")))?;
 
-        let key = format!("auto_upgrade_task.{}", task_id);
+        let key = format!("auto_upgrade_task.{task_id}");
         self.db.set_config(&key, &task_json).await?;
 
         tracing::info!("创建自动升级任务，ID: {}", task_id);
@@ -177,11 +177,11 @@ impl<'a> ConfigManager<'a> {
         progress: Option<i32>,
         error_message: Option<&str>,
     ) -> Result<()> {
-        let key = format!("auto_upgrade_task.{}", task_id);
+        let key = format!("auto_upgrade_task.{task_id}");
 
         if let Some(task_json) = self.db.get_config(&key).await? {
             let mut task: AutoUpgradeTask = serde_json::from_str(&task_json)
-                .map_err(|e| crate::error::DuckError::custom(format!("反序列化任务失败: {}", e)))?;
+                .map_err(|e| crate::error::DuckError::custom(format!("反序列化任务失败: {e}")))?;
 
             task.status = status.to_string();
             if let Some(progress) = progress {
@@ -192,7 +192,7 @@ impl<'a> ConfigManager<'a> {
             }
 
             let updated_json = serde_json::to_string(&task)
-                .map_err(|e| crate::error::DuckError::custom(format!("序列化任务失败: {}", e)))?;
+                .map_err(|e| crate::error::DuckError::custom(format!("序列化任务失败: {e}")))?;
             self.db.set_config(&key, &updated_json).await?;
 
             tracing::info!("升级任务 {} 状态已更新: {}", task_id, status);
@@ -216,7 +216,7 @@ impl<'a> ConfigManager<'a> {
 
     /// 删除升级任务
     pub async fn delete_upgrade_task(&self, task_id: &str) -> Result<()> {
-        let key = format!("auto_upgrade_task.{}", task_id);
+        let key = format!("auto_upgrade_task.{task_id}");
         // 注意：当前Database接口没有删除配置的方法，这里通过设置空值来"删除"
         self.db.set_config(&key, "").await?;
         tracing::info!("升级任务 {} 已删除", task_id);
@@ -293,8 +293,7 @@ impl<'a> ConfigManager<'a> {
         // 检查backup_id是否为正数
         if backup_id <= 0 {
             return Err(crate::error::DuckError::custom(format!(
-                "无效的backup_id: {}，必须为正数",
-                backup_id
+                "无效的backup_id: {backup_id}，必须为正数"
             )));
         }
 
@@ -303,8 +302,7 @@ impl<'a> ConfigManager<'a> {
             Some(record) => record,
             None => {
                 return Err(crate::error::DuckError::custom(format!(
-                    "备份记录不存在: backup_id = {}",
-                    backup_id
+                    "备份记录不存在: backup_id = {backup_id}"
                 )));
             }
         };
@@ -388,7 +386,7 @@ impl<'a> ConfigManager<'a> {
         use std::io::Read;
 
         let mut file = File::open(file_path)
-            .map_err(|e| crate::error::DuckError::custom(format!("无法打开文件进行验证: {}", e)))?;
+            .map_err(|e| crate::error::DuckError::custom(format!("无法打开文件进行验证: {e}")))?;
 
         let mut buffer = [0u8; 4];
         match file.read_exact(&mut buffer) {
@@ -425,8 +423,7 @@ impl<'a> ConfigManager<'a> {
                 }
             }
             Err(e) => Err(crate::error::DuckError::custom(format!(
-                "无法读取文件头进行验证: {}",
-                e
+                "无法读取文件头进行验证: {e}"
             ))),
         }
     }

@@ -21,7 +21,7 @@ impl DockerManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(DuckError::Docker(format!("加载镜像失败: {}", stderr)));
+            return Err(DuckError::Docker(format!("加载镜像失败: {stderr}")));
         }
 
         Ok(())
@@ -35,7 +35,7 @@ impl DockerManager {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(DuckError::Docker(format!("拉取镜像失败: {}", stderr)));
+            return Err(DuckError::Docker(format!("拉取镜像失败: {stderr}")));
         }
 
         Ok(())

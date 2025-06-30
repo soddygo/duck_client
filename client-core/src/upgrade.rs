@@ -207,7 +207,7 @@ impl UpgradeManager {
                 match self.rollback_from_backup(id, progress_callback).await {
                     Ok(_) => {
                         let final_error_msg =
-                            format!("升级失败 ({})，但已成功回滚到备份 ID {}", e, id);
+                            format!("升级失败 ({e})，但已成功回滚到备份 ID {id}");
                         return Ok(UpgradeResult {
                             success: false,
                             from_version: from_version.to_string(),
@@ -218,7 +218,7 @@ impl UpgradeManager {
                     }
                     Err(rollback_err) => {
                         let final_error_msg =
-                            format!("升级失败 ({})，且回滚操作也失败了: {}", e, rollback_err);
+                            format!("升级失败 ({e})，且回滚操作也失败了: {rollback_err}");
                         return Ok(UpgradeResult {
                             success: false,
                             from_version: from_version.to_string(),
@@ -238,7 +238,7 @@ impl UpgradeManager {
                 if let Err(restart_err) = self.docker_manager.start_services().await {
                     warn!("重启服务也失败了: {}", restart_err);
                     let final_error_msg =
-                        format!("升级失败 ({}), 并且无法重启原始服务: {}", e, restart_err);
+                        format!("升级失败 ({e}), 并且无法重启原始服务: {restart_err}");
                     return Ok(UpgradeResult {
                         success: false,
                         from_version: from_version.to_string(),
@@ -247,7 +247,7 @@ impl UpgradeManager {
                         backup_id,
                     });
                 } else {
-                    let final_error_msg = format!("升级失败 ({})，服务已重启", e);
+                    let final_error_msg = format!("升级失败 ({e})，服务已重启");
                     return Ok(UpgradeResult {
                         success: false,
                         from_version: from_version.to_string(),
@@ -297,7 +297,7 @@ impl UpgradeManager {
         warn!("从备份 ID {} 进行回滚。", backup_id);
         self.send_progress(
             progress_callback,
-            UpgradeStep::Failed(format!("正在从备份 {} 回滚...", backup_id)),
+            UpgradeStep::Failed(format!("正在从备份 {backup_id} 回滚...")),
             "",
         );
 
@@ -405,7 +405,7 @@ impl UpgradeManager {
         tokio::task::spawn_blocking(move || -> Result<()> {
             let file = std::fs::File::open(path_for_blocking)?;
             zip_extract::extract(file, &extract_dir_for_blocking, true)
-                .map_err(|e| DuckError::Custom(format!("解压失败: {}", e)))
+                .map_err(|e| DuckError::Custom(format!("解压失败: {e}")))
         })
         .await??;
 

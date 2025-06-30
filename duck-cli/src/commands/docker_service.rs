@@ -261,14 +261,17 @@ pub async fn setup_image_tags(app: &CliApp) -> Result<()> {
     // 先加载镜像以获取实际的镜像映射
     info!("📦 检查已加载的镜像...");
     let load_result = docker_service_manager.load_images().await?;
-    
+
     if load_result.image_mappings.is_empty() {
         warn!("⚠️ 未找到已加载的镜像映射，请先运行 load-images 命令");
         return Ok(());
     }
 
     // 使用基于映射的新方法
-    match docker_service_manager.setup_image_tags_with_mappings(&load_result.image_mappings).await {
+    match docker_service_manager
+        .setup_image_tags_with_mappings(&load_result.image_mappings)
+        .await
+    {
         Ok(result) => {
             info!("🏷️ 镜像标签设置完成!");
             info!("  • 成功设置: {} 个标签", result.success_count());
@@ -314,9 +317,7 @@ pub async fn extract_docker_service(
         let target_version = version
             .as_deref()
             .unwrap_or(&app.config.versions.docker_service);
-        
-        
-        
+
         app.config.get_version_download_file_path(
             target_version,
             "full",
@@ -334,10 +335,10 @@ pub async fn extract_docker_service(
     }
 
     info!("📦 找到Docker服务包: {}", zip_path.display());
-    
+
     // 使用utils中的解压函数
     crate::utils::extract_docker_service(&zip_path).await?;
-    
+
     info!("✅ Docker服务包解压完成");
     Ok(())
 }
@@ -364,7 +365,10 @@ pub async fn list_docker_images_with_ducker(app: &CliApp) -> Result<()> {
     let docker_service_manager =
         DockerService::new(app.config.clone(), app.docker_manager.clone())?;
 
-    match docker_service_manager.list_docker_images_with_ducker().await {
+    match docker_service_manager
+        .list_docker_images_with_ducker()
+        .await
+    {
         Ok(images) => {
             if images.is_empty() {
                 info!("📭 未找到任何 Docker 镜像");
@@ -373,16 +377,19 @@ pub async fn list_docker_images_with_ducker(app: &CliApp) -> Result<()> {
                 for (index, image) in images.iter().enumerate() {
                     info!("  {}. {}", index + 1, image);
                 }
-                
+
                 // 显示与我们业务相关的镜像
-                let business_images: Vec<&String> = images.iter()
-                    .filter(|img| img.contains("registry.yichamao.com") || 
-                                  img.contains("mysql") || 
-                                  img.contains("redis") || 
-                                  img.contains("milvus") ||
-                                  img.contains("quickwit"))
+                let business_images: Vec<&String> = images
+                    .iter()
+                    .filter(|img| {
+                        img.contains("registry.yichamao.com")
+                            || img.contains("mysql")
+                            || img.contains("redis")
+                            || img.contains("milvus")
+                            || img.contains("quickwit")
+                    })
                     .collect();
-                
+
                 if !business_images.is_empty() {
                     info!("");
                     info!("🏢 业务相关镜像 ({} 个):", business_images.len());

@@ -17,8 +17,11 @@ impl DockerManager {
 
         use tracing::{debug, info, warn};
 
-        info!("执行docker load命令: docker load -i {}", image_path.display());
-        
+        info!(
+            "执行docker load命令: docker load -i {}",
+            image_path.display()
+        );
+
         let output = self
             .run_docker_command(&["load", "-i", &image_path.to_string_lossy()])
             .await?;
@@ -40,7 +43,7 @@ impl DockerManager {
         for (i, line) in stdout.lines().enumerate() {
             debug!("  第{}行: {}", i + 1, line);
         }
-        
+
         for line in stdout.lines() {
             if line.starts_with("Loaded image:") {
                 if let Some(image_name) = line.strip_prefix("Loaded image:").map(|s| s.trim()) {

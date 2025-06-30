@@ -1,6 +1,7 @@
 use client_core::{
-    api::ApiClient, backup::BackupManager, config::AppConfig, container::DockerManager,
-    database::Database, error::Result, upgrade::UpgradeManager, authenticated_client::AuthenticatedClient,
+    api::ApiClient, authenticated_client::AuthenticatedClient, backup::BackupManager,
+    config::AppConfig, container::DockerManager, database::Database, error::Result,
+    upgrade::UpgradeManager,
 };
 use std::path::PathBuf;
 
@@ -32,12 +33,13 @@ impl CliApp {
 
         // 创建认证客户端（自动处理注册和认证）
         let server_base_url = client_core::constants::api::DEFAULT_BASE_URL.to_string();
-        let authenticated_client = AuthenticatedClient::new(database.clone(), server_base_url).await?;
+        let authenticated_client =
+            AuthenticatedClient::new(database.clone(), server_base_url).await?;
 
         // 获取用于API请求的客户端ID（只使用服务端返回的client_id）
         let client_id = database.get_api_client_id().await?;
         let mut api_client = ApiClient::new(client_id.clone());
-        
+
         // 将AuthenticatedClient设置到ApiClient中，这样ApiClient可以使用自动认证功能
         api_client.set_authenticated_client(authenticated_client.clone());
 

@@ -291,8 +291,6 @@ async fn check_docker_files_exist() -> Result<bool> {
     Ok(false)
 }
 
-
-
 /// 格式化时间间隔为可读字符串
 fn format_duration(duration: Duration) -> String {
     let seconds = duration.as_secs();

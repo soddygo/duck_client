@@ -67,7 +67,8 @@ impl DockerServiceManager {
         let load_result = self.load_images().await?;
 
         // 4. 使用ducker验证并设置镜像标签（推荐方法）
-        self.setup_image_tags_with_ducker_validation(&load_result.image_mappings).await?;
+        self.setup_image_tags_with_ducker_validation(&load_result.image_mappings)
+            .await?;
 
         // 5. 启动服务
         self.start_services().await?;
@@ -172,9 +173,15 @@ impl DockerServiceManager {
     }
 
     /// 基于实际镜像映射设置标签
-    pub async fn setup_image_tags_with_mappings(&self, image_mappings: &[(String, String)]) -> DockerServiceResult<TagResult> {
+    pub async fn setup_image_tags_with_mappings(
+        &self,
+        image_mappings: &[(String, String)],
+    ) -> DockerServiceResult<TagResult> {
         info!("开始设置镜像标签...");
-        let result = self.image_loader.setup_image_tags_with_mappings(image_mappings).await?;
+        let result = self
+            .image_loader
+            .setup_image_tags_with_mappings(image_mappings)
+            .await?;
 
         if !result.is_all_successful() {
             warn!(
@@ -188,9 +195,15 @@ impl DockerServiceManager {
     }
 
     /// 基于 ducker 验证镜像后再设置标签（推荐使用）
-    pub async fn setup_image_tags_with_ducker_validation(&self, image_mappings: &[(String, String)]) -> DockerServiceResult<TagResult> {
+    pub async fn setup_image_tags_with_ducker_validation(
+        &self,
+        image_mappings: &[(String, String)],
+    ) -> DockerServiceResult<TagResult> {
         info!("开始验证并设置镜像标签...");
-        let result = self.image_loader.setup_image_tags_with_validation(image_mappings).await?;
+        let result = self
+            .image_loader
+            .setup_image_tags_with_validation(image_mappings)
+            .await?;
 
         if !result.is_all_successful() {
             warn!(

@@ -21,7 +21,7 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
     // 获取版本信息以确定下载路径
     info!("检查Docker服务版本...");
     let current_version = app.config.versions.docker_service.clone();
-    
+
     // 使用API客户端检查版本（移除自动注册逻辑，因为现在由AuthenticatedClient处理）
     let version_result = app.api_client.check_docker_version(&current_version).await;
     let version_info = version_result;
@@ -50,7 +50,7 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
             // 在强制模式下，直接下载（跳过优化检查）
             if force {
                 info!("🔧 强制重新下载模式 - 跳过文件检查");
-                
+
                 // 确保下载目录存在
                 if let Err(e) = app
                     .config
@@ -66,7 +66,7 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
 
                 // 强制模式使用传统下载方法，跳过优化检查
                 let download_result = app.api_client.download_service_update(&download_path).await;
-                
+
                 match download_result {
                     Ok(_) => {
                         info!("✅ 强制下载完成!");
@@ -114,11 +114,11 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
                 info!("状态: 🔍 检查文件完整性");
             }
 
-            let download_result = app.api_client.download_service_update_optimized(
-                &download_path, 
-                Some(target_version)
-            ).await;
-            
+            let download_result = app
+                .api_client
+                .download_service_update_optimized(&download_path, Some(target_version))
+                .await;
+
             match download_result {
                 Ok(_) => {
                     info!("✅ 服务包已准备就绪!");
@@ -126,10 +126,14 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
                     info!("📝 下一步操作:");
                     info!("   运行 'duck-cli docker-service deploy' 来部署服务");
                 }
-                Err(client_core::error::DuckError::Api(ref msg)) if msg.contains("401") || msg.contains("Unauthorized") => {
+                Err(client_core::error::DuckError::Api(ref msg))
+                    if msg.contains("401") || msg.contains("Unauthorized") =>
+                {
                     error!("❌ 操作失败: 认证失败");
                     info!("💡 认证问题已由AuthenticatedClient自动处理，但仍然失败");
-                    return Err(client_core::error::DuckError::Api("操作失败: 认证失败".to_string()));
+                    return Err(client_core::error::DuckError::Api(
+                        "操作失败: 认证失败".to_string(),
+                    ));
                 }
                 Err(e) => {
                     error!("❌ 操作失败: {}", e);

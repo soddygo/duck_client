@@ -490,17 +490,13 @@ impl ApiClient {
     pub async fn calculate_file_hash(file_path: &Path) -> Result<String> {
         if !file_path.exists() {
             return Err(DuckError::Custom(format!(
-                "文件不存在: {}", 
+                "文件不存在: {}",
                 file_path.display()
             )));
         }
 
         let mut file = File::open(file_path).await.map_err(|e| {
-            DuckError::Custom(format!(
-                "无法打开文件 {}: {}", 
-                file_path.display(), 
-                e
-            ))
+            DuckError::Custom(format!("无法打开文件 {}: {}", file_path.display(), e))
         })?;
 
         let mut hasher = Sha256::new();
@@ -508,11 +504,7 @@ impl ApiClient {
 
         loop {
             let bytes_read = file.read(&mut buffer).await.map_err(|e| {
-                DuckError::Custom(format!(
-                    "读取文件失败 {}: {}", 
-                    file_path.display(), 
-                    e
-                ))
+                DuckError::Custom(format!("读取文件失败 {}: {}", file_path.display(), e))
             })?;
 
             if bytes_read == 0 {
@@ -531,16 +523,16 @@ impl ApiClient {
         let hash_file_path = file_path.with_extension("hash");
         let mut hash_file = File::create(&hash_file_path).await.map_err(|e| {
             DuckError::Custom(format!(
-                "无法创建哈希文件 {}: {}", 
-                hash_file_path.display(), 
+                "无法创建哈希文件 {}: {}",
+                hash_file_path.display(),
                 e
             ))
         })?;
 
         hash_file.write_all(hash.as_bytes()).await.map_err(|e| {
             DuckError::Custom(format!(
-                "写入哈希文件失败 {}: {}", 
-                hash_file_path.display(), 
+                "写入哈希文件失败 {}: {}",
+                hash_file_path.display(),
                 e
             ))
         })?;
@@ -552,27 +544,30 @@ impl ApiClient {
     /// 从.hash文件读取哈希信息
     pub async fn load_file_hash(file_path: &Path) -> Result<Option<String>> {
         let hash_file_path = file_path.with_extension("hash");
-        
+
         if !hash_file_path.exists() {
             return Ok(None);
         }
 
         let mut hash_file = File::open(&hash_file_path).await.map_err(|e| {
             DuckError::Custom(format!(
-                "无法打开哈希文件 {}: {}", 
-                hash_file_path.display(), 
+                "无法打开哈希文件 {}: {}",
+                hash_file_path.display(),
                 e
             ))
         })?;
 
         let mut hash_content = String::new();
-        hash_file.read_to_string(&mut hash_content).await.map_err(|e| {
-            DuckError::Custom(format!(
-                "读取哈希文件失败 {}: {}", 
-                hash_file_path.display(), 
-                e
-            ))
-        })?;
+        hash_file
+            .read_to_string(&mut hash_content)
+            .await
+            .map_err(|e| {
+                DuckError::Custom(format!(
+                    "读取哈希文件失败 {}: {}",
+                    hash_file_path.display(),
+                    e
+                ))
+            })?;
 
         Ok(Some(hash_content.trim().to_string()))
     }
@@ -580,13 +575,13 @@ impl ApiClient {
     /// 验证文件完整性
     pub async fn verify_file_integrity(file_path: &Path, expected_hash: &str) -> Result<bool> {
         info!("验证文件完整性: {}", file_path.display());
-        
+
         // 计算当前文件的哈希值
         let actual_hash = Self::calculate_file_hash(file_path).await?;
-        
+
         // 比较哈希值（忽略大小写）
         let matches = actual_hash.to_lowercase() == expected_hash.to_lowercase();
-        
+
         if matches {
             info!("✅ 文件完整性验证通过: {}", file_path.display());
         } else {
@@ -594,16 +589,12 @@ impl ApiClient {
             warn!("   期望哈希: {}", expected_hash);
             warn!("   实际哈希: {}", actual_hash);
         }
-        
+
         Ok(matches)
     }
 
     /// 检查文件是否需要下载（基于哈希值比较）
-    pub async fn should_download_file(
-        &self, 
-        file_path: &Path, 
-        remote_hash: &str
-    ) -> Result<bool> {
+    pub async fn should_download_file(&self, file_path: &Path, remote_hash: &str) -> Result<bool> {
         // 文件不存在，需要下载
         if !file_path.exists() {
             info!("文件不存在，需要下载: {}", file_path.display());
@@ -633,14 +624,20 @@ impl ApiClient {
         // 没有哈希文件，计算当前文件哈希值并比较
         info!("未找到哈希文件，验证现有文件...");
         let actual_hash = Self::calculate_file_hash(file_path).await?;
-        
+
         if actual_hash.to_lowercase() == remote_hash.to_lowercase() {
             // 文件匹配，保存哈希值以供下次使用
             Self::save_file_hash(file_path, &actual_hash).await?;
-            info!("✅ 现有文件与远程文件匹配，跳过下载: {}", file_path.display());
+            info!(
+                "✅ 现有文件与远程文件匹配，跳过下载: {}",
+                file_path.display()
+            );
             Ok(false)
         } else {
-            info!("📦 现有文件与远程文件不匹配，需要下载: {}", file_path.display());
+            info!(
+                "📦 现有文件与远程文件不匹配，需要下载: {}",
+                file_path.display()
+            );
             info!("   本地哈希: {}", actual_hash);
             info!("   远程哈希: {}", remote_hash);
             Ok(true)
@@ -677,7 +674,7 @@ impl ApiClient {
         // 1. 获取服务清单信息
         info!("🔍 获取服务版本信息...");
         let manifest = self.get_docker_service_manifest().await?;
-        
+
         info!("📋 服务清单信息:");
         info!("   版本: {}", manifest.version);
         info!("   发布日期: {}", manifest.release_date);
@@ -685,16 +682,19 @@ impl ApiClient {
         info!("   包哈希: {}", manifest.packages.full.hash);
 
         // 2. 检查是否需要下载
-        if !self.should_download_file(download_path, &manifest.packages.full.hash).await? {
+        if !self
+            .should_download_file(download_path, &manifest.packages.full.hash)
+            .await?
+        {
             return Ok(());
         }
 
         // 3. 确保下载目录存在
         if let Some(parent) = download_path.parent() {
             if !parent.exists() {
-                tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                    DuckError::Custom(format!("创建下载目录失败: {e}"))
-                })?;
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(|e| DuckError::Custom(format!("创建下载目录失败: {e}")))?;
                 info!("📁 创建下载目录: {}", parent.display());
             }
         }
@@ -703,7 +703,7 @@ impl ApiClient {
         let mut download_url = self
             .config
             .get_endpoint_url(&self.config.endpoints.docker_download_full);
-        
+
         if let Some(v) = version {
             download_url = format!("{download_url}?version={v}");
         }
@@ -720,12 +720,12 @@ impl ApiClient {
         if !Self::verify_file_integrity(download_path, &manifest.packages.full.hash).await? {
             // 删除损坏的文件
             if download_path.exists() {
-                tokio::fs::remove_file(download_path).await.map_err(|e| {
-                    DuckError::Custom(format!("删除损坏文件失败: {e}"))
-                })?;
+                tokio::fs::remove_file(download_path)
+                    .await
+                    .map_err(|e| DuckError::Custom(format!("删除损坏文件失败: {e}")))?;
             }
             return Err(DuckError::Custom(
-                "下载的文件完整性验证失败，已删除损坏文件".to_string()
+                "下载的文件完整性验证失败，已删除损坏文件".to_string(),
             ));
         }
 

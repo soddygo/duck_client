@@ -43,8 +43,7 @@ tracing-subscriber = { workspace = true }
 # 配置文件
 toml = { workspace = true }
 
-# 自更新
-self_update = { workspace = true }
+# 自更新 - 已移除，现在使用基于 GitHub API 的更新机制
 
 # Docker 命令执行
 which = { workspace = true }

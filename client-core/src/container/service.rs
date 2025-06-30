@@ -250,9 +250,7 @@ impl DockerManager {
                                 pending_services.join(", ")
                             ));
                         }
-                        return Err(DuckError::Docker(format!(
-                            "服务启动验证失败: {error_msg}"
-                        )));
+                        return Err(DuckError::Docker(format!("服务启动验证失败: {error_msg}")));
                     }
                 }
                 Err(e) => {

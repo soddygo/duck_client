@@ -206,8 +206,7 @@ impl UpgradeManager {
             if let Some(id) = backup_id {
                 match self.rollback_from_backup(id, progress_callback).await {
                     Ok(_) => {
-                        let final_error_msg =
-                            format!("升级失败 ({e})，但已成功回滚到备份 ID {id}");
+                        let final_error_msg = format!("升级失败 ({e})，但已成功回滚到备份 ID {id}");
                         return Ok(UpgradeResult {
                             success: false,
                             from_version: from_version.to_string(),

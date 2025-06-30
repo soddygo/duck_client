@@ -22,7 +22,7 @@ pub async fn run_ducker(args: Vec<String>) -> Result<()> {
     // 运行ducker的核心逻辑
     run_ducker_tui(ducker_args).await.map_err(|e| {
         error!("ducker执行失败: {}", e);
-        DuckError::custom(format!("ducker执行失败: {}", e))
+        DuckError::custom(format!("ducker执行失败: {e}"))
     })
 }
 

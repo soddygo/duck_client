@@ -130,8 +130,7 @@ pub async fn configure_cron(app: &mut CliApp, expression: Option<String>) -> Res
             } else {
                 error!(expression = %expr, "无效的cron表达式");
                 return Err(client_core::error::DuckError::custom(format!(
-                    "无效的cron表达式: {}",
-                    expr
+                    "无效的cron表达式: {expr}"
                 )));
             }
         }

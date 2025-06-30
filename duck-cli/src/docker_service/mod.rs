@@ -2,7 +2,6 @@ use client_core::config::AppConfig;
 use client_core::container::DockerManager;
 use client_core::error::Result;
 
-
 // 子模块声明
 mod architecture;
 mod config;

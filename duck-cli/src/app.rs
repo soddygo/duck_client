@@ -4,9 +4,7 @@ use client_core::{
 };
 use std::path::PathBuf;
 
-use crate::cli::{
-    AutoBackupCommand, AutoUpgradeDeployCommand, Commands, DockerServiceCommand,
-};
+use crate::cli::{AutoBackupCommand, AutoUpgradeDeployCommand, Commands, DockerServiceCommand};
 use crate::commands;
 use tracing::info;
 
@@ -71,7 +69,7 @@ impl CliApp {
                 commands::handle_check_update_command(check_update_cmd)
                     .await
                     .map_err(|e| {
-                        client_core::error::DuckError::custom(format!("检查更新失败: {}", e))
+                        client_core::error::DuckError::custom(format!("检查更新失败: {e}"))
                     })
             }
             Commands::Upgrade { full, force } => commands::run_upgrade(self, full, force).await,

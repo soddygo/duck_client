@@ -236,9 +236,7 @@ impl ApiClient {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
             error!("获取公告失败: {} - {}", status, text);
-            Err(DuckError::Api(format!(
-                "获取公告失败: {status} - {text}"
-            )))
+            Err(DuckError::Api(format!("获取公告失败: {status} - {text}")))
         }
     }
 
@@ -380,9 +378,7 @@ impl ApiClient {
             let bar_width = 30;
             let progress_bar = "█".repeat(bar_width);
 
-            print!(
-                "\r📦 下载进度: [{progress_bar}] 100.0% ({downloaded_mb:.1}/{total_mb:.1} MB)"
-            );
+            print!("\r📦 下载进度: [{progress_bar}] 100.0% ({downloaded_mb:.1}/{total_mb:.1} MB)");
             io::stdout().flush().unwrap();
         } else {
             // 没有总大小信息时，显示最终下载量

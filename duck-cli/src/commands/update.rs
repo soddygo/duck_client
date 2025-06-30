@@ -122,8 +122,7 @@ async fn check_update_server_available(_app: &CliApp) -> Result<UpdateInfo> {
         latest_version: current_version.to_string(), // 暂时使用当前版本
         has_update,
         download_url: Some(format!(
-            "{}/downloads/duck-cli-{}-{}",
-            base_url, current_version, _platform
+            "{base_url}/downloads/duck-cli-{current_version}-{_platform}"
         )),
         signature: Some("mock_signature".to_string()),
         release_notes: Some("这是一个模拟的更新说明".to_string()),
@@ -208,7 +207,7 @@ fn get_current_platform() -> String {
         ("linux", "x86_64") => "linux-x86_64".to_string(),
         ("linux", "aarch64") => "linux-aarch64".to_string(),
         ("windows", "x86_64") => "windows-x86_64".to_string(),
-        _ => format!("{}-{}", os, arch),
+        _ => format!("{os}-{arch}"),
     }
 }
 
@@ -452,8 +451,7 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
 
                 // 首次部署时，如果无法获取版本信息，应该返回错误
                 return Err(client_core::DuckError::Custom(format!(
-                    "首次部署时无法获取版本信息: {}",
-                    e
+                    "首次部署时无法获取版本信息: {e}"
                 )));
             } else {
                 info!("💡 无法检查版本，可能的原因:");
@@ -470,8 +468,7 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
                     // 非首次部署但没有现有文件，也应该返回错误
                     warn!("⚠️  无法获取版本信息且本地没有现有的服务包文件");
                     return Err(client_core::DuckError::Custom(format!(
-                        "无法获取版本信息且本地没有服务包文件: {}",
-                        e
+                        "无法获取版本信息且本地没有服务包文件: {e}"
                     )));
                 }
             }

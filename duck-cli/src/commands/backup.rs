@@ -278,7 +278,7 @@ pub async fn run_list_backups(app: &CliApp) -> Result<()> {
                 } else if file_size > 1024 {
                     format!("{:.1}KB", file_size as f64 / 1024.0)
                 } else {
-                    format!("{}B", file_size)
+                    format!("{file_size}B")
                 }
             } else {
                 "未知".to_string()
@@ -366,7 +366,7 @@ pub async fn run_list_backups(app: &CliApp) -> Result<()> {
 pub async fn run_rollback(app: &CliApp, backup_id: i64, force: bool) -> Result<()> {
     if !force {
         warn!("⚠️  警告: 此操作将覆盖当前所有服务文件和数据!");
-        print!("请确认您要从备份 {} 恢复 (y/N): ", backup_id);
+        print!("请确认您要从备份 {backup_id} 恢复 (y/N): ");
 
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;

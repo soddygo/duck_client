@@ -49,8 +49,7 @@ pub async fn deploy_docker_services(app: &CliApp) -> Result<()> {
         Err(e) => {
             error!("❌ Docker 服务部署失败: {:?}", e);
             return Err(client_core::DuckError::custom(format!(
-                "Docker 服务部署失败: {:?}",
-                e
+                "Docker 服务部署失败: {e:?}"
             )));
         }
     }
@@ -204,8 +203,7 @@ pub async fn check_docker_services_status(app: &CliApp) -> Result<()> {
         Err(e) => {
             error!("❌ 获取服务状态失败: {:?}", e);
             return Err(client_core::DuckError::custom(format!(
-                "获取服务状态失败: {:?}",
-                e
+                "获取服务状态失败: {e:?}"
             )));
         }
     }

@@ -114,8 +114,6 @@ pub async fn fetch_latest_version(repo: &GitHubRepo) -> Result<GitHubRelease> {
 
 /// 比较版本号
 pub fn compare_versions(current: &str, latest: &str) -> std::cmp::Ordering {
-
-
     // 简单的版本比较，假设版本格式为 v1.2.3 或 1.2.3
     let normalize_version = |v: &str| -> String { v.trim_start_matches('v').to_string() };
 
@@ -270,7 +268,7 @@ pub async fn install_release(url: &str, version: &str) -> Result<()> {
     std::fs::create_dir_all(&temp_dir)?;
 
     // 确定文件名
-    let default_filename = format!("duck-cli-{}", version);
+    let default_filename = format!("duck-cli-{version}");
     let filename = url.split('/').next_back().unwrap_or(&default_filename);
     let download_path = temp_dir.join(filename);
 
@@ -406,8 +404,6 @@ async fn install_unix_executable(download_path: &PathBuf, current_exe: &PathBuf)
     info!("✅ 可执行文件已更新");
     Ok(())
 }
-
-
 
 /// 从压缩包安装
 async fn install_from_archive(

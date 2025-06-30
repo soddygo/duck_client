@@ -222,7 +222,7 @@ impl HealthChecker {
                 }
             }
             Err(e) => {
-                let error_msg = format!("获取服务状态失败: {}", e);
+                let error_msg = format!("获取服务状态失败: {e}");
                 error!("{}", error_msg);
                 report.add_error(error_msg);
             }
@@ -330,8 +330,7 @@ impl HealthChecker {
         }
 
         Err(DockerServiceError::ServiceManagement(format!(
-            "未找到容器: {}",
-            container_name
+            "未找到容器: {container_name}"
         )))
     }
 
@@ -354,7 +353,7 @@ impl HealthChecker {
         if !failed_containers.is_empty() {
             let failed_names: Vec<&str> =
                 failed_containers.iter().map(|c| c.name.as_str()).collect();
-            summary.push_str(&format!("\n失败容器: {:?}", failed_names));
+            summary.push_str(&format!("\n失败容器: {failed_names:?}"));
         }
 
         Ok(summary)

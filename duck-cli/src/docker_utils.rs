@@ -150,8 +150,7 @@ pub async fn check_services_running(filter: &ServiceFilter) -> Result<bool> {
                 Err(e) => {
                     error!("获取容器列表失败: {}", e);
                     Err(client_core::error::DuckError::docker_service(format!(
-                        "获取容器列表失败: {}",
-                        e
+                        "获取容器列表失败: {e}"
                     )))
                 }
             }
@@ -159,8 +158,7 @@ pub async fn check_services_running(filter: &ServiceFilter) -> Result<bool> {
         Err(e) => {
             error!("无法连接到Docker: {}", e);
             Err(client_core::error::DuckError::docker_service(format!(
-                "无法连接到Docker: {}",
-                e
+                "无法连接到Docker: {e}"
             )))
         }
     }
@@ -330,16 +328,14 @@ pub async fn parse_service_configs_from_compose(
             Err(e) => {
                 error!("解析docker-compose.yml失败: {}", e);
                 Err(client_core::error::DuckError::custom(format!(
-                    "解析docker-compose.yml失败: {}",
-                    e
+                    "解析docker-compose.yml失败: {e}"
                 )))
             }
         },
         Err(e) => {
             error!("读取docker-compose.yml文件失败: {}", e);
             Err(client_core::error::DuckError::custom(format!(
-                "读取docker-compose.yml文件失败: {}",
-                e
+                "读取docker-compose.yml文件失败: {e}"
             )))
         }
     }

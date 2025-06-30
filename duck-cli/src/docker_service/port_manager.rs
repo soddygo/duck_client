@@ -103,8 +103,7 @@ impl PortManager {
                 }
             }
             Err(DockerServiceError::Configuration(format!(
-                "无法找到从 {} 开始的可用端口",
-                preferred_port
+                "无法找到从 {preferred_port} 开始的可用端口"
             )))
         }
     }
@@ -131,7 +130,7 @@ impl PortManager {
         })?;
 
         let yaml: Value = serde_yaml::from_str(&content).map_err(|e| {
-            DockerServiceError::Configuration(format!("解析docker-compose文件失败: {}", e))
+            DockerServiceError::Configuration(format!("解析docker-compose文件失败: {e}"))
         })?;
 
         let mut port_mappings = Vec::new();
@@ -235,8 +234,7 @@ impl PortManager {
                         Ok(None)
                     } else {
                         Err(DockerServiceError::Configuration(format!(
-                            "端口号超出范围: {}",
-                            port
+                            "端口号超出范围: {port}"
                         )))
                     }
                 } else {

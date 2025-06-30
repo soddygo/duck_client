@@ -107,8 +107,7 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
         _ => {
             error!("不支持的时间单位: {}", unit);
             return Err(client_core::error::DuckError::custom(format!(
-                "不支持的时间单位: {}，支持的单位: hours, minutes, days",
-                unit
+                "不支持的时间单位: {unit}，支持的单位: hours, minutes, days"
             )));
         }
     };
@@ -299,6 +298,6 @@ fn format_duration(duration: Duration) -> String {
     } else if seconds >= 60 {
         format!("{} 分钟", seconds / 60)
     } else {
-        format!("{} 秒", seconds)
+        format!("{seconds} 秒")
     }
 }

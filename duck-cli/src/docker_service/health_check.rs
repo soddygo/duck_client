@@ -202,37 +202,49 @@ impl HealthChecker {
         Self { docker_manager }
     }
 
-    /// 执行健康检查
+    /// 执行健康检查 - 使用 ducker 库
     pub async fn check_health(&self) -> DockerServiceResult<HealthReport> {
         let mut report = HealthReport::new();
 
         // 获取服务状态
         match self.docker_manager.get_services_status().await {
             Ok(services) => {
+                info!("健康检查: 获取到 {} 个服务", services.len());
                 for service in services {
+                    let status = match service.status {
+                        client_core::container::ServiceStatus::Running => ContainerStatus::Running,
+                        client_core::container::ServiceStatus::Stopped => ContainerStatus::Stopped,
+                        client_core::container::ServiceStatus::Unknown => ContainerStatus::Unknown,
+                    };
+
                     let container = ContainerInfo {
-                        name: service.name,
-                        status: ContainerStatus::from_str(&format!("{:?}", service.status)),
-                        image: service.image,
-                        ports: service.ports,
+                        name: service.name.clone(),
+                        status,
+                        image: service.image.clone(),
+                        ports: service.ports.clone(),
                         uptime: None,
                         health: None,
                     };
+
                     report.add_container(container);
                 }
             }
             Err(e) => {
-                let error_msg = format!("获取服务状态失败: {e}");
+                let error_msg = format!("ducker 获取服务状态失败: {e}");
                 error!("{}", error_msg);
                 report.add_error(error_msg);
             }
         }
 
         report.finalize();
+        info!(
+            "健康检查完成: {}/{} 容器运行正常",
+            report.running_count, report.total_count
+        );
         Ok(report)
     }
 
-    /// 等待服务启动完成
+    /// 等待服务启动完成 - 智能等待策略
     pub async fn wait_for_services_ready(
         &self,
         timeout: Duration,
@@ -240,18 +252,25 @@ impl HealthChecker {
     ) -> DockerServiceResult<HealthReport> {
         let start_time = Instant::now();
         let mut last_report = None;
+        let mut first_check = true;
 
-        info!("等待服务启动完成，超时时间: {:?}", timeout);
+        info!("⏳ 开始检查服务启动状态，超时时间: {}秒", timeout.as_secs());
 
         loop {
             let elapsed = start_time.elapsed();
             if elapsed >= timeout {
-                let _final_report = last_report.unwrap_or_else(|| {
+                // 超时处理
+                let final_report = last_report.unwrap_or_else(|| {
                     let mut report = HealthReport::new();
                     report.add_error("等待超时".to_string());
                     report.finalize();
                     report
                 });
+
+                // 清除最后的进度显示
+                print!("\r");
+                error!("⏰ 健康检查超时! 用时: {}秒", elapsed.as_secs());
+                self.print_final_status(&final_report, false);
 
                 return Err(DockerServiceError::Timeout {
                     operation: "等待服务启动".to_string(),
@@ -262,58 +281,152 @@ impl HealthChecker {
             // 执行健康检查
             let report = self.check_health().await?;
 
-            // 显示进度
-            self.log_progress(&report, elapsed);
+            // 显示实时进度（使用 print! 刷新）
+            self.print_progress(&report, elapsed, first_check);
+            first_check = false;
 
             // 检查是否所有服务都已就绪
             match report.overall_status {
                 ServiceStatus::AllRunning => {
-                    info!("所有服务已成功启动! 用时: {:?}", elapsed);
+                    // 所有服务都成功启动，立即返回
+                    print!("\r");
+                    info!("🎉 所有服务已成功启动! 用时: {}秒", elapsed.as_secs());
+                    self.print_final_status(&report, true);
                     return Ok(report);
                 }
                 ServiceStatus::AllStopped => {
-                    warn!("所有服务都已停止");
+                    print!("\r");
+                    warn!("❌ 所有服务都已停止");
+                    self.print_final_status(&report, false);
                     return Err(DockerServiceError::ServiceManagement(
                         "所有服务都已停止".to_string(),
                     ));
                 }
-                _ => {
-                    // 继续等待
+                ServiceStatus::PartiallyRunning | ServiceStatus::Starting => {
+                    // 有服务正在启动或部分运行，继续等待
+                    last_report = Some(report);
+                }
+                ServiceStatus::Unknown => {
+                    // 状态未知，继续等待
+                    last_report = Some(report);
                 }
             }
 
-            last_report = Some(report);
             tokio::time::sleep(check_interval).await;
         }
     }
 
-    /// 记录进度日志
-    fn log_progress(&self, report: &HealthReport, elapsed: Duration) {
-        let running_containers = report
+
+
+    /// 实时进度显示 - 使用print!刷新，避免过多日志
+    fn print_progress(&self, report: &HealthReport, elapsed: Duration, is_first: bool) {
+        let running_count = report.running_count;
+        let total_count = report.total_count;
+        let elapsed_secs = elapsed.as_secs();
+
+        // 构建运行中的服务列表
+        let running_services: Vec<&str> = report
             .containers
             .iter()
             .filter(|c| c.status.is_healthy())
-            .map(|c| &c.name)
-            .collect::<Vec<_>>();
+            .map(|c| c.name.as_str())
+            .collect();
 
-        let starting_containers = report
+        // 构建启动中的服务列表
+        let starting_services: Vec<&str> = report
             .get_starting_containers()
             .iter()
-            .map(|c| &c.name)
-            .collect::<Vec<_>>();
+            .map(|c| c.name.as_str())
+            .collect();
 
-        if !running_containers.is_empty() {
-            info!("已启动服务: {:?}", running_containers);
+        // 构建失败的服务列表
+        let failed_services: Vec<&str> = report
+            .get_failed_containers()
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
+
+        // 构建状态信息
+        let mut status_parts = vec![];
+
+        if !running_services.is_empty() {
+            status_parts.push(format!("✅ 运行中: {}", running_services.len()));
         }
 
-        if !starting_containers.is_empty() {
-            info!("启动中服务: {:?}", starting_containers);
+        if !starting_services.is_empty() {
+            status_parts.push(format!("⏳ 启动中: {}", starting_services.len()));
         }
 
-        info!(
-            "进度: {}/{} 服务就绪, 用时: {:?}",
-            report.running_count, report.total_count, elapsed
+        if !failed_services.is_empty() {
+            status_parts.push(format!("❌ 失败: {}", failed_services.len()));
+        }
+
+        let status_text = if status_parts.is_empty() {
+            "检查中...".to_string()
+        } else {
+            status_parts.join(" | ")
+        };
+
+        // 使用 \r 回到行首，覆盖之前的进度
+        if is_first {
+            print!("\n"); // 第一次输出前加个换行
+        }
+
+        print!(
+            "\r🔍 [{}/{}] {} | 用时: {}秒",
+            running_count, total_count, status_text, elapsed_secs
         );
+
+        // 强制刷新输出
+        use std::io::{self, Write};
+        io::stdout().flush().unwrap_or(());
+    }
+
+    /// 打印最终状态信息
+    fn print_final_status(&self, report: &HealthReport, success: bool) {
+        println!(); // 换行，确保最终状态在新的一行显示
+
+        if success {
+            info!("=== ✅ 服务启动成功 ===");
+        } else {
+            error!("=== ❌ 服务启动失败 ===");
+        }
+
+        info!("总计: {}/{} 服务", report.running_count, report.total_count);
+
+        // 显示运行中的服务
+        let running_services: Vec<&str> = report
+            .containers
+            .iter()
+            .filter(|c| c.status.is_healthy())
+            .map(|c| c.name.as_str())
+            .collect();
+
+        if !running_services.is_empty() {
+            info!("✅ 运行中的服务: {:?}", running_services);
+        }
+
+        // 显示失败的服务
+        let failed_services: Vec<&str> = report
+            .get_failed_containers()
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
+
+        if !failed_services.is_empty() {
+            warn!("❌ 失败的服务: {:?}", failed_services);
+        }
+
+        // 显示启动中的服务
+        let starting_services: Vec<&str> = report
+            .get_starting_containers()
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
+
+        if !starting_services.is_empty() {
+            warn!("⏳ 仍在启动的服务: {:?}", starting_services);
+        }
     }
 
     /// 检查特定容器的状态

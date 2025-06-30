@@ -17,7 +17,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn create_dummy_compose_file(dir: &Path) -> PathBuf {
-        let compose_file = dir.join("docker-compose.yml");
+        let compose_file = dir.join(crate::constants::docker::COMPOSE_FILE_NAME);
         std::fs::write(
             &compose_file,
             r#"

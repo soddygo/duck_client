@@ -1,6 +1,8 @@
 use super::types::{DockerManager, ServiceInfo, ServiceStatus};
 use crate::constants::timeout;
 use crate::{DuckError, Result};
+use ducker::docker::{container::DockerContainer, util::new_local_docker_connection};
+use tracing::{error, info};
 
 impl DockerManager {
     /// 启动所有服务
@@ -66,8 +68,130 @@ impl DockerManager {
         Ok(())
     }
 
-    /// 获取服务状态
+    /// 获取服务状态 - 使用 ducker 库实现，只返回docker-compose中定义的服务
     pub async fn get_services_status(&self) -> Result<Vec<ServiceInfo>> {
+        self.check_prerequisites().await?;
+
+        info!("使用 ducker 库获取容器状态...");
+        
+        // 1. 获取docker-compose.yml中定义的服务名称
+        let compose_services = self.get_compose_service_names().await?;
+        info!("docker-compose.yml 中定义的服务: {:?}", compose_services);
+        
+        // 2. 获取所有容器信息
+        let containers = self.get_all_containers_with_ducker().await?;
+        info!("系统中发现 {} 个容器", containers.len());
+        
+        // 3. 只保留与compose服务匹配的容器
+        let mut matched_services = Vec::new();
+        let mut compose_services_found = std::collections::HashSet::new();
+        
+        for container in containers {
+            // 检查该容器是否属于任何compose服务
+            for service_name in &compose_services {
+                if self.is_service_name_match(&container.names, service_name) {
+                    let service_info = self.convert_docker_container_to_service_info(container.clone());
+                    matched_services.push(service_info);
+                    compose_services_found.insert(service_name.clone());
+                    break; // 避免重复匹配
+                }
+            }
+        }
+        
+        // 4. 为未找到的compose服务创建"未知"状态的条目
+        for service_name in &compose_services {
+            if !compose_services_found.contains(service_name) {
+                matched_services.push(ServiceInfo {
+                    name: service_name.clone(),
+                    status: crate::container::ServiceStatus::Unknown,
+                    image: "未知".to_string(),
+                    ports: Vec::new(),
+                });
+            }
+        }
+        
+        info!("匹配到 {}/{} 个compose服务容器", compose_services_found.len(), compose_services.len());
+        
+        Ok(matched_services)
+    }
+
+    /// 获取所有容器状态（包括非compose容器）- 保留原有功能
+    pub async fn get_all_containers_status(&self) -> Result<Vec<ServiceInfo>> {
+        self.check_prerequisites().await?;
+
+        info!("使用 ducker 库获取所有容器状态...");
+        
+        // 获取所有容器信息
+        let containers = self.get_all_containers_with_ducker().await?;
+        
+        // 转换为 ServiceInfo 格式
+        let services = containers
+            .into_iter()
+            .map(|container| self.convert_docker_container_to_service_info(container))
+            .collect();
+
+        Ok(services)
+    }
+
+    /// 使用 ducker 库获取所有容器信息
+    async fn get_all_containers_with_ducker(&self) -> Result<Vec<DockerContainer>> {
+        match new_local_docker_connection("/var/run/docker.sock", None).await {
+            Ok(docker) => {
+                match DockerContainer::list(&docker).await {
+                    Ok(containers) => {
+                        info!("ducker 成功获取到 {} 个容器", containers.len());
+                        Ok(containers)
+                    }
+                    Err(e) => {
+                        error!("ducker 获取容器列表失败: {}", e);
+                        Err(DuckError::Docker(format!("获取容器列表失败: {e}")))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("ducker 连接 Docker 失败: {}", e);
+                Err(DuckError::Docker(format!("连接 Docker 失败: {e}")))
+            }
+        }
+    }
+
+    /// 将 DockerContainer 转换为 ServiceInfo
+    fn convert_docker_container_to_service_info(&self, container: DockerContainer) -> ServiceInfo {
+        let status = if container.running {
+            ServiceStatus::Running
+        } else {
+            // 根据状态字符串进一步判断
+            match container.status.to_lowercase().as_str() {
+                s if s.contains("exited") => ServiceStatus::Stopped,
+                s if s.contains("created") => ServiceStatus::Stopped,
+                s if s.contains("restarting") => ServiceStatus::Unknown,
+                s if s.contains("paused") => ServiceStatus::Stopped,
+                s if s.contains("dead") => ServiceStatus::Stopped,
+                _ => ServiceStatus::Unknown,
+            }
+        };
+
+        // 解析端口映射
+        let ports = if container.ports.is_empty() {
+            Vec::new()
+        } else {
+            container.ports
+                .split(", ")
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string())
+                .collect()
+        };
+
+        ServiceInfo {
+            name: container.names.clone(),
+            status,
+            image: container.image.clone(),
+            ports,
+        }
+    }
+
+    /// 获取服务状态 - 保留旧方法作为备选
+    pub async fn get_services_status_with_compose(&self) -> Result<Vec<ServiceInfo>> {
         self.check_prerequisites().await?;
 
         let output = self
@@ -83,17 +207,80 @@ impl DockerManager {
         self.parse_service_info(&stdout)
     }
 
-    /// 检查单个服务是否正在运行
+    /// 检查单个服务是否正在运行 - 使用 ducker 实现
     pub async fn is_service_running(&self, service_name: &str) -> Result<bool> {
         let services = self.get_services_status().await?;
 
         for service in services {
-            if service.name == service_name {
+            if self.is_service_name_match(&service.name, service_name) {
                 return Ok(service.status == ServiceStatus::Running);
             }
         }
 
         Ok(false)
+    }
+
+    /// 判断容器是否属于指定的compose服务
+    /// 使用docker-compose的容器命名规则进行匹配
+    fn is_service_name_match(&self, container_name: &str, service_name: &str) -> bool {
+        // 生成可能的容器名称模式
+        let patterns = self.generate_compose_container_patterns(service_name);
+        
+        let container_lower = container_name.to_lowercase();
+        
+        // 检查容器名称是否匹配任何模式
+        for pattern in patterns {
+            let pattern_lower = pattern.to_lowercase();
+            
+            // 精确匹配
+            if container_lower == pattern_lower {
+                return true;
+            }
+            
+            // 前缀匹配（处理有额外后缀的情况）
+            if container_lower.starts_with(&pattern_lower) {
+                return true;
+            }
+        }
+
+        // 如果没有匹配到，检查是否是包含关系
+        let service_lower = service_name.to_lowercase();
+        if container_lower.contains(&service_lower) {
+            return true;
+        }
+
+        false
+    }
+
+    /// 获取特定服务的详细信息
+    pub async fn get_service_detail(&self, service_name: &str) -> Result<Option<ServiceInfo>> {
+        let services = self.get_services_status().await?;
+
+        for service in services {
+            if self.is_service_name_match(&service.name, service_name) {
+                return Ok(Some(service));
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// 获取所有正在运行的服务
+    pub async fn get_running_services(&self) -> Result<Vec<ServiceInfo>> {
+        let services = self.get_services_status().await?;
+        Ok(services
+            .into_iter()
+            .filter(|service| service.status == ServiceStatus::Running)
+            .collect())
+    }
+
+    /// 获取所有失败的服务
+    pub async fn get_failed_services(&self) -> Result<Vec<ServiceInfo>> {
+        let services = self.get_services_status().await?;
+        Ok(services
+            .into_iter()
+            .filter(|service| service.status == ServiceStatus::Stopped)
+            .collect())
     }
 
     /// 获取服务日志

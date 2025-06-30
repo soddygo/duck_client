@@ -11,6 +11,57 @@ pub mod docker {
     /// 环境变量文件名
     pub const ENV_FILE_NAME: &str = ".env";
 
+    /// Docker镜像目录名
+    pub const IMAGES_DIR_NAME: &str = "images";
+
+    /// 数据目录名
+    pub const DATA_DIR_NAME: &str = "data";
+
+    /// 配置目录名
+    pub const CONFIG_DIR_NAME: &str = "config";
+
+    /// 上传目录名
+    pub const UPLOAD_DIR_NAME: &str = "upload";
+
+    /// 备份目录名
+    pub const BACKUPS_DIR_NAME: &str = "backups";
+
+    /// 日志目录名
+    pub const LOGS_DIR_NAME: &str = "logs";
+
+    /// 服务数据目录结构
+    pub mod data_dirs {
+        /// MySQL数据目录
+        pub const MYSQL_DATA_DIR: &str = "data/mysql";
+
+        /// Redis数据目录
+        pub const REDIS_DATA_DIR: &str = "data/redis";
+
+        /// Milvus数据目录
+        pub const MILVUS_DATA_DIR: &str = "data/milvus";
+
+        /// Milvus数据存储目录
+        pub const MILVUS_DATA_STORAGE_DIR: &str = "data/milvus/data";
+
+        /// Milvus etcd数据目录
+        pub const MILVUS_ETCD_DATA_DIR: &str = "data/milvus/etcd";
+    }
+
+    /// 服务日志目录结构
+    pub mod log_dirs {
+        /// Agent日志目录
+        pub const AGENT_LOG_DIR: &str = "logs/agent";
+
+        /// MySQL日志目录
+        pub const MYSQL_LOG_DIR: &str = "logs/mysql";
+
+        /// Redis日志目录
+        pub const REDIS_LOG_DIR: &str = "logs/redis";
+
+        /// Milvus日志目录
+        pub const MILVUS_LOG_DIR: &str = "logs/milvus";
+    }
+
     /// 服务端口相关常量
     pub mod ports {
         /// 默认frontend服务端口
@@ -116,6 +167,56 @@ pub mod docker {
     /// 获取环境变量文件路径（跨平台）
     pub fn get_env_file_path() -> PathBuf {
         Path::new(".").join(DOCKER_DIR_NAME).join(ENV_FILE_NAME)
+    }
+
+    /// 获取Docker镜像目录路径（跨平台）
+    pub fn get_images_dir_path() -> PathBuf {
+        Path::new(".").join(DOCKER_DIR_NAME).join(IMAGES_DIR_NAME)
+    }
+
+    /// 获取数据目录路径（跨平台）
+    pub fn get_data_dir_path() -> PathBuf {
+        Path::new(".").join(DOCKER_DIR_NAME).join(DATA_DIR_NAME)
+    }
+
+    /// 获取配置目录路径（跨平台）
+    pub fn get_config_dir_path() -> PathBuf {
+        Path::new(".").join(DOCKER_DIR_NAME).join(CONFIG_DIR_NAME)
+    }
+
+    /// 获取上传目录路径（跨平台）
+    pub fn get_upload_dir_path() -> PathBuf {
+        Path::new(".").join(DOCKER_DIR_NAME).join(UPLOAD_DIR_NAME)
+    }
+
+    /// 获取备份目录路径（跨平台）
+    pub fn get_backups_dir_path() -> PathBuf {
+        Path::new(".").join(DOCKER_DIR_NAME).join(BACKUPS_DIR_NAME)
+    }
+
+    /// 获取日志目录路径（跨平台）
+    pub fn get_logs_dir_path() -> PathBuf {
+        Path::new(".").join(DOCKER_DIR_NAME).join(LOGS_DIR_NAME)
+    }
+
+    /// 获取所有必需的Docker服务目录列表
+    pub fn get_all_required_directories() -> Vec<&'static str> {
+        vec![
+            DATA_DIR_NAME,
+            data_dirs::MYSQL_DATA_DIR,
+            data_dirs::REDIS_DATA_DIR,
+            data_dirs::MILVUS_DATA_DIR,
+            data_dirs::MILVUS_DATA_STORAGE_DIR,
+            data_dirs::MILVUS_ETCD_DATA_DIR,
+            LOGS_DIR_NAME,
+            log_dirs::AGENT_LOG_DIR,
+            log_dirs::MYSQL_LOG_DIR,
+            log_dirs::REDIS_LOG_DIR,
+            log_dirs::MILVUS_LOG_DIR,
+            UPLOAD_DIR_NAME,
+            CONFIG_DIR_NAME,
+            BACKUPS_DIR_NAME,
+        ]
     }
 }
 

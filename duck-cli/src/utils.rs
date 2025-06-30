@@ -118,8 +118,8 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
         }
 
         // 检查是否有docker-compose.yml，确定根目录结构
-        if file_name.ends_with("docker-compose.yml") {
-            if let Some(pos) = file_name.rfind("docker-compose.yml") {
+                if file_name.ends_with(client_core::constants::docker::COMPOSE_FILE_NAME) {
+        if let Some(pos) = file_name.rfind(client_core::constants::docker::COMPOSE_FILE_NAME) {
                 let prefix = &file_name[..pos];
                 if prefix.is_empty() {
                     // docker-compose.yml在根目录

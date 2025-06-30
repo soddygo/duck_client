@@ -179,4 +179,4 @@ pub enum Commands {
     /// 自动升级部署
     #[command(subcommand)]
     AutoUpgradeDeploy(AutoUpgradeDeployCommand),
-}
+} 

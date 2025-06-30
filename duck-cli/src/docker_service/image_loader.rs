@@ -59,15 +59,15 @@ impl ImageInfo {
         let arch_suffix = format!("-{}", architecture.as_str());
         let (original_tag, target_tag) =
             if let Some(name_without_ext) = file_name.strip_suffix(".tar") {
-                if name_without_ext.ends_with(&arch_suffix) {
-                    let target = &name_without_ext[..name_without_ext.len() - arch_suffix.len()];
-                    (name_without_ext.to_string(), target.to_string())
-                } else {
-                    (name_without_ext.to_string(), name_without_ext.to_string())
-                }
+            if name_without_ext.ends_with(&arch_suffix) {
+                let target = &name_without_ext[..name_without_ext.len() - arch_suffix.len()];
+                (name_without_ext.to_string(), target.to_string())
             } else {
-                (file_name.to_string(), file_name.to_string())
-            };
+                (name_without_ext.to_string(), name_without_ext.to_string())
+            }
+        } else {
+            (file_name.to_string(), file_name.to_string())
+        };
 
         // 获取文件大小
         let file_size = std::fs::metadata(&file_path)
@@ -202,7 +202,7 @@ impl ImageLoader {
     /// 创建新的镜像加载器
     pub fn new(docker_manager: DockerManager, work_dir: PathBuf) -> DockerServiceResult<Self> {
         let architecture = detect_architecture();
-        let images_dir = work_dir.join("images");
+        let images_dir = work_dir.join(client_core::constants::docker::IMAGES_DIR_NAME);
 
         Ok(Self {
             docker_manager,

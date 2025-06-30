@@ -12,6 +12,7 @@ mod image_loader;
 mod manager;
 mod port_manager;
 mod service_manager;
+pub mod script_permissions;
 
 // 公共接口导出
 pub use architecture::{Architecture, detect_architecture};

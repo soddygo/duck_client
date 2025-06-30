@@ -48,6 +48,9 @@ toml = { workspace = true }
 # Docker 命令执行
 which = { workspace = true }
 
+# Docker 容器管理
+ducker = { workspace = true }
+
 # 文件系统操作
 tempfile = { workspace = true }
 walkdir = { workspace = true }

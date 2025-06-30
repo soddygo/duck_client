@@ -61,7 +61,8 @@ pub fn detect_architecture() -> Architecture {
     detected
 }
 
-/// 验证架构是否受支持
+/// 验证架构是否有效
+#[allow(dead_code)]
 pub fn validate_architecture(arch: Architecture) -> DockerServiceResult<()> {
     match arch {
         Architecture::Amd64 | Architecture::Arm64 => {
@@ -71,12 +72,14 @@ pub fn validate_architecture(arch: Architecture) -> DockerServiceResult<()> {
     }
 }
 
-/// 获取镜像文件的架构标识模式
+/// 获取架构相关的镜像匹配模式
+#[allow(dead_code)]
 pub fn get_image_pattern(arch: Architecture) -> String {
     format!("*-{}.tar", arch.as_str())
 }
 
-/// 检查指定架构的镜像文件是否存在
+/// 检查指定架构的镜像是否存在
+#[allow(dead_code)]
 pub fn check_architecture_images_exist(
     images_dir: &std::path::Path,
     arch: Architecture,
@@ -123,7 +126,8 @@ pub fn check_architecture_images_exist(
     Ok(found_images)
 }
 
-/// 获取所有可用架构的镜像文件统计
+/// 获取可用的架构列表
+#[allow(dead_code)]
 pub fn get_available_architectures(
     images_dir: &std::path::Path,
 ) -> DockerServiceResult<std::collections::HashMap<Architecture, Vec<std::path::PathBuf>>> {

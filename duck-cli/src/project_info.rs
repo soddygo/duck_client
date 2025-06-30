@@ -2,7 +2,7 @@
 ///
 /// 由于 duck-cli 是面向用户的主程序，项目元数据统一在这里定义
 /// client-core 作为内部库，只提供技术性常量
-
+///
 /// 项目元数据（自动从 duck-cli 的 Cargo.toml 同步）
 pub mod metadata {
     /// 项目名称（自动从 Cargo.toml 同步）

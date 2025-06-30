@@ -1,7 +1,7 @@
 use client_core::config::AppConfig;
 use client_core::container::DockerManager;
 use client_core::error::Result;
-use std::path::PathBuf;
+
 
 // 子模块声明
 mod architecture;
@@ -16,16 +16,28 @@ mod service_manager;
 
 // 公共接口导出
 pub use architecture::{Architecture, detect_architecture};
+#[allow(unused_imports)]
+pub use config::DockerServiceConfig;
+#[allow(unused_imports)]
+pub use environment::EnvironmentChecker;
+#[allow(unused_imports)]
 pub use error::{DockerServiceError, DockerServiceResult};
+#[allow(unused_imports)]
 pub use health_check::{ContainerStatus, HealthReport, ServiceStatus};
+#[allow(unused_imports)]
+pub use image_loader::{ImageInfo, ImageLoader, ImageType, LoadResult, TagResult};
 pub use manager::DockerServiceManager;
+#[allow(unused_imports)]
 pub use port_manager::{PortConflict, PortConflictReport, PortManager, PortMapping};
+#[allow(unused_imports)]
+pub use service_manager::ServiceManager;
 
 /// Docker 服务管理的主要入口点
 pub struct DockerService;
 
 impl DockerService {
     /// 创建 Docker 服务管理器实例
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(config: AppConfig, docker_manager: DockerManager) -> Result<DockerServiceManager> {
         let work_dir = docker_manager
             .get_working_directory()

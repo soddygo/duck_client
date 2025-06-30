@@ -5,7 +5,7 @@ use client_core::{
 use std::path::PathBuf;
 
 use crate::cli::{
-    AutoBackupCommand, AutoUpgradeDeployCommand, CheckUpdateCommand, Commands, DockerServiceCommand,
+    AutoBackupCommand, AutoUpgradeDeployCommand, Commands, DockerServiceCommand,
 };
 use crate::commands;
 use tracing::info;

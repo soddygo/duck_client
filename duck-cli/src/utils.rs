@@ -1,6 +1,6 @@
 use client_core::error::Result;
 use std::io::{Read, Write};
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
 /// # Duck CLI 日志系统使用说明
 ///
@@ -45,8 +45,9 @@ use tracing::{debug, error, info, warn};
 /// ## 日志格式
 /// - **终端输出**：人类可读格式，不显示模块路径
 /// - **文件输出**：包含完整模块路径和更多调试信息
-
+///
 /// 带进度显示的文件复制
+#[allow(dead_code)]
 pub fn copy_with_progress<R: Read, W: Write>(
     mut reader: R,
     mut writer: W,
@@ -94,6 +95,7 @@ pub fn copy_with_progress<R: Read, W: Write>(
 }
 
 /// 解压Docker服务包
+#[allow(dead_code)]
 pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
     info!("   🔍 正在分析ZIP文件...");
 
@@ -315,8 +317,9 @@ pub fn setup_logging(verbose: bool) {
 ///
 /// 当duck-cli作为库使用时，可以调用此函数进行最小化的日志配置
 /// 或者让库的使用者完全控制日志配置
+#[allow(dead_code)]
 pub fn setup_minimal_logging() {
-    use tracing_subscriber::{EnvFilter, fmt, util::SubscriberInitExt};
+    use tracing_subscriber::{EnvFilter, fmt};
 
     // 尝试初始化一个简单的订阅者
     // 如果已经有全局订阅者，这会返回错误，我们忽略它

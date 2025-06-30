@@ -1,9 +1,9 @@
 use crate::app::CliApp;
 use crate::commands::{backup, docker_service};
 use crate::docker_utils;
-use client_core::constants::{cron, docker, timeout};
+use client_core::constants::{cron, timeout};
 use client_core::error::Result;
-use std::path::Path;
+
 use tracing::{debug, error, info, instrument, warn};
 
 /// 执行自动备份流程：停止服务 -> 备份 -> 重启服务
@@ -97,12 +97,10 @@ pub async fn run_auto_backup(app: &mut CliApp) -> Result<()> {
                 }
             }
         }
+    } else if backup_success {
+        info!("自动备份流程完成");
     } else {
-        if backup_success {
-            info!("自动备份流程完成");
-        } else {
-            warn!("自动备份流程完成（备份失败）");
-        }
+        warn!("自动备份流程完成（备份失败）");
     }
 
     // 如果备份失败，返回错误
@@ -262,6 +260,7 @@ fn validate_cron_expression(expr: &str) -> bool {
     true
 }
 
+#[allow(dead_code)]
 fn check_docker_files_exist() -> std::result::Result<Vec<String>, Box<dyn std::error::Error>> {
     let compose_path = client_core::constants::docker::get_compose_file_path();
     let mut missing_files = Vec::new();

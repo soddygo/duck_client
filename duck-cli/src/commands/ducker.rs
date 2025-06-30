@@ -85,7 +85,7 @@ async fn run_ducker_tui(args: DuckerArgs) -> color_eyre::Result<()> {
     info!("使用duck-cli的日志系统，跳过ducker的日志初始化");
 
     // 安装color_eyre (跳过如果已经安装)
-    if let Err(_) = color_eyre::install() {
+    if color_eyre::install().is_err() {
         warn!("color_eyre已经安装，跳过");
     }
 

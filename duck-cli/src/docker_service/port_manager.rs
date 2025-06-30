@@ -1,6 +1,6 @@
 use super::error::{DockerServiceError, DockerServiceResult};
 use serde_yaml::Value;
-use std::collections::HashMap;
+
 use std::net::{SocketAddr, TcpListener};
 use std::path::Path;
 use tracing::{error, info, warn};
@@ -91,6 +91,7 @@ impl PortManager {
     }
 
     /// 获取可用端口
+    #[allow(dead_code)]
     pub fn get_available_port(&self, preferred_port: u16) -> DockerServiceResult<u16> {
         if self.is_port_available(preferred_port) {
             Ok(preferred_port)
@@ -109,6 +110,7 @@ impl PortManager {
     }
 
     /// 保留端口
+    #[allow(dead_code)]
     pub fn reserve_port(&mut self, port: u16) {
         if !self.reserved_ports.contains(&port) {
             self.reserved_ports.push(port);

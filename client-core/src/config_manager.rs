@@ -339,7 +339,7 @@ impl<'a> ConfigManager<'a> {
         }
 
         // 简单验证ZIP文件头（验证文件确实是ZIP格式）
-        if let Err(e) = Self::verify_zip_file_header(&backup_file_path) {
+        if let Err(e) = Self::verify_zip_file_header(backup_file_path) {
             return Err(crate::error::DuckError::custom(format!(
                 "备份文件格式验证失败: backup_id = {}，文件路径 = {}，错误: {}",
                 backup_id, backup_record.file_path, e

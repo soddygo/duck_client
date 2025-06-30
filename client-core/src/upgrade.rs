@@ -15,6 +15,7 @@ use tracing::{info, warn};
 #[derive(Debug, Clone)]
 pub struct UpgradeManager {
     config: AppConfig,
+    #[allow(dead_code)]
     config_path: PathBuf,
     docker_manager: DockerManager,
     backup_manager: BackupManager,
@@ -153,7 +154,7 @@ impl UpgradeManager {
             if options.download_only {
                 let package_filename = download_url
                     .split('/')
-                    .last()
+                    .next_back()
                     .unwrap_or(crate::constants::upgrade::DEFAULT_UPDATE_PACKAGE);
                 let download_path = temp_dir.path().join(package_filename);
                 self.download_and_extract(
@@ -172,7 +173,7 @@ impl UpgradeManager {
 
             let package_filename = download_url
                 .split('/')
-                .last()
+                .next_back()
                 .unwrap_or(crate::constants::upgrade::DEFAULT_UPDATE_PACKAGE);
             let download_path = temp_dir.path().join(package_filename);
             self.download_and_extract(
@@ -378,7 +379,7 @@ impl UpgradeManager {
 
     async fn download_and_extract(
         &self,
-        download_url: &str,
+        _download_url: &str,
         download_path: &Path,
         extract_dir: &Path,
         progress_callback: Option<&ProgressCallback>,
@@ -430,7 +431,7 @@ impl UpgradeManager {
         let mut entries = tokio::fs::read_dir(images_dir).await?;
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "tar") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "tar") {
                 info!("加载镜像: {}", path.display());
                 self.docker_manager.load_image(&path).await?;
             }
@@ -477,6 +478,7 @@ impl UpgradeManager {
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn copy_directory_with_data_preservation<'a>(
         &'a self,
         src: &'a Path,
@@ -494,7 +496,7 @@ impl UpgradeManager {
 
                 if dest_path
                     .strip_prefix(dest)
-                    .map_or(false, |p| p.starts_with("data"))
+                    .is_ok_and(|p| p.starts_with("data"))
                     && dest_path.exists()
                 {
                     info!("保留现有数据文件: {}", dest_path.display());

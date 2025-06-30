@@ -1,7 +1,7 @@
 use crate::docker_service::error::{DockerServiceError, DockerServiceResult};
 use client_core::container::DockerManager;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
 use std::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
@@ -22,6 +22,7 @@ pub enum ContainerStatus {
 
 impl ContainerStatus {
     /// 从字符串解析容器状态
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "running" | "up" => ContainerStatus::Running,
@@ -184,6 +185,12 @@ impl HealthReport {
     }
 }
 
+impl Default for HealthReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// 健康检查器
 pub struct HealthChecker {
     docker_manager: DockerManager,
@@ -239,7 +246,7 @@ impl HealthChecker {
         loop {
             let elapsed = start_time.elapsed();
             if elapsed >= timeout {
-                let final_report = last_report.unwrap_or_else(|| {
+                let _final_report = last_report.unwrap_or_else(|| {
                     let mut report = HealthReport::new();
                     report.add_error("等待超时".to_string());
                     report.finalize();

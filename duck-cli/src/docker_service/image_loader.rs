@@ -1,8 +1,7 @@
 use crate::docker_service::architecture::{Architecture, detect_architecture};
 use crate::docker_service::error::{DockerServiceError, DockerServiceResult};
 use client_core::container::DockerManager;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tracing::{error, info, warn};
 
 /// 镜像类型
@@ -20,12 +19,14 @@ pub struct ImageInfo {
     /// 镜像文件路径
     pub file_path: PathBuf,
     /// 镜像类型
+    #[allow(dead_code)]
     pub image_type: ImageType,
     /// 原始标签（带架构后缀）
     pub original_tag: String,
     /// 目标标签（去除架构后缀）
     pub target_tag: String,
     /// 镜像架构
+    #[allow(dead_code)]
     pub architecture: Architecture,
     /// 文件大小
     pub file_size: u64,
@@ -55,8 +56,7 @@ impl ImageInfo {
 
         // 提取原始标签和目标标签
         let arch_suffix = format!("-{}", architecture.as_str());
-        let (original_tag, target_tag) = if file_name.ends_with(".tar") {
-            let name_without_ext = &file_name[..file_name.len() - 4];
+        let (original_tag, target_tag) = if let Some(name_without_ext) = file_name.strip_suffix(".tar") {
             if name_without_ext.ends_with(&arch_suffix) {
                 let target = &name_without_ext[..name_without_ext.len() - arch_suffix.len()];
                 (name_without_ext.to_string(), target.to_string())
@@ -125,6 +125,12 @@ impl LoadResult {
     }
 }
 
+impl Default for LoadResult {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// 标签设置结果
 #[derive(Debug, Clone)]
 pub struct TagResult {
@@ -167,9 +173,16 @@ impl TagResult {
     }
 }
 
+impl Default for TagResult {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// 镜像加载器
 pub struct ImageLoader {
     docker_manager: DockerManager,
+    #[allow(dead_code)]
     work_dir: PathBuf,
     architecture: Architecture,
     images_dir: PathBuf,
@@ -331,7 +344,7 @@ impl ImageLoader {
         use tokio::process::Command;
 
         let output = Command::new("docker")
-            .args(&["tag", source_tag, target_tag])
+            .args(["tag", source_tag, target_tag])
             .output()
             .await
             .map_err(|e| DockerServiceError::DockerCommand(e.to_string()))?;

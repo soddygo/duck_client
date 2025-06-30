@@ -1,6 +1,6 @@
 use client_core::constants::{docker, timeout};
 use client_core::error::Result;
-use ducker::docker::{container::DockerContainer, util::new_local_docker_connection};
+use ducker::docker::container::DockerContainer;
 use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
@@ -12,8 +12,10 @@ use tracing::{error, info, warn};
 #[derive(Debug, Clone)]
 pub enum ServiceFilter {
     /// 按容器名称关键字过滤
+    #[allow(dead_code)]
     NameContains(Vec<String>),
     /// 按容器ID过滤
+    #[allow(dead_code)]
     ContainerIds(Vec<String>),
     /// 基于服务配置智能过滤
     ServiceConfigs(Vec<ServiceConfig>),
@@ -342,6 +344,7 @@ pub async fn parse_service_configs_from_compose(
 }
 
 /// 从docker-compose.yml文件中解析服务名称（保持向后兼容）
+#[allow(dead_code)]
 pub async fn parse_service_names_from_compose(compose_file_path: &Path) -> Result<Vec<String>> {
     let service_configs = parse_service_configs_from_compose(compose_file_path).await?;
     Ok(service_configs

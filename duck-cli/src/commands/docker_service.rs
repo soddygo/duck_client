@@ -1,5 +1,5 @@
 use crate::app::CliApp;
-use crate::docker_service::{ContainerStatus, DockerService, DockerServiceManager};
+use crate::docker_service::{ContainerStatus, DockerService};
 use client_core::Result;
 use tracing::{error, info, warn};
 

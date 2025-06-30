@@ -426,12 +426,10 @@ impl BackupManager {
         let total_size = tokio::task::spawn_blocking(move || {
             let mut total = 0u64;
 
-            for entry in WalkDir::new(&source_dir) {
-                if let Ok(entry) = entry {
-                    if entry.path().is_file() {
-                        if let Ok(metadata) = entry.metadata() {
-                            total += metadata.len();
-                        }
+            for entry in WalkDir::new(&source_dir).into_iter().flatten() {
+                if entry.path().is_file() {
+                    if let Ok(metadata) = entry.metadata() {
+                        total += metadata.len();
                     }
                 }
             }

@@ -1,6 +1,6 @@
 use crate::docker_service::architecture::{Architecture, detect_architecture};
 use crate::docker_service::error::{DockerServiceError, DockerServiceResult};
-use crate::docker_service::health_check::{HealthChecker, HealthReport, ServiceStatus};
+use crate::docker_service::health_check::{HealthChecker, HealthReport};
 use crate::docker_service::image_loader::{ImageLoader, LoadResult, TagResult};
 use crate::docker_service::port_manager::{PortConflictReport, PortManager};
 use client_core::config::AppConfig;
@@ -12,6 +12,7 @@ use tracing::{error, info, warn};
 
 /// Docker 服务管理器
 pub struct DockerServiceManager {
+    #[allow(dead_code)]
     config: AppConfig,
     docker_manager: DockerManager,
     work_dir: PathBuf,

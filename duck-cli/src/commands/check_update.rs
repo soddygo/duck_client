@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 /// GitHub 仓库常量配置
@@ -14,11 +14,15 @@ use crate::cli::CheckUpdateCommand;
 #[derive(Debug, Deserialize)]
 pub struct GitHubRelease {
     pub tag_name: String,
+    #[allow(dead_code)]
     pub name: String,
     pub body: String,
+    #[allow(dead_code)]
     pub draft: bool,
+    #[allow(dead_code)]
     pub prerelease: bool,
     pub published_at: String,
+    #[allow(dead_code)]
     pub html_url: String,
     pub assets: Vec<GitHubAsset>,
 }
@@ -26,9 +30,12 @@ pub struct GitHubRelease {
 #[derive(Debug, Deserialize)]
 pub struct GitHubAsset {
     pub name: String,
+    #[allow(dead_code)]
     pub size: u64,
+    #[allow(dead_code)]
     pub download_count: u64,
     pub browser_download_url: String,
+    #[allow(dead_code)]
     pub content_type: String,
 }
 
@@ -107,7 +114,7 @@ pub async fn fetch_latest_version(repo: &GitHubRepo) -> Result<GitHubRelease> {
 
 /// 比较版本号
 pub fn compare_versions(current: &str, latest: &str) -> std::cmp::Ordering {
-    use std::cmp::Ordering;
+
 
     // 简单的版本比较，假设版本格式为 v1.2.3 或 1.2.3
     let normalize_version = |v: &str| -> String { v.trim_start_matches('v').to_string() };
@@ -264,7 +271,7 @@ pub async fn install_release(url: &str, version: &str) -> Result<()> {
 
     // 确定文件名
     let default_filename = format!("duck-cli-{}", version);
-    let filename = url.split('/').last().unwrap_or(&default_filename);
+    let filename = url.split('/').next_back().unwrap_or(&default_filename);
     let download_path = temp_dir.join(filename);
 
     info!("📥 正在下载版本 {}: {}", version, url);
@@ -397,7 +404,7 @@ async fn install_unix_executable(download_path: &PathBuf, current_exe: &PathBuf)
 
 /// 从压缩包安装
 async fn install_from_archive(
-    archive_path: &PathBuf,
+    archive_path: &Path,
     current_exe: &PathBuf,
     _version: &str,
 ) -> Result<()> {
@@ -410,7 +417,7 @@ async fn install_from_archive(
 
     // 解压 tar.gz 文件
     let output = Command::new("tar")
-        .args(&[
+        .args([
             "-xzf",
             &archive_path.to_string_lossy(),
             "-C",

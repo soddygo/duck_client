@@ -4,6 +4,7 @@ use client_core::error::Result;
 use tracing::{error, info, warn};
 
 /// 检查客户端自身更新
+#[allow(dead_code)]
 pub async fn run_check_update(app: &CliApp) -> Result<()> {
     info!("🔍 检查客户端更新");
     info!("==================");
@@ -52,6 +53,7 @@ pub async fn run_check_update(app: &CliApp) -> Result<()> {
 }
 
 /// 执行客户端自身更新
+#[allow(dead_code)]
 pub async fn run_self_update(app: &CliApp, download_only: bool, force: bool) -> Result<()> {
     info!("🔄 客户端自更新");
     info!("=================");
@@ -89,6 +91,7 @@ pub async fn run_self_update(app: &CliApp, download_only: bool, force: bool) -> 
 
 /// 结构体：更新信息
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct UpdateInfo {
     current_version: String,
     latest_version: String,
@@ -99,7 +102,8 @@ struct UpdateInfo {
     pub_date: Option<String>,
 }
 
-/// 检查更新服务器并获取版本信息
+/// 检查更新服务器是否可用（API可用性检查）
+#[allow(dead_code)]
 async fn check_update_server_available(_app: &CliApp) -> Result<UpdateInfo> {
     info!("检查更新服务器状态...");
 
@@ -128,6 +132,7 @@ async fn check_update_server_available(_app: &CliApp) -> Result<UpdateInfo> {
 }
 
 /// 下载更新包
+#[allow(dead_code)]
 async fn download_update_package(
     _app: &CliApp,
     update_info: &UpdateInfo,
@@ -171,6 +176,7 @@ async fn download_update_package(
 }
 
 /// 执行自更新
+#[allow(dead_code)]
 async fn perform_self_update(app: &CliApp, update_info: &UpdateInfo, platform: &str) -> Result<()> {
     // 1. 下载更新包
     let update_file = download_update_package(app, update_info, platform).await?;
@@ -190,7 +196,8 @@ async fn perform_self_update(app: &CliApp, update_info: &UpdateInfo, platform: &
     Ok(())
 }
 
-/// 获取当前平台标识
+/// 获取当前平台
+#[allow(dead_code)]
 fn get_current_platform() -> String {
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
@@ -216,6 +223,7 @@ fn _version_compare(new_version: &str, current_version: &str) -> Result<bool> {
 }
 
 /// 验证更新包签名
+#[allow(dead_code)]
 fn verify_update_signature(file_path: &std::path::Path, signature: &str) -> Result<()> {
     // TODO: 实现签名验证逻辑
     info!("验证文件签名: {}", file_path.display());
@@ -228,6 +236,7 @@ fn verify_update_signature(file_path: &std::path::Path, signature: &str) -> Resu
 }
 
 /// 备份当前可执行文件
+#[allow(dead_code)]
 fn backup_current_executable() -> Result<()> {
     let current_exe = std::env::current_exe()?;
     let backup_path = current_exe.with_extension("backup");
@@ -239,11 +248,12 @@ fn backup_current_executable() -> Result<()> {
 }
 
 /// 应用更新
+#[allow(dead_code)]
 fn apply_update(update_file: &std::path::Path) -> Result<()> {
     let current_exe = std::env::current_exe()?;
 
     // 根据平台处理更新文件
-    if update_file.extension().map_or(false, |ext| ext == "zip") {
+    if update_file.extension().is_some_and(|ext| ext == "zip") {
         // ZIP 格式，需要解压
         extract_and_replace_executable(update_file, &current_exe)?;
     } else {
@@ -264,7 +274,8 @@ fn apply_update(update_file: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
-/// 解压并替换可执行文件
+/// 从压缩包中提取并替换可执行文件
+#[allow(dead_code)]
 fn extract_and_replace_executable(
     zip_file: &std::path::Path,
     target_exe: &std::path::Path,
@@ -277,7 +288,8 @@ fn extract_and_replace_executable(
     Ok(())
 }
 
-/// 上报更新结果
+/// 向服务器报告更新结果
+#[allow(dead_code)]
 async fn report_update_result(
     _app: &CliApp,
     update_info: &UpdateInfo,

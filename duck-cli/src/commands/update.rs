@@ -41,47 +41,16 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
                 client_core::constants::upgrade::DOCKER_SERVICE_PACKAGE,
             );
 
-            // 检查文件是否已存在
-            let file_exists = download_path.exists();
+            // 检查文件是否已存在（智能下载会处理这个检查）
 
             info!("📂 下载路径结构:");
             info!("   版本目录: ./cacheDuckData/download/{}/", target_version);
             info!("   文件路径: {}", download_path.display());
 
-            // 判断是否需要下载
-            let should_download =
-                is_first_time || force || version_info.has_update || full || !file_exists;
-
-            if file_exists && !force && !version_info.has_update && !full {
-                info!("✅ 发现已存在的服务包文件");
-                info!("   版本: {}", target_version);
-                info!("   位置: {}", download_path.display());
-                info!("💡 选项:");
-                info!("   - 运行 'duck-cli upgrade --force' 强制重新下载");
-                info!("   - 运行 'duck-cli docker-service deploy' 使用现有文件部署");
-                return Ok(());
-            }
-
-            if should_download {
-                if is_first_time {
-                    info!("状态: 🆕 首次部署 - 下载完整服务包");
-                } else if force {
-                    info!("状态: 🔧 强制重新下载");
-                    if file_exists {
-                        info!("   已存在的文件将被覆盖");
-                    }
-                } else if version_info.has_update {
-                    info!("状态: 🎉 发现新版本，开始下载");
-                    if let Some(notes) = version_info.release_notes {
-                        info!("更新说明:");
-                        for line in notes.lines() {
-                            info!("   {}", line);
-                        }
-                    }
-                } else if full {
-                    info!("状态: 📦 全量下载模式");
-                }
-
+            // 在强制模式下，直接下载（跳过优化检查）
+            if force {
+                info!("🔧 强制重新下载模式 - 跳过文件检查");
+                
                 // 确保下载目录存在
                 if let Err(e) = app
                     .config
@@ -91,37 +60,82 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
                     return Err(e);
                 }
 
-                info!("📥 开始下载服务包...");
+                info!("📥 开始强制下载服务包...");
                 info!("   目标版本: {}", target_version);
                 info!("   下载类型: {} (全量)", download_type);
 
-                // 执行下载，如果失败且是认证错误，则自动重新注册
+                // 强制模式使用传统下载方法，跳过优化检查
                 let download_result = app.api_client.download_service_update(&download_path).await;
+                
                 match download_result {
                     Ok(_) => {
-                        info!("✅ 服务包下载完成!");
+                        info!("✅ 强制下载完成!");
                         info!("   文件位置: {}", download_path.display());
                         info!("📝 下一步操作:");
                         info!("   运行 'duck-cli docker-service deploy' 来部署服务");
-                    }
-                    Err(client_core::error::DuckError::Api(ref msg)) if msg.contains("401") || msg.contains("Unauthorized") => {
-                        error!("❌ 下载失败: 认证失败");
-                        info!("💡 认证问题已由AuthenticatedClient自动处理，但仍然失败");
-                        return Err(client_core::error::DuckError::Api("下载失败: 认证失败".to_string()));
+                        return Ok(());
                     }
                     Err(e) => {
-                        error!("❌ 下载失败: {}", e);
-                        info!("💡 请检查网络连接或稍后重试");
+                        error!("❌ 强制下载失败: {}", e);
                         return Err(e);
                     }
                 }
+            }
+
+            // 准备下载（智能检查模式）
+
+            // 确保下载目录存在
+            if let Err(e) = app
+                .config
+                .ensure_version_download_dir(target_version, download_type)
+            {
+                error!("❌ 创建下载目录失败: {}", e);
+                return Err(e);
+            }
+
+            // 使用优化的下载方法（包含哈希验证和重复下载避免）
+            info!("📥 智能下载检查...");
+            info!("   目标版本: {}", target_version);
+            info!("   下载类型: {} (全量)", download_type);
+
+            if is_first_time {
+                info!("状态: 🆕 首次部署 - 下载完整服务包");
+            } else if version_info.has_update {
+                info!("状态: 🎉 发现新版本，开始下载");
+                if let Some(notes) = version_info.release_notes {
+                    info!("更新说明:");
+                    for line in notes.lines() {
+                        info!("   {}", line);
+                    }
+                }
+            } else if full {
+                info!("状态: 📦 全量下载模式");
             } else {
-                info!("状态: ✅ 服务包已是最新");
-                info!("💡 当前服务包已是最新版本");
-                info!("📝 可用操作:");
-                info!("   - 运行 'duck-cli upgrade --force' 强制重新下载");
-                info!("   - 运行 'duck-cli upgrade --full' 下载完整服务包");
-                info!("   - 运行 'duck-cli docker-service deploy' 部署现有服务包");
+                info!("状态: 🔍 检查文件完整性");
+            }
+
+            let download_result = app.api_client.download_service_update_optimized(
+                &download_path, 
+                Some(target_version)
+            ).await;
+            
+            match download_result {
+                Ok(_) => {
+                    info!("✅ 服务包已准备就绪!");
+                    info!("   文件位置: {}", download_path.display());
+                    info!("📝 下一步操作:");
+                    info!("   运行 'duck-cli docker-service deploy' 来部署服务");
+                }
+                Err(client_core::error::DuckError::Api(ref msg)) if msg.contains("401") || msg.contains("Unauthorized") => {
+                    error!("❌ 操作失败: 认证失败");
+                    info!("💡 认证问题已由AuthenticatedClient自动处理，但仍然失败");
+                    return Err(client_core::error::DuckError::Api("操作失败: 认证失败".to_string()));
+                }
+                Err(e) => {
+                    error!("❌ 操作失败: {}", e);
+                    info!("💡 请检查网络连接或稍后重试");
+                    return Err(e);
+                }
             }
         }
         Err(e) => {

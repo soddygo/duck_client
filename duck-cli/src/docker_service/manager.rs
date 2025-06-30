@@ -54,7 +54,7 @@ impl DockerServiceManager {
     }
 
     /// 执行完整的服务部署流程
-    pub async fn deploy_services(&self) -> DockerServiceResult<()> {
+    pub async fn deploy_services(&mut self) -> DockerServiceResult<()> {
         info!("开始 Docker 服务部署流程");
 
         // 1. 环境检查
@@ -226,7 +226,7 @@ impl DockerServiceManager {
     }
 
     /// 启动所有服务
-    pub async fn start_services(&self) -> DockerServiceResult<()> {
+    pub async fn start_services(&mut self) -> DockerServiceResult<()> {
         info!("启动 Docker Compose 服务...");
 
         // 1. 检查端口冲突
@@ -313,7 +313,7 @@ impl DockerServiceManager {
     }
 
     /// 重启所有服务
-    pub async fn restart_services(&self) -> DockerServiceResult<()> {
+    pub async fn restart_services(&mut self) -> DockerServiceResult<()> {
         info!("重启 Docker Compose 服务...");
 
         // 先停止服务
@@ -419,7 +419,7 @@ impl DockerServiceManager {
     }
 
     /// 检查端口冲突
-    async fn check_port_conflicts(&self) -> DockerServiceResult<()> {
+    async fn check_port_conflicts(&mut self) -> DockerServiceResult<()> {
         let compose_file = self.work_dir.join("docker-compose.yml");
 
         if !compose_file.exists() {
@@ -431,13 +431,13 @@ impl DockerServiceManager {
 
         match self
             .port_manager
-            .check_compose_port_conflicts(&compose_file)
+            .smart_check_compose_port_conflicts(&compose_file)
             .await
         {
             Ok(report) => {
                 if report.has_conflicts {
                     error!("❌ 发现端口冲突，无法启动服务");
-                    self.port_manager.print_conflict_report(&report);
+                    self.port_manager.print_smart_conflict_report(&report);
                     return Err(DockerServiceError::PortManagement(format!(
                         "发现 {} 个端口冲突，请解决后重试",
                         report.conflicted_ports.len()
@@ -459,10 +459,10 @@ impl DockerServiceManager {
     }
 
     /// 手动检查端口冲突（供外部调用）
-    pub async fn check_port_conflicts_report(&self) -> DockerServiceResult<PortConflictReport> {
+    pub async fn check_port_conflicts_report(&mut self) -> DockerServiceResult<PortConflictReport> {
         let compose_file = self.work_dir.join("docker-compose.yml");
         self.port_manager
-            .check_compose_port_conflicts(&compose_file)
+            .smart_check_compose_port_conflicts(&compose_file)
             .await
     }
 }

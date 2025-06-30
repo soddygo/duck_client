@@ -62,6 +62,11 @@ reqwest = { workspace = true }
 color-eyre = "0.6"
 ratatui = "0.29"
 
+dirs = "6.0"
+toml = "0.8"
+
+nom = "8"
+
 [lib]
 name = "duck_cli"
 path = "src/lib.rs"

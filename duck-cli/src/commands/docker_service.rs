@@ -8,7 +8,7 @@ pub async fn deploy_docker_services(app: &CliApp) -> Result<()> {
     info!("🚀 开始部署 Docker 服务...");
 
     // 创建 Docker 服务管理器
-    let docker_service_manager =
+    let mut docker_service_manager =
         DockerService::new(app.config.clone(), app.docker_manager.clone())?;
 
     // 显示系统信息
@@ -61,7 +61,7 @@ pub async fn deploy_docker_services(app: &CliApp) -> Result<()> {
 pub async fn start_docker_services(app: &CliApp) -> Result<()> {
     info!("▶️ 启动 Docker 服务...");
 
-    let docker_service_manager =
+    let mut docker_service_manager =
         DockerService::new(app.config.clone(), app.docker_manager.clone())?;
 
     match docker_service_manager.start_services().await {
@@ -101,7 +101,7 @@ pub async fn stop_docker_services(app: &CliApp) -> Result<()> {
 pub async fn restart_docker_services(app: &CliApp) -> Result<()> {
     info!("🔄 重启 Docker 服务...");
 
-    let docker_service_manager =
+    let mut docker_service_manager =
         DockerService::new(app.config.clone(), app.docker_manager.clone())?;
 
     match docker_service_manager.restart_services().await {

@@ -148,8 +148,9 @@ async fn check_docker_services_status(compose_file_path: &std::path::Path) -> Re
                                 // 提供访问信息
                                 if running_count > 0 {
                                     info!("   🌐 可能的访问地址:");
-                                    info!("      - 前端页面: http://localhost:80");
-                                    info!("      - 后端API: http://localhost:8080");
+                                          use client_core::constants::docker::ports;
+      info!("      - 前端页面: http://localhost:{}", ports::DEFAULT_FRONTEND_PORT);
+      info!("      - 后端API: http://localhost:{}", ports::DEFAULT_BACKEND_PORT);
                                 }
                             } else {
                                 info!("   📋 没有检测到运行中的服务容器");

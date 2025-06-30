@@ -9,8 +9,13 @@ use tokio::time::sleep;
 use tracing::{error, info, warn};
 
 /// 执行自动升级部署流程
-pub async fn run_auto_upgrade_deploy(app: &mut CliApp) -> Result<()> {
+pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16>) -> Result<()> {
     info!("🚀 开始自动升级部署流程...");
+
+    // 如果指定了端口，显示端口信息
+    if let Some(port) = frontend_port {
+        info!("🔌 自定义frontend端口: {}", port);
+    }
 
     // 1. 下载最新的docker.zip服务版本文件
     info!("开始下载最新的Docker服务版本");
@@ -67,7 +72,7 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp) -> Result<()> {
     // 5. 自动部署服务
     info!("开始部署Docker服务");
     info!("🔄 正在部署Docker服务...");
-    docker_service::deploy_docker_services(app).await?;
+    docker_service::deploy_docker_services(app, frontend_port).await?;
 
     // 6. 启动服务
     info!("启动Docker服务");
@@ -171,7 +176,7 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
     info!("延迟时间到，开始执行自动升级部署，任务ID: {}", task_id);
 
     // 执行自动升级部署
-    match run_auto_upgrade_deploy(app).await {
+    match run_auto_upgrade_deploy(app, None).await {
         Ok(_) => {
             let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
             config_manager

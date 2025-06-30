@@ -27,7 +27,11 @@ pub enum AutoBackupCommand {
 #[derive(Subcommand, Debug)]
 pub enum AutoUpgradeDeployCommand {
     /// 立即执行自动升级部署
-    Run,
+    Run {
+        /// 指定frontend服务的端口号（默认80端口）
+        #[arg(long, help = "指定frontend服务的端口号，对应docker-compose.yml中的FRONTEND_HOST_PORT变量（默认: 80端口）")]
+        port: Option<u16>,
+    },
     /// 延迟执行自动升级部署
     DelayTimeDeploy {
         /// 延迟时间数值
@@ -64,7 +68,11 @@ pub enum CheckUpdateCommand {
 #[derive(Subcommand, Debug)]
 pub enum DockerServiceCommand {
     /// 部署Docker服务
-    Deploy,
+    Deploy {
+        /// 指定frontend服务的端口号（默认80端口）
+        #[arg(long, help = "指定frontend服务的端口号，对应docker-compose.yml中的FRONTEND_HOST_PORT变量（默认: 80端口）")]
+        port: Option<u16>,
+    },
     /// 启动Docker服务
     Start,
     /// 停止Docker服务

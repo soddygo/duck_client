@@ -8,6 +8,87 @@ pub mod docker {
     /// Docker工作目录名
     pub const DOCKER_DIR_NAME: &str = "docker";
 
+    /// 环境变量文件名
+    pub const ENV_FILE_NAME: &str = ".env";
+
+    /// 服务端口相关常量
+    pub mod ports {
+        /// 默认frontend服务端口
+        pub const DEFAULT_FRONTEND_PORT: u16 = 80;
+
+        /// 默认backend服务端口
+        pub const DEFAULT_BACKEND_PORT: u16 = 8080;
+
+        /// 默认backend调试端口
+        pub const DEFAULT_BACKEND_DEBUG_PORT: u16 = 5005;
+
+        /// 默认MySQL端口
+        pub const DEFAULT_MYSQL_PORT: u16 = 3306;
+
+        /// 默认Redis端口
+        pub const DEFAULT_REDIS_PORT: u16 = 6379;
+
+        /// 默认Milvus端口
+        pub const DEFAULT_MILVUS_PORT: u16 = 19530;
+
+        /// 默认Milvus管理端口
+        pub const DEFAULT_MILVUS_MANAGEMENT_PORT: u16 = 9091;
+
+        /// 默认etcd端口
+        pub const DEFAULT_ETCD_PORT: u16 = 2379;
+
+        /// 默认MinIO API端口
+        pub const DEFAULT_MINIO_API_PORT: u16 = 9000;
+
+        /// 默认MinIO控制台端口
+        pub const DEFAULT_MINIO_CONSOLE_PORT: u16 = 9001;
+
+        /// 默认日志平台端口
+        pub const DEFAULT_LOG_PLATFORM_PORT: u16 = 8097;
+
+        /// 默认Quickwit端口
+        pub const DEFAULT_QUICKWIT_PORT: u16 = 7280;
+
+        /// 默认Quickwit管理端口
+        pub const DEFAULT_QUICKWIT_ADMIN_PORT: u16 = 7281;
+
+        /// 默认视频分析主服务端口
+        pub const DEFAULT_VIDEO_ANALYSIS_MASTER_PORT: u16 = 8989;
+
+        /// 默认MCP代理端口
+        pub const DEFAULT_MCP_PROXY_PORT: u16 = 8020;
+    }
+
+    /// 环境变量名称常量
+    pub mod env_vars {
+        /// Frontend服务主机端口环境变量
+        pub const FRONTEND_HOST_PORT: &str = "FRONTEND_HOST_PORT";
+
+        /// Backend应用端口环境变量
+        pub const APP_PORT: &str = "APP_PORT";
+
+        /// Backend调试端口环境变量
+        pub const APP_DEBUG_PORT: &str = "APP_DEBUG_PORT";
+
+        /// MySQL端口环境变量
+        pub const MYSQL_PORT: &str = "MYSQL_PORT";
+
+        /// Redis端口环境变量
+        pub const REDIS_PORT: &str = "REDIS_PORT";
+
+        /// Milvus端口环境变量
+        pub const MILVUS_PORT: &str = "MILVUS_PORT";
+
+        /// 日志平台主机端口环境变量
+        pub const LOG_PLATFORM_HOST_PORT: &str = "LOG_PLATFORM_HOST_PORT";
+
+        /// 视频分析主服务主机端口环境变量
+        pub const VIDEO_ANALYSIS_MASTER_HOST_PORT: &str = "VIDEO_ANALYSIS_MASTER_HOST_PORT";
+
+        /// 主应用端口环境变量（视频分析）
+        pub const MASTER_APP_PORT: &str = "MASTER_APP_PORT";
+    }
+
     /// Docker socket路径（跨平台支持）
     /// Unix/Linux/macOS: /var/run/docker.sock
     /// Windows: \\.\pipe\docker_engine
@@ -30,6 +111,11 @@ pub mod docker {
     /// 获取默认compose文件路径的字符串表示（用于向后兼容）
     pub fn get_compose_file_path_str() -> String {
         get_compose_file_path().to_string_lossy().to_string()
+    }
+
+    /// 获取环境变量文件路径（跨平台）
+    pub fn get_env_file_path() -> PathBuf {
+        Path::new(".").join(DOCKER_DIR_NAME).join(ENV_FILE_NAME)
     }
 }
 

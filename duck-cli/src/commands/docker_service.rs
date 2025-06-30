@@ -4,8 +4,14 @@ use client_core::Result;
 use tracing::{error, info, warn};
 
 /// 部署 Docker 服务
-pub async fn deploy_docker_services(app: &CliApp) -> Result<()> {
+pub async fn deploy_docker_services(app: &CliApp, frontend_port: Option<u16>) -> Result<()> {
     info!("🚀 开始部署 Docker 服务...");
+
+    // 如果指定了端口，先设置端口配置
+    if let Some(port) = frontend_port {
+        info!("🔧 配置frontend端口: {}", port);
+        set_frontend_port(port).await?;
+    }
 
     // 创建 Docker 服务管理器
     let mut docker_service_manager =
@@ -194,10 +200,12 @@ pub async fn check_docker_services_status(app: &CliApp) -> Result<()> {
 
             // 显示访问信息
             if report.overall_status.is_healthy() {
+                use client_core::constants::docker::ports;
                 info!("🌐 服务访问信息:");
-                info!("  • 前端页面: http://localhost:80");
-                info!("  • 后端API: http://localhost:8080");
-                info!("  • 管理界面: http://localhost:9000 (如果配置)");
+                info!("  • 前端页面: http://localhost:{}", ports::DEFAULT_FRONTEND_PORT);
+                info!("  • 后端API: http://localhost:{}", ports::DEFAULT_BACKEND_PORT);
+                info!("  • 管理界面: http://localhost:{} (如果配置)", ports::DEFAULT_MINIO_API_PORT);
+                info!("  📝 注意: 如果使用了自定义端口参数，请使用相应的端口访问");
             }
         }
         Err(e) => {
@@ -412,5 +420,52 @@ pub async fn list_docker_images_with_ducker(app: &CliApp) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// 设置frontend服务端口
+async fn set_frontend_port(port: u16) -> Result<()> {
+    use std::fs;
+    use client_core::constants::docker::{get_env_file_path, env_vars};
+
+    let env_file_path = get_env_file_path();
+    
+    if !env_file_path.exists() {
+        warn!("⚠️  .env文件不存在: {}", env_file_path.display());
+        return Err(client_core::DuckError::custom(
+            ".env文件不存在，无法设置frontend端口"
+        ));
+    }
+
+    // 读取现有的.env文件内容
+    let content = fs::read_to_string(&env_file_path)
+        .map_err(|e| client_core::DuckError::custom(format!("读取.env文件失败: {}", e)))?;
+
+    // 处理内容，更新FRONTEND_HOST_PORT的值
+    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    let mut found = false;
+    let env_var_prefix = format!("{}=", env_vars::FRONTEND_HOST_PORT);
+
+    for line in &mut lines {
+        if line.starts_with(&env_var_prefix) {
+            *line = format!("{}={}", env_vars::FRONTEND_HOST_PORT, port);
+            found = true;
+            info!("✅ 更新{}={}", env_vars::FRONTEND_HOST_PORT, port);
+            break;
+        }
+    }
+
+    // 如果没找到，添加新行
+    if !found {
+        lines.push(format!("{}={}", env_vars::FRONTEND_HOST_PORT, port));
+        info!("✅ 添加{}={}", env_vars::FRONTEND_HOST_PORT, port);
+    }
+
+    // 写回文件
+    let updated_content = lines.join("\n");
+    fs::write(&env_file_path, updated_content)
+        .map_err(|e| client_core::DuckError::custom(format!("写入.env文件失败: {}", e)))?;
+
+    info!("🔧 Frontend端口已设置为: {}", port);
     Ok(())
 }

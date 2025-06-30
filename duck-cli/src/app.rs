@@ -105,9 +105,9 @@ impl CliApp {
     /// 运行 Docker 服务相关命令
     async fn run_docker_service_command(&mut self, cmd: DockerServiceCommand) -> Result<()> {
         match cmd {
-            DockerServiceCommand::Deploy => {
+            DockerServiceCommand::Deploy { port } => {
                 info!("🚀 部署 Docker 服务...");
-                commands::deploy_docker_services(self).await
+                commands::deploy_docker_services(self, port).await
             }
             DockerServiceCommand::Start => {
                 info!("▶️  启动 Docker 服务...");
@@ -180,9 +180,9 @@ impl CliApp {
         cmd: AutoUpgradeDeployCommand,
     ) -> Result<()> {
         match cmd {
-            AutoUpgradeDeployCommand::Run => {
+            AutoUpgradeDeployCommand::Run { port } => {
                 info!("🚀 开始自动升级部署流程...");
-                commands::run_auto_upgrade_deploy(self).await
+                commands::run_auto_upgrade_deploy(self, port).await
             }
             AutoUpgradeDeployCommand::DelayTimeDeploy { time, unit } => {
                 info!("配置延迟自动升级部署: {} {}", time, unit);

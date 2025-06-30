@@ -415,8 +415,9 @@ impl DockerServiceManager {
         // 显示访问信息
         if report.overall_status.is_healthy() {
             info!("=== 服务访问信息 ===");
-            info!("• 前端页面: http://localhost:80");
-            info!("• 后端API: http://localhost:8080");
+                    use client_core::constants::docker::ports;
+        info!("• 前端页面: http://localhost:{}", ports::DEFAULT_FRONTEND_PORT);
+        info!("• 后端API: http://localhost:{}", ports::DEFAULT_BACKEND_PORT);
             info!("• 服务管理完成，可以开始使用!");
         }
     }

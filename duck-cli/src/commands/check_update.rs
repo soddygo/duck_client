@@ -381,6 +381,7 @@ async fn install_windows_executable(download_path: &PathBuf, current_exe: &PathB
 }
 
 /// Unix 系统安装
+#[cfg(unix)]
 async fn install_unix_executable(download_path: &PathBuf, current_exe: &PathBuf) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
@@ -400,6 +401,12 @@ async fn install_unix_executable(download_path: &PathBuf, current_exe: &PathBuf)
 
     info!("✅ 可执行文件已更新");
     Ok(())
+}
+
+/// Windows 系统的Unix安装桩函数（不应该被调用）
+#[cfg(not(unix))]
+async fn install_unix_executable(_download_path: &PathBuf, _current_exe: &PathBuf) -> Result<()> {
+    Err(anyhow::anyhow!("此函数不应在非Unix系统上调用"))
 }
 
 /// 从压缩包安装

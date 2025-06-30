@@ -1,6 +1,8 @@
 use client_core::constants::{docker, timeout};
 use client_core::error::Result;
 use ducker::docker::container::DockerContainer;
+#[allow(unused_imports)]
+use ducker::docker::util::new_local_docker_connection;
 use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
@@ -77,7 +79,7 @@ impl ServiceFilter {
 pub async fn check_services_running(filter: &ServiceFilter) -> Result<bool> {
     // 使用跨平台连接方法，自动处理 Unix socket 和 Windows Named Pipe
     // 优先使用环境变量 DOCKER_HOST，否则使用平台默认路径
-    match ducker::docker::util::new_local_docker_connection(
+    match new_local_docker_connection(
         docker::DOCKER_SOCKET_PATH,
         None, // 优先使用 DOCKER_HOST 环境变量，若未设置则使用 socket_path
     )

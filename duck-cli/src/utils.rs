@@ -1,6 +1,7 @@
 use client_core::error::Result;
 use std::io::{Read, Write};
-use tracing::info;
+#[allow(unused_imports)]
+use tracing::{debug, error, info, warn};
 
 /// # Duck CLI 日志系统使用说明
 ///
@@ -277,7 +278,8 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
 /// - 默认输出到stderr，避免与程序输出混淆
 /// - 终端输出简洁格式，文件输出详细格式
 pub fn setup_logging(verbose: bool) {
-    use tracing_subscriber::{EnvFilter, fmt};
+    #[allow(unused_imports)]
+    use tracing_subscriber::{EnvFilter, fmt, util::SubscriberInitExt};
 
     // 根据verbose参数和环境变量确定日志级别
     let default_level = if verbose { "debug" } else { "info" };
@@ -319,7 +321,8 @@ pub fn setup_logging(verbose: bool) {
 /// 或者让库的使用者完全控制日志配置
 #[allow(dead_code)]
 pub fn setup_minimal_logging() {
-    use tracing_subscriber::{EnvFilter, fmt};
+    #[allow(unused_imports)]
+    use tracing_subscriber::{EnvFilter, fmt, util::SubscriberInitExt};
 
     // 尝试初始化一个简单的订阅者
     // 如果已经有全局订阅者，这会返回错误，我们忽略它

@@ -127,6 +127,10 @@ impl CliApp {
                 info!("🔄 重启容器: {}", container_name);
                 commands::restart_container(self, &container_name).await
             }
+            DockerServiceCommand::Extract { file, version } => {
+                info!("📦 解压 Docker 服务包...");
+                commands::extract_docker_service(self, file, version).await
+            }
             DockerServiceCommand::LoadImages => {
                 info!("📦 加载 Docker 镜像...");
                 commands::load_docker_images(self).await

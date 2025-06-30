@@ -287,6 +287,51 @@ pub async fn setup_image_tags(app: &CliApp) -> Result<()> {
     Ok(())
 }
 
+/// 解压Docker服务包
+pub async fn extract_docker_service(
+    app: &CliApp,
+    file: Option<String>,
+    version: Option<String>,
+) -> Result<()> {
+    info!("📦 开始解压Docker服务包...");
+
+    // 确定要解压的文件路径
+    let zip_path = if let Some(file_path) = file {
+        // 使用用户指定的文件路径
+        std::path::PathBuf::from(file_path)
+    } else {
+        // 使用默认路径（基于版本）
+        let target_version = version
+            .as_deref()
+            .unwrap_or(&app.config.versions.docker_service);
+        
+        let download_path = app.config.get_version_download_file_path(
+            target_version,
+            "full",
+            client_core::constants::upgrade::DOCKER_SERVICE_PACKAGE,
+        );
+        
+        download_path
+    };
+
+    // 检查文件是否存在
+    if !zip_path.exists() {
+        error!("❌ Docker服务包文件不存在: {}", zip_path.display());
+        return Err(client_core::DuckError::Custom(format!(
+            "Docker服务包文件不存在: {}",
+            zip_path.display()
+        )));
+    }
+
+    info!("📦 找到Docker服务包: {}", zip_path.display());
+    
+    // 使用utils中的解压函数
+    crate::utils::extract_docker_service(&zip_path).await?;
+    
+    info!("✅ Docker服务包解压完成");
+    Ok(())
+}
+
 /// 获取系统架构信息
 pub async fn show_architecture_info(_app: &CliApp) -> Result<()> {
     let arch = crate::docker_service::get_system_architecture();

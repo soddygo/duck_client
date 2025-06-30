@@ -78,6 +78,15 @@ pub enum DockerServiceCommand {
         /// 容器名称
         container_name: String,
     },
+    /// 解压Docker服务包
+    Extract {
+        /// 指定docker.zip文件路径（可选，默认使用当前版本的下载文件）
+        #[arg(long)]
+        file: Option<String>,
+        /// 目标版本（可选，默认使用当前配置版本）
+        #[arg(long)]
+        version: Option<String>,
+    },
     /// 加载Docker镜像
     LoadImages,
     /// 设置镜像标签

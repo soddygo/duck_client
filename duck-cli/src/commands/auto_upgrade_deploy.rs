@@ -17,6 +17,10 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp) -> Result<()> {
     info!("📥 正在下载最新的Docker服务版本...");
     update::run_upgrade(app, true, false).await?; // 全量下载
 
+    // 1.5. 解压下载的docker.zip文件
+    info!("📦 正在解压Docker服务包...");
+    docker_service::extract_docker_service(app, None, None).await?;
+
     // 2. 检查Docker服务状态
     info!("检查Docker服务状态");
     let service_running = check_docker_service_status(app).await?;
@@ -286,6 +290,8 @@ async fn check_docker_files_exist() -> Result<bool> {
     info!("docker目录存在但没有需要备份的重要文件");
     Ok(false)
 }
+
+
 
 /// 格式化时间间隔为可读字符串
 fn format_duration(duration: Duration) -> String {

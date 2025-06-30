@@ -258,7 +258,17 @@ pub async fn setup_image_tags(app: &CliApp) -> Result<()> {
     let docker_service_manager =
         DockerService::new(app.config.clone(), app.docker_manager.clone())?;
 
-    match docker_service_manager.setup_image_tags().await {
+    // 先加载镜像以获取实际的镜像映射
+    info!("📦 检查已加载的镜像...");
+    let load_result = docker_service_manager.load_images().await?;
+    
+    if load_result.image_mappings.is_empty() {
+        warn!("⚠️ 未找到已加载的镜像映射，请先运行 load-images 命令");
+        return Ok(());
+    }
+
+    // 使用基于映射的新方法
+    match docker_service_manager.setup_image_tags_with_mappings(&load_result.image_mappings).await {
         Ok(result) => {
             info!("🏷️ 镜像标签设置完成!");
             info!("  • 成功设置: {} 个标签", result.success_count());
@@ -343,6 +353,57 @@ pub async fn show_architecture_info(_app: &CliApp) -> Result<()> {
         "  • 镜像后缀: {}",
         crate::docker_service::get_architecture_suffix(arch)
     );
+
+    Ok(())
+}
+
+/// 使用 ducker 列出 Docker 镜像
+pub async fn list_docker_images_with_ducker(app: &CliApp) -> Result<()> {
+    info!("🔍 使用 ducker 列出 Docker 镜像...");
+
+    let docker_service_manager =
+        DockerService::new(app.config.clone(), app.docker_manager.clone())?;
+
+    match docker_service_manager.list_docker_images_with_ducker().await {
+        Ok(images) => {
+            if images.is_empty() {
+                info!("📭 未找到任何 Docker 镜像");
+            } else {
+                info!("🎯 找到 {} 个 Docker 镜像:", images.len());
+                for (index, image) in images.iter().enumerate() {
+                    info!("  {}. {}", index + 1, image);
+                }
+                
+                // 显示与我们业务相关的镜像
+                let business_images: Vec<&String> = images.iter()
+                    .filter(|img| img.contains("registry.yichamao.com") || 
+                                  img.contains("mysql") || 
+                                  img.contains("redis") || 
+                                  img.contains("milvus") ||
+                                  img.contains("quickwit"))
+                    .collect();
+                
+                if !business_images.is_empty() {
+                    info!("");
+                    info!("🏢 业务相关镜像 ({} 个):", business_images.len());
+                    for image in business_images {
+                        let status = if image.contains(":latest") && !image.contains("latest-") {
+                            "✅ 已准备"
+                        } else if image.contains("latest-arm64") || image.contains("latest-amd64") {
+                            "🔄 需要标签"
+                        } else {
+                            "ℹ️  其他版本"
+                        };
+                        info!("  • {} {}", status, image);
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            error!("❌ 获取镜像列表失败: {}", e);
+            return Err(e.into());
+        }
+    }
 
     Ok(())
 }

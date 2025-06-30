@@ -63,11 +63,11 @@ impl DockerServiceManager {
         // 2. 设置必要目录
         self.setup_directories().await?;
 
-        // 3. 加载镜像
-        self.load_images().await?;
+        // 3. 加载镜像并获取映射信息
+        let load_result = self.load_images().await?;
 
-        // 4. 设置镜像标签
-        self.setup_image_tags().await?;
+        // 4. 使用ducker验证并设置镜像标签（推荐方法）
+        self.setup_image_tags_with_ducker_validation(&load_result.image_mappings).await?;
 
         // 5. 启动服务
         self.start_services().await?;
@@ -171,7 +171,45 @@ impl DockerServiceManager {
         Ok(result)
     }
 
-    /// 设置镜像标签
+    /// 基于实际镜像映射设置标签
+    pub async fn setup_image_tags_with_mappings(&self, image_mappings: &[(String, String)]) -> DockerServiceResult<TagResult> {
+        info!("开始设置镜像标签...");
+        let result = self.image_loader.setup_image_tags_with_mappings(image_mappings).await?;
+
+        if !result.is_all_successful() {
+            warn!(
+                "部分标签设置失败: 成功 {}, 失败 {}",
+                result.success_count(),
+                result.failure_count()
+            );
+        }
+
+        Ok(result)
+    }
+
+    /// 基于 ducker 验证镜像后再设置标签（推荐使用）
+    pub async fn setup_image_tags_with_ducker_validation(&self, image_mappings: &[(String, String)]) -> DockerServiceResult<TagResult> {
+        info!("开始验证并设置镜像标签...");
+        let result = self.image_loader.setup_image_tags_with_validation(image_mappings).await?;
+
+        if !result.is_all_successful() {
+            warn!(
+                "部分标签设置失败: 成功 {}, 失败 {}",
+                result.success_count(),
+                result.failure_count()
+            );
+        }
+
+        Ok(result)
+    }
+
+    /// 使用 ducker 列出当前系统中的所有镜像
+    pub async fn list_docker_images_with_ducker(&self) -> DockerServiceResult<Vec<String>> {
+        info!("使用 ducker 获取镜像列表...");
+        self.image_loader.list_images_with_ducker().await
+    }
+
+    /// 设置镜像标签（传统方法）
     pub async fn setup_image_tags(&self) -> DockerServiceResult<TagResult> {
         info!("开始设置镜像标签...");
         let result = self.image_loader.setup_image_tags().await?;

@@ -93,6 +93,8 @@ pub enum DockerServiceCommand {
     SetupTags,
     /// 显示架构信息
     ArchInfo,
+    /// 列出Docker镜像（使用ducker）
+    ListImages,
 }
 
 /// Duck Client CLI - Docker 服务管理和升级工具

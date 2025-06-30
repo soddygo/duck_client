@@ -23,7 +23,7 @@ pub use check_update::handle_check_update_command;
 pub use docker_service::{
     check_docker_services_status, deploy_docker_services, extract_docker_service, load_docker_images, restart_container,
     restart_docker_services, setup_image_tags, show_architecture_info, start_docker_services,
-    stop_docker_services,
+    stop_docker_services, list_docker_images_with_ducker,
 };
 
 // Ducker commands

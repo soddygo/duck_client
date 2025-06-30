@@ -143,6 +143,10 @@ impl CliApp {
                 info!("🏗️  系统架构信息:");
                 commands::show_architecture_info(self).await
             }
+            DockerServiceCommand::ListImages => {
+                info!("🔍 列出 Docker 镜像:");
+                commands::list_docker_images_with_ducker(self).await
+            }
         }
     }
 

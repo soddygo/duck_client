@@ -3,6 +3,7 @@ use crate::docker_service::error::{DockerServiceError, DockerServiceResult};
 use client_core::container::DockerManager;
 use std::path::PathBuf;
 use tracing::{error, info, warn};
+use ducker::docker::{image::DockerImage, util::new_local_docker_connection};
 
 /// 镜像类型
 #[derive(Debug, Clone, PartialEq)]
@@ -91,6 +92,7 @@ pub struct LoadResult {
     pub failure_count: usize,
     pub loaded_images: Vec<String>,
     pub failed_images: Vec<(String, String)>, // (文件名, 错误信息)
+    pub image_mappings: Vec<(String, String)>, // (文件名, 实际镜像名称) 
 }
 
 impl LoadResult {
@@ -100,12 +102,19 @@ impl LoadResult {
             failure_count: 0,
             loaded_images: Vec::new(),
             failed_images: Vec::new(),
+            image_mappings: Vec::new(),
         }
     }
 
     pub fn add_success(&mut self, image_name: String) {
         self.success_count += 1;
         self.loaded_images.push(image_name);
+    }
+
+    pub fn add_success_with_mapping(&mut self, file_name: String, actual_image_name: String) {
+        self.success_count += 1;
+        self.loaded_images.push(file_name.clone());
+        self.image_mappings.push((file_name, actual_image_name));
     }
 
     pub fn add_failure(&mut self, image_name: String, error: String) {
@@ -280,9 +289,9 @@ impl ImageLoader {
             );
 
             match self.docker_manager.load_image(&image.file_path).await {
-                Ok(_) => {
-                    info!("{} ✓ 镜像加载成功: {}", progress, file_name);
-                    result.add_success(file_name.to_string());
+                Ok(actual_image_name) => {
+                    info!("{} ✓ 镜像加载成功: {} -> {}", progress, file_name, actual_image_name);
+                    result.add_success_with_mapping(file_name.to_string(), actual_image_name);
                 }
                 Err(e) => {
                     error!("{} ✗ 镜像加载失败: {} - {}", progress, file_name, e);
@@ -298,7 +307,77 @@ impl ImageLoader {
         Ok(result)
     }
 
-    /// 设置镜像标签
+    /// 基于实际加载的镜像设置标签
+    pub async fn setup_image_tags_with_mappings(&self, image_mappings: &[(String, String)]) -> DockerServiceResult<TagResult> {
+        use tracing::{debug, info, warn};
+        
+        let mut result = TagResult::new();
+        
+        info!("开始设置镜像标签...");
+        
+        for (file_name, actual_image_name) in image_mappings {
+            debug!("处理镜像映射: {} -> {}", file_name, actual_image_name);
+            
+            // 基于实际镜像名称创建目标标签（去除架构后缀）
+            let target_tag = self.remove_architecture_suffix(actual_image_name);
+            
+            info!(
+                "设置标签: {} -> {}",
+                actual_image_name, target_tag
+            );
+            
+            // 使用实际的镜像名称设置标签
+            match self.tag_image(actual_image_name, &target_tag).await {
+                Ok(_) => {
+                    info!("✓ 标签设置成功: {}", target_tag);
+                    result.add_success(actual_image_name.clone(), target_tag);
+                }
+                Err(e) => {
+                    warn!("✗ 标签设置失败: {} - {}", target_tag, e);
+                    result.add_failure(actual_image_name.clone(), target_tag, e.to_string());
+                }
+            }
+        }
+        
+        info!(
+            "标签设置完成: 成功 {}, 失败 {}",
+            result.success_count, result.failure_count
+        );
+        Ok(result)
+    }
+
+    /// 从镜像名称中移除架构后缀
+    fn remove_architecture_suffix(&self, image_name: &str) -> String {
+        use tracing::debug;
+        
+        debug!("处理镜像名称: {}", image_name);
+        
+        // 检查是否有标签中的架构后缀：:latest-arm64, :latest-amd64 等
+        if let Some((name_part, tag_part)) = image_name.rsplit_once(':') {
+            debug!("分离后 - 名称: {}, 标签: {}", name_part, tag_part);
+            
+            // 检查标签中是否包含架构后缀
+            if tag_part.ends_with("-arm64") || tag_part.ends_with("-amd64") || 
+               tag_part.ends_with("-x86_64") || tag_part.ends_with("-aarch64") {
+                // 移除标签中的架构后缀
+                let clean_tag = tag_part
+                    .replace("-arm64", "")
+                    .replace("-amd64", "")
+                    .replace("-x86_64", "")
+                    .replace("-aarch64", "");
+                
+                let result = format!("{}:{}", name_part, if clean_tag.is_empty() { "latest" } else { &clean_tag });
+                debug!("移除标签中的架构后缀: {} -> {}", image_name, result);
+                return result;
+            }
+        }
+        
+        // 如果没有找到架构后缀，对于基础镜像（如mysql:8.0）直接返回
+        debug!("未找到架构后缀，返回原镜像名称: {}", image_name);
+        image_name.to_string()
+    }
+
+    /// 设置镜像标签（传统方法，保持向后兼容）
     pub async fn setup_image_tags(&self) -> DockerServiceResult<TagResult> {
         let images = self.scan_architecture_images()?;
         let mut result = TagResult::new();
@@ -359,6 +438,135 @@ impl ImageLoader {
 
         Ok(())
     }
+
+    /// 使用 ducker 检查镜像是否存在
+    pub async fn check_image_exists_with_ducker(&self, image_name: &str) -> DockerServiceResult<bool> {
+        use tracing::{debug, warn};
+        
+        debug!("使用 ducker 检查镜像是否存在: {}", image_name);
+        
+        // 创建 Docker 连接
+        let docker = match new_local_docker_connection("/var/run/docker.sock", None).await {
+            Ok(d) => d,
+            Err(e) => {
+                warn!("无法连接到 Docker: {}", e);
+                return Ok(false);
+            }
+        };
+        
+        // 获取所有镜像列表
+        let images = match DockerImage::list(&docker, false).await {
+            Ok(imgs) => imgs,
+            Err(e) => {
+                warn!("无法获取镜像列表: {}", e);
+                return Ok(false);
+            }
+        };
+        
+        // 检查目标镜像是否存在
+        let exists = images.iter().any(|img| img.get_full_name() == image_name);
+        
+        debug!("镜像 {} 存在检查结果: {}", image_name, exists);
+        Ok(exists)
+    }
+    
+    /// 使用 ducker 列出所有镜像
+    pub async fn list_images_with_ducker(&self) -> DockerServiceResult<Vec<String>> {
+        use tracing::{debug, warn};
+        
+        debug!("使用 ducker 获取镜像列表");
+        
+        // 创建 Docker 连接
+        let docker = match new_local_docker_connection("/var/run/docker.sock", None).await {
+            Ok(d) => d,
+            Err(e) => {
+                warn!("无法连接到 Docker: {}", e);
+                return Ok(vec![]);
+            }
+        };
+        
+        // 获取所有镜像列表
+        let images = match DockerImage::list(&docker, false).await {
+            Ok(imgs) => imgs,
+            Err(e) => {
+                warn!("无法获取镜像列表: {}", e);
+                return Ok(vec![]);
+            }
+        };
+        
+        let image_names: Vec<String> = images.iter()
+            .map(|img| img.get_full_name())
+            .collect();
+        
+        debug!("找到 {} 个镜像", image_names.len());
+        Ok(image_names)
+    }
+
+    /// 基于 ducker 验证镜像后再设置标签
+    pub async fn setup_image_tags_with_validation(&self, image_mappings: &[(String, String)]) -> DockerServiceResult<TagResult> {
+        use tracing::{debug, info, warn};
+        
+        let mut result = TagResult::new();
+        
+        info!("开始验证并设置镜像标签...");
+        
+        for (file_name, actual_image_name) in image_mappings {
+            debug!("处理镜像映射: {} -> {}", file_name, actual_image_name);
+            
+            // 使用 ducker 检查源镜像是否存在
+            match self.check_image_exists_with_ducker(actual_image_name).await {
+                Ok(true) => {
+                    debug!("源镜像存在: {}", actual_image_name);
+                }
+                Ok(false) => {
+                    warn!("源镜像不存在，跳过标签设置: {}", actual_image_name);
+                    result.add_failure(
+                        actual_image_name.clone(),
+                        "源镜像不存在".to_string(),
+                        "镜像未找到".to_string()
+                    );
+                    continue;
+                }
+                Err(e) => {
+                    warn!("检查镜像存在性失败: {} - {}", actual_image_name, e);
+                    // 继续尝试设置标签，因为可能是 ducker 连接问题
+                }
+            }
+            
+            // 基于实际镜像名称创建目标标签（去除架构后缀）
+            let target_tag = self.remove_architecture_suffix(actual_image_name);
+            
+            // 如果源镜像和目标标签相同，跳过
+            if actual_image_name == &target_tag {
+                debug!("源镜像和目标标签相同，跳过: {}", actual_image_name);
+                result.add_success(actual_image_name.clone(), target_tag);
+                continue;
+            }
+            
+            info!(
+                "设置标签: {} -> {}",
+                actual_image_name, target_tag
+            );
+            
+            // 使用实际的镜像名称设置标签
+            match self.tag_image(actual_image_name, &target_tag).await {
+                Ok(_) => {
+                    info!("✓ 标签设置成功: {}", target_tag);
+                    result.add_success(actual_image_name.clone(), target_tag);
+                }
+                Err(e) => {
+                    warn!("✗ 标签设置失败: {} - {}", target_tag, e);
+                    result.add_failure(actual_image_name.clone(), target_tag, e.to_string());
+                }
+            }
+        }
+        
+        info!(
+            "标签设置完成: 成功 {}, 失败 {}",
+            result.success_count, result.failure_count
+        );
+        Ok(result)
+    }
 }
 
 /// 格式化文件大小显示
@@ -378,6 +586,8 @@ fn format_file_size(size: u64) -> String {
         format!("{:.1} {}", size, UNITS[unit_index])
     }
 }
+
+
 
 #[cfg(test)]
 mod tests {

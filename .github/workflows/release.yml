@@ -1,0 +1,290 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for release'
+        required: false
+        default: 'nightly'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build for ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # Linux builds
+          - name: Linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: duck-cli
+            archive_name: duck-cli-linux-amd64
+            cross: false
+            
+          - name: Linux-aarch64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            bin: duck-cli
+            archive_name: duck-cli-linux-arm64
+            cross: true
+            
+          # Windows builds
+          - name: Windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: duck-cli.exe
+            archive_name: duck-cli-windows-amd64
+            cross: false
+            
+          - name: Windows-aarch64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            bin: duck-cli.exe
+            archive_name: duck-cli-windows-arm64
+            cross: false
+            
+          # macOS builds (单独架构，稍后合并)
+          - name: macOS-x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            bin: duck-cli
+            archive_name: duck-cli-macos-amd64
+            cross: false
+            
+          - name: macOS-aarch64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            bin: duck-cli
+            archive_name: duck-cli-macos-arm64
+            cross: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Install cross (for cross compilation)
+        if: matrix.platform.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.platform.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build binary
+        run: |
+          if [ "${{ matrix.platform.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.platform.target }}
+          else
+            cargo build --release --target ${{ matrix.platform.target }}
+          fi
+        shell: bash
+
+      - name: Package binary (Unix)
+        if: matrix.platform.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.platform.target }}/release
+          tar czf ../../../${{ matrix.platform.archive_name }}.tar.gz ${{ matrix.platform.bin }}
+          cd -
+
+      - name: Package binary (Windows)
+        if: matrix.platform.os == 'windows-latest'
+        run: |
+          cd target/${{ matrix.platform.target }}/release
+          7z a ../../../${{ matrix.platform.archive_name }}.zip ${{ matrix.platform.bin }}
+          cd -
+        shell: bash
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.platform.archive_name }}
+          path: |
+            ${{ matrix.platform.archive_name }}.tar.gz
+            ${{ matrix.platform.archive_name }}.zip
+          if-no-files-found: ignore
+
+  # 创建 macOS 通用二进制文件
+  build-macos-universal:
+    name: Build macOS Universal Binary
+    runs-on: macos-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-universal-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build x86_64
+        run: cargo build --release --target x86_64-apple-darwin
+
+      - name: Build aarch64
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create \
+            target/x86_64-apple-darwin/release/duck-cli \
+            target/aarch64-apple-darwin/release/duck-cli \
+            -output target/universal-apple-darwin/release/duck-cli
+
+      - name: Verify universal binary
+        run: |
+          file target/universal-apple-darwin/release/duck-cli
+          lipo -info target/universal-apple-darwin/release/duck-cli
+
+      - name: Package universal binary
+        run: |
+          cd target/universal-apple-darwin/release
+          tar czf ../../../duck-cli-macos-universal.tar.gz duck-cli
+          cd -
+
+      - name: Upload universal binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: duck-cli-macos-universal
+          path: duck-cli-macos-universal.tar.gz
+
+  # 发布到 GitHub Releases
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build, build-macos-universal]
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get release info
+        id: release_info
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag_name=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+            echo "release_name=Duck CLI ${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "release_name=Duck CLI ${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release_assets
+          find artifacts -name "*.tar.gz" -exec cp {} release_assets/ \;
+          find artifacts -name "*.zip" -exec cp {} release_assets/ \;
+          ls -la release_assets/
+
+      - name: Generate checksums
+        run: |
+          cd release_assets
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag_name }}
+          name: ${{ steps.release_info.outputs.release_name }}
+          prerelease: ${{ steps.release_info.outputs.prerelease }}
+          files: |
+            release_assets/*
+          body: |
+            ## 🦆 Duck CLI Release ${{ steps.release_info.outputs.tag_name }}
+            
+            ### 📥 下载说明
+            
+            请根据您的操作系统和架构选择合适的版本：
+            
+            #### 🍎 macOS
+            - **duck-cli-macos-universal.tar.gz** - 通用版本（推荐）
+              - 同时支持 Intel (x86_64) 和 Apple Silicon (ARM64) 芯片
+              - 系统会自动选择合适的架构运行
+            
+            #### 🐧 Linux
+            - **duck-cli-linux-amd64.tar.gz** - 适用于 x86_64 架构
+            - **duck-cli-linux-arm64.tar.gz** - 适用于 ARM64 架构
+            
+            #### 🪟 Windows
+            - **duck-cli-windows-amd64.zip** - 适用于 x86_64 架构
+            - **duck-cli-windows-arm64.zip** - 适用于 ARM64 架构
+            
+            ### 🔧 安装说明
+            
+            1. 下载对应平台的压缩包
+            2. 解压到您希望的目录
+            3. 将可执行文件路径添加到系统 PATH 环境变量
+            4. 运行 `duck-cli --help` 验证安装
+            
+            ### 📋 校验文件完整性
+            
+            下载 `SHA256SUMS` 文件，使用以下命令验证文件完整性：
+            
+            ```bash
+            # Linux/macOS
+            sha256sum -c SHA256SUMS
+            
+            # Windows (PowerShell)
+            Get-FileHash *.zip | Format-Table
+            ```
+            
+            ### 🆕 更新说明
+            
+            如果您已安装旧版本，可以使用内置的更新功能：
+            
+            ```bash
+            duck-cli check-update check     # 检查更新
+            duck-cli check-update install   # 自动安装最新版本
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 清理构建缓存（可选）
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [release]
+    if: always()
+    steps:
+      - name: Delete artifacts
+        uses: geekyeggo/delete-artifact@v2
+        with:
+          name: |
+            duck-cli-*
+        continue-on-error: true 

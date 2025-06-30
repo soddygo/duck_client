@@ -1,0 +1,69 @@
+[package]
+name = "client-core"
+version = "0.1.0"
+edition = "2024"
+description = "Duck Client 核心库"
+authors = ["Duck Team"]
+license = "MIT OR Apache-2.0"
+# 内部库，不需要详细的发布信息
+
+[dependencies]
+# 异步运行时
+tokio = { workspace = true, features = ["full"] }
+futures = { workspace = true }
+futures-util = { workspace = true }
+
+# HTTP 客户端
+reqwest = { workspace = true, features = ["json", "stream"] }
+
+# 数据库
+# sqlx = { workspace = true, features = ["migrate", "uuid", "chrono"] }
+duckdb = { workspace = true }
+tokio-stream = { workspace = true }
+
+# 序列化
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+
+# UUID 生成
+uuid = { workspace = true, features = ["v4", "serde"] }
+
+# 时间处理
+chrono = { workspace = true, features = ["serde"] }
+
+# 错误处理
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# 日志
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# 配置文件
+toml = { workspace = true }
+
+# 自更新
+self_update = { workspace = true }
+
+# Docker 命令执行
+which = { workspace = true }
+
+# 文件系统操作
+tempfile = { workspace = true }
+walkdir = { workspace = true }
+zip-extract = { workspace = true }
+
+# 压缩
+zip = { workspace = true }
+flate2 = { workspace = true }
+tar = { workspace = true }
+
+# 哈希计算
+sha2 = { workspace = true }
+
+# Optional dependency
+indicatif = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

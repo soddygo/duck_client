@@ -1,1 +1,12 @@
 /target
+**/target
+.idea
+.vscode
+.DS_Store
+backups
+.vite
+docker
+cacheDuckData
+history.db
+history.db.wal
+config.toml

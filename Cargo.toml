@@ -1,8 +1,112 @@
 [workspace]
 resolver = "2"
-members = [
-    "common",
-    # "server",
-    "client/cli",
-    # "client/tauri-app"
-]
+members = [ "client-core", "duck-cli" ]
+
+
+
+[workspace.dependencies]
+
+# 集成的 ducker Docker TUI
+ducker = { git = "https://github.com/robertpsoane/ducker.git",branch = "master" }
+
+# 异步运行时
+tokio = { version = "1", features = ["macros", "net", "rt", "rt-multi-thread"] }
+tokio-util = "0.7"
+futures = "0.3"
+futures-util = "0.3"
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "=0.2.2"
+log = "0.4"
+
+# 错误处理
+anyhow = "1.0"
+thiserror = "2.0"
+
+# 时间处理
+chrono = { version = "0.4", features = ["serde", "now"] }
+
+# Web框架
+axum = { version = "0.8", features = [
+    "http2",
+    "query",
+    "tracing",
+    "ws",
+    "multipart",
+    "macros",
+] }
+tower = { version = "0.5" }
+tower-http = { version = "0.6", features = [
+    "compression-full",
+    "cors",
+    "fs",
+    "trace",
+] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+
+# API文档
+utoipa = { version = "5.4", features = ["axum_extras", "chrono"] }
+utoipa-rapidoc = { version = "6", features = ["axum"] }
+utoipa-redoc = { version = "6", features = ["axum"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+
+# 并发工具
+dashmap = "6.1"
+once_cell = "1.21"
+
+# 测试
+criterion = "0.6"
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "=0.9.33"
+serde_with = "3.13"
+
+# 配置文件
+toml = "0.8"
+
+# 构建工具
+derive_builder = "0.20"
+
+# HTTP客户端
+reqwest = { version = "0.12", features = ["json"] }
+http = "1.3"
+
+# 命令行工具
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# UUID
+uuid = { version = "1", features = ["v7"] }
+
+# 数据库
+# sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
+duckdb = { version = "1.3", features = ["bundled", "chrono", "uuid"] }
+
+# 自更新
+self_update = "0.42"
+
+# 系统工具
+which = "8.0"
+
+# 文件系统
+tempfile = "3.20"
+walkdir = "2.5"
+
+# 压缩
+zip = "4.2"
+zip-extract = "0.4"
+flate2 = "1.0"
+tar = "0.4"
+
+# 加密和哈希
+sha2 = "0.10"
+
+# 进度条
+indicatif = "0.17"
+
+# 消息传递 (用于DuckDB Actor模式)
+tokio-stream = "0.1"
+

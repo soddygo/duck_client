@@ -129,6 +129,7 @@ graph TD
         -   `duck-client-core`: 实现所有客户端的核心业务逻辑，如 API 通信、服务升级、备份恢复、数据库管理等。
         -   `duck-cli`: 轻量级的命令行"外壳"，负责解析参数并调用 `client-core` 中的功能。
         -   `duck-tauri`: 轻量级的图形界面"外壳"，通过 Tauri 命令调用 `client-core` 中的功能并与前端交互。
+        使用 deno , react 前端技术,使用的 tauri 前端
 
 -   `duck-server` (**服务端工程**):
     -   **职责**: 一个独立的 Cargo Workspace，包含所有服务端的代码。此项目将作为**私有仓库**进行管理。
@@ -140,17 +141,15 @@ graph TD
 
 #### `duck-client` (客户端项目)
 ```
-/duck-client/
-|-- Cargo.toml              # Workspace: 定义 client-core, cli, tauri
-|-- README.md
-|-- .gitignore
-|
-|-- /crates/
-|   |-- /duck-client-core/  # 客户端核心业务逻辑
-|   |-- /duck-cli/          # 命令行应用
-|
-|-- /apps/
-|   |-- /duck-tauri/        # Tauri 图形界面应用
+duck_client/
+├── Cargo.toml           # Workspace配置
+├── config.toml          # 用户配置文件
+├── duck-tauri  # tauri桌面app ui
+├── client-core # 核心业务逻辑库
+├── duck-cli   # 命令行,同时提供 lib,可以供 duck-tauri 使用.不需要UI的时候,只使用 cli command ,编译此模块
+└── spec/
+    ├── Design.md 设计文档
+    └── task.md   开发任务文档
 ```
 
 #### `duck-server` (服务端项目)
@@ -160,10 +159,9 @@ graph TD
 |-- README.md
 |-- .gitignore
 |
-|-- /crates/
-|   |-- /duck-server/       # Axum Web 服务
-|   |-- /duck-server-db/    # 数据库交互逻辑
-|       |-- migrations/
+|-- server/       # Axum Web 服务
+|-- server-db/    # 数据库交互逻辑
+|-- migrations/         # 数据库迁移文件
 ```
 
 ## 5. 数据持久化设计 (Database Design)

@@ -54,8 +54,7 @@ impl DockerManager {
         warn!("docker load命令成功但无法解析镜像名称");
         warn!("完整输出: {}", stdout);
         Err(DuckError::Docker(format!(
-            "无法解析docker load输出: {}",
-            stdout
+            "无法解析docker load输出: {stdout}"
         )))
     }
 

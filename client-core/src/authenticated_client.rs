@@ -145,7 +145,7 @@ impl AuthenticatedClient {
                 }
                 Err(e) => {
                     error!("自动重新注册失败: {}", e);
-                    Err(DuckError::Api(format!("认证失败且无法重新注册: {}", e)))
+                    Err(DuckError::Api(format!("认证失败且无法重新注册: {e}")))
                 }
             }
         } else {

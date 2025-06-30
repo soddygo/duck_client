@@ -315,13 +315,13 @@ pub async fn extract_docker_service(
             .as_deref()
             .unwrap_or(&app.config.versions.docker_service);
         
-        let download_path = app.config.get_version_download_file_path(
+        
+        
+        app.config.get_version_download_file_path(
             target_version,
             "full",
             client_core::constants::upgrade::DOCKER_SERVICE_PACKAGE,
-        );
-        
-        download_path
+        )
     };
 
     // 检查文件是否存在

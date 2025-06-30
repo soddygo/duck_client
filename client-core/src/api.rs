@@ -523,7 +523,7 @@ impl ApiClient {
         }
 
         let hash = hasher.finalize();
-        Ok(format!("{:x}", hash))
+        Ok(format!("{hash:x}"))
     }
 
     /// 保存文件哈希信息到.hash文件
@@ -693,7 +693,7 @@ impl ApiClient {
         if let Some(parent) = download_path.parent() {
             if !parent.exists() {
                 tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                    DuckError::Custom(format!("创建下载目录失败: {}", e))
+                    DuckError::Custom(format!("创建下载目录失败: {e}"))
                 })?;
                 info!("📁 创建下载目录: {}", parent.display());
             }
@@ -705,7 +705,7 @@ impl ApiClient {
             .get_endpoint_url(&self.config.endpoints.docker_download_full);
         
         if let Some(v) = version {
-            download_url = format!("{}?version={}", download_url, v);
+            download_url = format!("{download_url}?version={v}");
         }
 
         info!("📥 开始下载服务更新包...");
@@ -721,7 +721,7 @@ impl ApiClient {
             // 删除损坏的文件
             if download_path.exists() {
                 tokio::fs::remove_file(download_path).await.map_err(|e| {
-                    DuckError::Custom(format!("删除损坏文件失败: {}", e))
+                    DuckError::Custom(format!("删除损坏文件失败: {e}"))
                 })?;
             }
             return Err(DuckError::Custom(

@@ -218,7 +218,7 @@ impl PortManager {
                             } else {
                                 warn!("环境变量 {} 未定义", var_name);
                                 // 保持原始格式
-                                result.push_str(&format!("${{{}}}", var_name));
+                                result.push_str(&format!("${{{var_name}}}"));
                             }
                         },
                         VarExpansion::VariableWithDefault(var_name, default_value) => {
@@ -579,13 +579,13 @@ impl PortManager {
                     }
                     Err(e) => {
                         warn!("获取容器列表失败: {}", e);
-                        Err(format!("获取容器列表失败: {}", e))
+                        Err(format!("获取容器列表失败: {e}"))
                     }
                 }
             }
             Err(e) => {
                 warn!("连接Docker失败: {}", e);
-                Err(format!("连接Docker失败: {}", e))
+                Err(format!("连接Docker失败: {e}"))
             }
         }
     }
@@ -625,10 +625,10 @@ impl PortManager {
         
         // 检查是否是docker-compose生成的容器名称格式
         // 通常格式为: {项目名}_{服务名}_{实例号} 或 {项目名}-{服务名}-{实例号}
-        if container_lower.contains(&format!("_{}_", service_lower)) ||
-           container_lower.contains(&format!("-{}-", service_lower)) ||
-           container_lower.ends_with(&format!("_{}", service_lower)) ||
-           container_lower.ends_with(&format!("-{}", service_lower)) {
+        if container_lower.contains(&format!("_{service_lower}_")) ||
+           container_lower.contains(&format!("-{service_lower}-")) ||
+           container_lower.ends_with(&format!("_{service_lower}")) ||
+           container_lower.ends_with(&format!("-{service_lower}")) {
             return true;
         }
         

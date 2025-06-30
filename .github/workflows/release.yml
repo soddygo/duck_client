@@ -79,9 +79,8 @@ jobs:
 
       - name: Install cross (for cross compilation)
         if: matrix.platform.cross
-        run: >-
-          cargo install cross --git
-          https://github.com/cross-rs/cross
+        run: |
+          cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -97,15 +96,13 @@ jobs:
       - name: Build binary
         run: |
           if [ "${{ matrix.platform.cross }}" = "true" ]; then
+            echo "Cross compiling for ${{ matrix.platform.target }}"
             cross build --release --target ${{ matrix.platform.target }}
           else
+            echo "Native compiling for ${{ matrix.platform.target }}"
             cargo build --release --target ${{ matrix.platform.target }}
           fi
         shell: bash
-        env:
-          # Enable vendored OpenSSL for cross compilation
-          OPENSSL_STATIC: 1
-          OPENSSL_VENDORED: 1
 
       - name: Package binary (Unix)
         if: matrix.platform.os != 'windows-latest'

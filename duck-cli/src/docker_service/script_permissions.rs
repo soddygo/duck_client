@@ -17,12 +17,12 @@ impl ScriptPermissionManager {
     /// 检查并修复 Docker Compose 相关脚本权限
     pub async fn check_and_fix_script_permissions(&self) -> DockerServiceResult<()> {
         info!("🔍 检查Docker相关脚本权限...");
-        
+
         // 检测运行环境
         let is_windows = cfg!(target_os = "windows");
         if is_windows {
             info!("🪟 检测到Windows环境，将进行跨平台兼容性检查");
-            
+
             // 执行Windows兼容性检查
             if let Ok(suggestions) = self.windows_compatibility_check().await {
                 if !suggestions.is_empty() {
@@ -33,9 +33,9 @@ impl ScriptPermissionManager {
                 }
             }
         }
-        
+
         let script_paths = self.find_docker_scripts()?;
-        
+
         if script_paths.is_empty() {
             debug!("未找到需要检查权限的脚本文件");
             return Ok(());
@@ -76,7 +76,7 @@ impl ScriptPermissionManager {
                 Err(e) => {
                     error_count += 1;
                     error!("❌ 修复脚本权限失败 {}: {}", script_path.display(), e);
-                    
+
                     // Windows环境提供额外建议
                     if is_windows {
                         warn!("💡 Windows环境建议:");
@@ -119,7 +119,7 @@ impl ScriptPermissionManager {
         // 常见的Docker脚本路径模式
         let script_patterns = vec![
             "config/docker-entrypoint.sh",
-            "config/entrypoint.sh", 
+            "config/entrypoint.sh",
             "config/init.sh",
             "config/startup.sh",
             "config/video_analysis/entrypoint-master.sh",
@@ -159,17 +159,22 @@ impl ScriptPermissionManager {
     }
 
     /// 递归查找shell脚本文件
-    fn find_shell_scripts_recursive(&self, dir: &Path, script_paths: &mut Vec<PathBuf>) -> DockerServiceResult<()> {
+    fn find_shell_scripts_recursive(
+        &self,
+        dir: &Path,
+        script_paths: &mut Vec<PathBuf>,
+    ) -> DockerServiceResult<()> {
         if !dir.is_dir() {
             return Ok(());
         }
 
-        let entries = std::fs::read_dir(dir)
-            .map_err(|e| DockerServiceError::FileSystem(format!("读取目录失败 {}: {}", dir.display(), e)))?;
+        let entries = std::fs::read_dir(dir).map_err(|e| {
+            DockerServiceError::FileSystem(format!("读取目录失败 {}: {}", dir.display(), e))
+        })?;
 
         for entry in entries {
             let entry = entry
-                .map_err(|e| DockerServiceError::FileSystem(format!("读取目录项失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("读取目录项失败: {e}")))?;
             let path = entry.path();
 
             if path.is_dir() {
@@ -188,18 +193,19 @@ impl ScriptPermissionManager {
         // 检查文件是否存在
         if !script_path.exists() {
             return Err(DockerServiceError::FileSystem(format!(
-                "脚本文件不存在: {}", 
+                "脚本文件不存在: {}",
                 script_path.display()
             )));
         }
 
         // 检查当前权限
-        let metadata = std::fs::metadata(script_path)
-            .map_err(|e| DockerServiceError::FileSystem(format!(
-                "获取文件元数据失败 {}: {}", 
-                script_path.display(), 
+        let metadata = std::fs::metadata(script_path).map_err(|e| {
+            DockerServiceError::FileSystem(format!(
+                "获取文件元数据失败 {}: {}",
+                script_path.display(),
                 e
-            )))?;
+            ))
+        })?;
 
         if cfg!(unix) {
             // Unix/Linux/macOS 系统权限检查
@@ -215,7 +221,11 @@ impl ScriptPermissionManager {
 
     /// Unix系统权限检查
     #[cfg(unix)]
-    async fn check_unix_permissions(&self, script_path: &Path, metadata: &std::fs::Metadata) -> DockerServiceResult<bool> {
+    async fn check_unix_permissions(
+        &self,
+        script_path: &Path,
+        metadata: &std::fs::Metadata,
+    ) -> DockerServiceResult<bool> {
         use std::os::unix::fs::PermissionsExt;
         let mode = metadata.permissions().mode();
         let is_executable = (mode & 0o111) != 0; // 检查是否有执行权限
@@ -233,17 +243,25 @@ impl ScriptPermissionManager {
 
     /// Windows系统权限检查
     #[cfg(not(unix))]
-    async fn check_unix_permissions(&self, _script_path: &Path, _metadata: &std::fs::Metadata) -> DockerServiceResult<bool> {
+    async fn check_unix_permissions(
+        &self,
+        _script_path: &Path,
+        _metadata: &std::fs::Metadata,
+    ) -> DockerServiceResult<bool> {
         Ok(false)
     }
 
     /// Windows系统权限检查和修复
-    async fn check_windows_permissions(&self, script_path: &Path, _metadata: &std::fs::Metadata) -> DockerServiceResult<bool> {
+    async fn check_windows_permissions(
+        &self,
+        script_path: &Path,
+        _metadata: &std::fs::Metadata,
+    ) -> DockerServiceResult<bool> {
         info!("🪟 Windows环境下检查脚本权限: {}", script_path.display());
-        
+
         // Windows下，我们假设脚本可能需要设置执行权限
         // 因为Windows文件系统挂载到Docker容器时可能丢失执行权限
-        
+
         // 检查是否已经有执行权限（通过尝试chmod来验证）
         if self.verify_windows_execute_permission(script_path).await? {
             debug!("脚本在容器中应该有执行权限: {}", script_path.display());
@@ -257,10 +275,13 @@ impl ScriptPermissionManager {
     }
 
     /// 验证Windows下的脚本执行权限
-    async fn verify_windows_execute_permission(&self, script_path: &Path) -> DockerServiceResult<bool> {
+    async fn verify_windows_execute_permission(
+        &self,
+        script_path: &Path,
+    ) -> DockerServiceResult<bool> {
         // 在Windows下，我们通过尝试chmod来验证权限
         // 如果chmod成功且没有实际改变，说明权限已经正确
-        
+
         // 方法1: 尝试Git Bash验证
         if let Ok(result) = self.verify_with_git_bash(script_path).await {
             return Ok(result);
@@ -280,7 +301,7 @@ impl ScriptPermissionManager {
     async fn verify_with_git_bash(&self, script_path: &Path) -> DockerServiceResult<bool> {
         let git_bash_paths = vec![
             "C:\\Program Files\\Git\\bin\\bash.exe",
-            "C:\\Program Files (x86)\\Git\\bin\\bash.exe", 
+            "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
             "bash",
         ];
 
@@ -303,7 +324,7 @@ impl ScriptPermissionManager {
     /// 使用WSL验证权限
     async fn verify_with_wsl(&self, script_path: &Path) -> DockerServiceResult<bool> {
         let wsl_path = self.convert_to_wsl_path(script_path)?;
-        
+
         if let Ok(output) = Command::new("wsl")
             .arg("test")
             .arg("-x")
@@ -340,14 +361,12 @@ impl ScriptPermissionManager {
             .arg("+x")
             .arg(script_path)
             .output()
-            .map_err(|e| DockerServiceError::Permission(format!(
-                "执行chmod命令失败: {}", e
-            )))?;
+            .map_err(|e| DockerServiceError::Permission(format!("执行chmod命令失败: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(DockerServiceError::Permission(format!(
-                "chmod命令执行失败: {}", stderr
+                "chmod命令执行失败: {stderr}"
             )));
         }
 
@@ -372,7 +391,7 @@ impl ScriptPermissionManager {
             }
         }
 
-        // 方法2: 尝试使用WSL的chmod  
+        // 方法2: 尝试使用WSL的chmod
         if let Ok(result) = self.try_wsl_chmod(script_path).await {
             if result {
                 info!("✅ 通过WSL设置权限成功");
@@ -397,7 +416,7 @@ impl ScriptPermissionManager {
         warn!("     chmod +x {}", script_path.display());
         warn!("  3. 在PowerShell中运行:");
         warn!("     bash -c \"chmod +x {}\"", script_path.display());
-        
+
         // 不返回错误，让程序继续运行，用户可以手动修复
         Ok(())
     }
@@ -432,7 +451,7 @@ impl ScriptPermissionManager {
     async fn try_wsl_chmod(&self, script_path: &Path) -> DockerServiceResult<bool> {
         // 转换Windows路径为WSL路径
         let wsl_path = self.convert_to_wsl_path(script_path)?;
-        
+
         if let Ok(output) = Command::new("wsl")
             .arg("chmod")
             .arg("+x")
@@ -454,11 +473,7 @@ impl ScriptPermissionManager {
 
     /// 尝试直接chmod
     async fn try_direct_chmod(&self, script_path: &Path) -> DockerServiceResult<bool> {
-        if let Ok(output) = Command::new("chmod")
-            .arg("+x")
-            .arg(script_path)
-            .output()
-        {
+        if let Ok(output) = Command::new("chmod").arg("+x").arg(script_path).output() {
             if output.status.success() {
                 debug!("直接 chmod 成功");
                 return Ok(true);
@@ -472,7 +487,7 @@ impl ScriptPermissionManager {
     /// 转换Windows路径为WSL路径
     fn convert_to_wsl_path(&self, windows_path: &Path) -> DockerServiceResult<String> {
         let path_str = windows_path.to_string_lossy();
-        
+
         // 简单的路径转换逻辑
         if path_str.starts_with("C:") {
             let wsl_path = path_str.replace("C:", "/mnt/c").replace("\\", "/");
@@ -489,10 +504,10 @@ impl ScriptPermissionManager {
     /// 手动修复特定脚本权限
     pub async fn fix_specific_script(&self, script_name: &str) -> DockerServiceResult<()> {
         let script_path = self.work_dir.join("config").join(script_name);
-        
+
         if !script_path.exists() {
             return Err(DockerServiceError::FileSystem(format!(
-                "脚本文件不存在: {}", 
+                "脚本文件不存在: {}",
                 script_path.display()
             )));
         }
@@ -515,10 +530,7 @@ impl ScriptPermissionManager {
                 if let Ok(metadata) = std::fs::metadata(&entrypoint_script) {
                     let mode = metadata.permissions().mode();
                     if (mode & 0o111) == 0 {
-                        issues.push(format!(
-                            "脚本缺少执行权限: {}",
-                            entrypoint_script.display()
-                        ));
+                        issues.push(format!("脚本缺少执行权限: {}", entrypoint_script.display()));
                     }
                 }
             }
@@ -527,7 +539,7 @@ impl ScriptPermissionManager {
         // 检查其他常见脚本
         let common_scripts = vec![
             "config/video_analysis/entrypoint-master.sh",
-            "config/video_analysis/entrypoint-worker.sh", 
+            "config/video_analysis/entrypoint-worker.sh",
             "script/init-minio.sh",
         ];
 
@@ -540,10 +552,7 @@ impl ScriptPermissionManager {
                     if let Ok(metadata) = std::fs::metadata(&script_path) {
                         let mode = metadata.permissions().mode();
                         if (mode & 0o111) == 0 {
-                            issues.push(format!(
-                                "脚本缺少执行权限: {}",
-                                script_path.display()
-                            ));
+                            issues.push(format!("脚本缺少执行权限: {}", script_path.display()));
                         }
                     }
                 }
@@ -560,12 +569,13 @@ impl ScriptPermissionManager {
         }
 
         // 读取文件内容
-        let content = std::fs::read_to_string(script_path)
-            .map_err(|e| DockerServiceError::FileSystem(format!(
-                "读取脚本文件失败 {}: {}", 
-                script_path.display(), 
+        let content = std::fs::read_to_string(script_path).map_err(|e| {
+            DockerServiceError::FileSystem(format!(
+                "读取脚本文件失败 {}: {}",
+                script_path.display(),
                 e
-            )))?;
+            ))
+        })?;
 
         // 检查是否包含Windows行尾符
         if !content.contains("\r\n") {
@@ -580,22 +590,24 @@ impl ScriptPermissionManager {
 
         // 创建备份文件
         let backup_path = script_path.with_extension("sh.bak");
-        std::fs::copy(script_path, &backup_path)
-            .map_err(|e| DockerServiceError::FileSystem(format!(
-                "创建备份文件失败 {}: {}", 
-                backup_path.display(), 
+        std::fs::copy(script_path, &backup_path).map_err(|e| {
+            DockerServiceError::FileSystem(format!(
+                "创建备份文件失败 {}: {}",
+                backup_path.display(),
                 e
-            )))?;
+            ))
+        })?;
 
         debug!("已创建备份文件: {}", backup_path.display());
 
         // 写入转换后的内容
-        std::fs::write(script_path, unix_content)
-            .map_err(|e| DockerServiceError::FileSystem(format!(
-                "写入转换后的脚本失败 {}: {}", 
-                script_path.display(), 
+        std::fs::write(script_path, unix_content).map_err(|e| {
+            DockerServiceError::FileSystem(format!(
+                "写入转换后的脚本失败 {}: {}",
+                script_path.display(),
                 e
-            )))?;
+            ))
+        })?;
 
         info!("✅ 行尾符转换完成: {}", script_path.display());
         info!("💾 备份文件: {}", backup_path.display());
@@ -655,15 +667,23 @@ impl ScriptPermissionManager {
         if let Ok(output) = Command::new("wsl").arg("--list").arg("--verbose").output() {
             let wsl_output = String::from_utf8_lossy(&output.stdout);
             if wsl_output.contains("Version 2") {
-                suggestions.push("建议在WSL2环境中运行Docker相关操作以获得更好的兼容性".to_string());
+                suggestions
+                    .push("建议在WSL2环境中运行Docker相关操作以获得更好的兼容性".to_string());
             }
         }
 
         // 检查Git配置
-        if let Ok(output) = Command::new("git").arg("config").arg("core.autocrlf").output() {
+        if let Ok(output) = Command::new("git")
+            .arg("config")
+            .arg("core.autocrlf")
+            .output()
+        {
             let git_config = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if git_config == "true" {
-                suggestions.push("Git配置 core.autocrlf=true 可能导致脚本行尾符问题，建议设置为false".to_string());
+                suggestions.push(
+                    "Git配置 core.autocrlf=true 可能导致脚本行尾符问题，建议设置为false"
+                        .to_string(),
+                );
             }
         }
 
@@ -675,4 +695,4 @@ impl ScriptPermissionManager {
 
         Ok(suggestions)
     }
-} 
+}

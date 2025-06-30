@@ -202,9 +202,18 @@ pub async fn check_docker_services_status(app: &CliApp) -> Result<()> {
             if report.overall_status.is_healthy() {
                 use client_core::constants::docker::ports;
                 info!("🌐 服务访问信息:");
-                info!("  • 前端页面: http://localhost:{}", ports::DEFAULT_FRONTEND_PORT);
-                info!("  • 后端API: http://localhost:{}", ports::DEFAULT_BACKEND_PORT);
-                info!("  • 管理界面: http://localhost:{} (如果配置)", ports::DEFAULT_MINIO_API_PORT);
+                info!(
+                    "  • 前端页面: http://localhost:{}",
+                    ports::DEFAULT_FRONTEND_PORT
+                );
+                info!(
+                    "  • 后端API: http://localhost:{}",
+                    ports::DEFAULT_BACKEND_PORT
+                );
+                info!(
+                    "  • 管理界面: http://localhost:{} (如果配置)",
+                    ports::DEFAULT_MINIO_API_PORT
+                );
                 info!("  📝 注意: 如果使用了自定义端口参数，请使用相应的端口访问");
             }
         }
@@ -425,15 +434,15 @@ pub async fn list_docker_images_with_ducker(app: &CliApp) -> Result<()> {
 
 /// 设置frontend服务端口
 async fn set_frontend_port(port: u16) -> Result<()> {
+    use client_core::constants::docker::{env_vars, get_env_file_path};
     use std::fs;
-    use client_core::constants::docker::{get_env_file_path, env_vars};
 
     let env_file_path = get_env_file_path();
-    
+
     if !env_file_path.exists() {
         warn!("⚠️  .env文件不存在: {}", env_file_path.display());
         return Err(client_core::DuckError::custom(
-            ".env文件不存在，无法设置frontend端口"
+            ".env文件不存在，无法设置frontend端口",
         ));
     }
 

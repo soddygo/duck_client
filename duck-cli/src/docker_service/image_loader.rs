@@ -59,15 +59,15 @@ impl ImageInfo {
         let arch_suffix = format!("-{}", architecture.as_str());
         let (original_tag, target_tag) =
             if let Some(name_without_ext) = file_name.strip_suffix(".tar") {
-            if name_without_ext.ends_with(&arch_suffix) {
-                let target = &name_without_ext[..name_without_ext.len() - arch_suffix.len()];
-                (name_without_ext.to_string(), target.to_string())
+                if name_without_ext.ends_with(&arch_suffix) {
+                    let target = &name_without_ext[..name_without_ext.len() - arch_suffix.len()];
+                    (name_without_ext.to_string(), target.to_string())
+                } else {
+                    (name_without_ext.to_string(), name_without_ext.to_string())
+                }
             } else {
-                (name_without_ext.to_string(), name_without_ext.to_string())
-            }
-        } else {
-            (file_name.to_string(), file_name.to_string())
-        };
+                (file_name.to_string(), file_name.to_string())
+            };
 
         // 获取文件大小
         let file_size = std::fs::metadata(&file_path)

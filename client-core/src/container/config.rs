@@ -92,7 +92,7 @@ impl DockerManager {
             .ok_or_else(|| DuckError::Docker("compose文件中没有services部分".to_string()))?;
 
         let mut service_names = HashSet::new();
-        
+
         if let Some(services_map) = services.as_mapping() {
             for (key, _) in services_map {
                 if let Some(service_name) = key.as_str() {
@@ -129,7 +129,7 @@ impl DockerManager {
     /// Docker Compose 生成的容器名称格式：{项目名}_{服务名}_{实例号}
     pub fn generate_compose_container_patterns(&self, service_name: &str) -> Vec<String> {
         let project_name = self.get_compose_project_name();
-        
+
         vec![
             // 标准格式：项目名_服务名_实例号
             format!("{project_name}_{service_name}_1"),

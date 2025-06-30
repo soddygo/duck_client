@@ -316,8 +316,6 @@ impl HealthChecker {
         }
     }
 
-
-
     /// 实时进度显示 - 使用print!刷新，避免过多日志
     fn print_progress(&self, report: &HealthReport, elapsed: Duration, is_first: bool) {
         let running_count = report.running_count;
@@ -369,13 +367,10 @@ impl HealthChecker {
 
         // 使用 \r 回到行首，覆盖之前的进度
         if is_first {
-            print!("\n"); // 第一次输出前加个换行
+            println!(); // 第一次输出前加个换行
         }
 
-        print!(
-            "\r🔍 [{}/{}] {} | 用时: {}秒",
-            running_count, total_count, status_text, elapsed_secs
-        );
+        print!("\r🔍 [{running_count}/{total_count}] {status_text} | 用时: {elapsed_secs}秒");
 
         // 强制刷新输出
         use std::io::{self, Write};

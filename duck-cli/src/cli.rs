@@ -29,7 +29,10 @@ pub enum AutoUpgradeDeployCommand {
     /// 立即执行自动升级部署
     Run {
         /// 指定frontend服务的端口号（默认80端口）
-        #[arg(long, help = "指定frontend服务的端口号，对应docker-compose.yml中的FRONTEND_HOST_PORT变量（默认: 80端口）")]
+        #[arg(
+            long,
+            help = "指定frontend服务的端口号，对应docker-compose.yml中的FRONTEND_HOST_PORT变量（默认: 80端口）"
+        )]
         port: Option<u16>,
     },
     /// 延迟执行自动升级部署
@@ -70,7 +73,10 @@ pub enum DockerServiceCommand {
     /// 部署Docker服务
     Deploy {
         /// 指定frontend服务的端口号（默认80端口）
-        #[arg(long, help = "指定frontend服务的端口号，对应docker-compose.yml中的FRONTEND_HOST_PORT变量（默认: 80端口）")]
+        #[arg(
+            long,
+            help = "指定frontend服务的端口号，对应docker-compose.yml中的FRONTEND_HOST_PORT变量（默认: 80端口）"
+        )]
         port: Option<u16>,
     },
     /// 启动Docker服务
@@ -179,4 +185,4 @@ pub enum Commands {
     /// 自动升级部署
     #[command(subcommand)]
     AutoUpgradeDeploy(AutoUpgradeDeployCommand),
-} 
+}

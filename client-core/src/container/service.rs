@@ -73,31 +73,32 @@ impl DockerManager {
         self.check_prerequisites().await?;
 
         info!("使用 ducker 库获取容器状态...");
-        
+
         // 1. 获取docker-compose.yml中定义的服务名称
         let compose_services = self.get_compose_service_names().await?;
         info!("docker-compose.yml 中定义的服务: {:?}", compose_services);
-        
+
         // 2. 获取所有容器信息
         let containers = self.get_all_containers_with_ducker().await?;
         info!("系统中发现 {} 个容器", containers.len());
-        
+
         // 3. 只保留与compose服务匹配的容器
         let mut matched_services = Vec::new();
         let mut compose_services_found = std::collections::HashSet::new();
-        
+
         for container in containers {
             // 检查该容器是否属于任何compose服务
             for service_name in &compose_services {
                 if self.is_service_name_match(&container.names, service_name) {
-                    let service_info = self.convert_docker_container_to_service_info(container.clone());
+                    let service_info =
+                        self.convert_docker_container_to_service_info(container.clone());
                     matched_services.push(service_info);
                     compose_services_found.insert(service_name.clone());
                     break; // 避免重复匹配
                 }
             }
         }
-        
+
         // 4. 为未找到的compose服务创建"未知"状态的条目
         for service_name in &compose_services {
             if !compose_services_found.contains(service_name) {
@@ -109,9 +110,13 @@ impl DockerManager {
                 });
             }
         }
-        
-        info!("匹配到 {}/{} 个compose服务容器", compose_services_found.len(), compose_services.len());
-        
+
+        info!(
+            "匹配到 {}/{} 个compose服务容器",
+            compose_services_found.len(),
+            compose_services.len()
+        );
+
         Ok(matched_services)
     }
 
@@ -120,10 +125,10 @@ impl DockerManager {
         self.check_prerequisites().await?;
 
         info!("使用 ducker 库获取所有容器状态...");
-        
+
         // 获取所有容器信息
         let containers = self.get_all_containers_with_ducker().await?;
-        
+
         // 转换为 ServiceInfo 格式
         let services = containers
             .into_iter()
@@ -136,18 +141,16 @@ impl DockerManager {
     /// 使用 ducker 库获取所有容器信息
     async fn get_all_containers_with_ducker(&self) -> Result<Vec<DockerContainer>> {
         match new_local_docker_connection("/var/run/docker.sock", None).await {
-            Ok(docker) => {
-                match DockerContainer::list(&docker).await {
-                    Ok(containers) => {
-                        info!("ducker 成功获取到 {} 个容器", containers.len());
-                        Ok(containers)
-                    }
-                    Err(e) => {
-                        error!("ducker 获取容器列表失败: {}", e);
-                        Err(DuckError::Docker(format!("获取容器列表失败: {e}")))
-                    }
+            Ok(docker) => match DockerContainer::list(&docker).await {
+                Ok(containers) => {
+                    info!("ducker 成功获取到 {} 个容器", containers.len());
+                    Ok(containers)
                 }
-            }
+                Err(e) => {
+                    error!("ducker 获取容器列表失败: {}", e);
+                    Err(DuckError::Docker(format!("获取容器列表失败: {e}")))
+                }
+            },
             Err(e) => {
                 error!("ducker 连接 Docker 失败: {}", e);
                 Err(DuckError::Docker(format!("连接 Docker 失败: {e}")))
@@ -175,7 +178,8 @@ impl DockerManager {
         let ports = if container.ports.is_empty() {
             Vec::new()
         } else {
-            container.ports
+            container
+                .ports
                 .split(", ")
                 .filter(|s| !s.trim().is_empty())
                 .map(|s| s.trim().to_string())
@@ -225,18 +229,18 @@ impl DockerManager {
     fn is_service_name_match(&self, container_name: &str, service_name: &str) -> bool {
         // 生成可能的容器名称模式
         let patterns = self.generate_compose_container_patterns(service_name);
-        
+
         let container_lower = container_name.to_lowercase();
-        
+
         // 检查容器名称是否匹配任何模式
         for pattern in patterns {
             let pattern_lower = pattern.to_lowercase();
-            
+
             // 精确匹配
             if container_lower == pattern_lower {
                 return true;
             }
-            
+
             // 前缀匹配（处理有额外后缀的情况）
             if container_lower.starts_with(&pattern_lower) {
                 return true;

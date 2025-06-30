@@ -1,6 +1,6 @@
 use client_core::{
     api::ApiClient, backup::BackupManager, config::AppConfig, container::DockerManager,
-    database::Database, error::Result, upgrade::UpgradeManager,
+    database::Database, error::Result, upgrade::UpgradeManager, authenticated_client::AuthenticatedClient,
 };
 use std::path::PathBuf;
 
@@ -13,6 +13,7 @@ pub struct CliApp {
     pub config: AppConfig,
     pub database: Database,
     pub api_client: ApiClient,
+    pub authenticated_client: AuthenticatedClient,
     pub docker_manager: DockerManager,
     pub backup_manager: BackupManager,
     pub upgrade_manager: UpgradeManager,
@@ -29,20 +30,27 @@ impl CliApp {
         // 初始化数据库
         let database = Database::connect("history.db").await?;
 
-        // 获取用于API请求的客户端ID（优先使用服务端返回的client_id）
-        let client_id = database.get_api_client_id().await?;
-        let api_client = ApiClient::new(client_id);
+        // 创建认证客户端（自动处理注册和认证）
+        let server_base_url = client_core::constants::api::DEFAULT_BASE_URL.to_string();
+        let authenticated_client = AuthenticatedClient::new(database.clone(), server_base_url).await?;
 
-        // 初始化其他管理器
+        // 获取用于API请求的客户端ID（只使用服务端返回的client_id）
+        let client_id = database.get_api_client_id().await?;
+        let mut api_client = ApiClient::new(client_id.clone());
+        
+        // 将AuthenticatedClient设置到ApiClient中，这样ApiClient可以使用自动认证功能
+        api_client.set_authenticated_client(authenticated_client.clone());
+
+        // 创建其他管理器
         let docker_manager = DockerManager::new(PathBuf::from(&config.docker.compose_file))?;
         let backup_manager = BackupManager::new(
-            config.get_backup_dir(),
+            PathBuf::from(&config.backup.storage_dir),
             database.clone(),
             docker_manager.clone(),
         )?;
         let upgrade_manager = UpgradeManager::new(
             config.clone(),
-            PathBuf::from("config.toml"), // 使用默认路径
+            PathBuf::from("config.toml"), // 使用默认配置路径
             docker_manager.clone(),
             backup_manager.clone(),
             api_client.clone(),
@@ -53,14 +61,15 @@ impl CliApp {
             config,
             database,
             api_client,
+            authenticated_client,
             docker_manager,
             backup_manager,
             upgrade_manager,
         })
     }
 
-    /// 运行 CLI 命令
-    pub async fn run(&mut self, command: Commands) -> Result<()> {
+    /// 运行应用命令
+    pub async fn run_command(&mut self, command: Commands) -> Result<()> {
         match command {
             Commands::Status => commands::run_status(self).await,
             Commands::ApiInfo => commands::run_api_info(self).await,

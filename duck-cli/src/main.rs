@@ -49,7 +49,7 @@ async fn main() {
     };
 
     // 运行命令
-    if let Err(e) = app.run(cli.command).await {
+    if let Err(e) = app.run_command(cli.command).await {
         error!("❌ 操作失败: {}", e);
         std::process::exit(1);
     }

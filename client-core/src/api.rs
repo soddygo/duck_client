@@ -1,4 +1,5 @@
 use crate::api_config::ApiConfig;
+use crate::authenticated_client::AuthenticatedClient;
 use crate::error::{DuckError, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ pub struct ApiClient {
     client: Client,
     config: ApiConfig,
     client_id: Option<String>,
+    authenticated_client: Option<AuthenticatedClient>,
 }
 
 /// 客户端注册请求
@@ -163,12 +165,18 @@ impl ApiClient {
             client: Client::new(),
             config: ApiConfig::default(),
             client_id,
+            authenticated_client: None,
         }
     }
 
     /// 设置客户端ID
     pub fn set_client_id(&mut self, client_id: String) {
         self.client_id = Some(client_id);
+    }
+
+    /// 设置认证客户端
+    pub fn set_authenticated_client(&mut self, authenticated_client: AuthenticatedClient) {
+        self.authenticated_client = Some(authenticated_client);
     }
 
     /// 获取当前API配置
@@ -303,7 +311,18 @@ impl ApiClient {
 
         info!("开始下载Docker服务更新包: {}", url);
 
-        let response = self.build_request(&url).send().await?;
+        // 优先使用AuthenticatedClient进行请求（自动处理认证）
+        let response = if let Some(ref auth_client) = self.authenticated_client {
+            match auth_client.get(&url).await {
+                Ok(request_builder) => auth_client.send(request_builder, &url).await?,
+                Err(e) => {
+                    warn!("使用AuthenticatedClient失败，回退到普通请求: {}", e);
+                    self.build_request(&url).send().await?
+                }
+            }
+        } else {
+            self.build_request(&url).send().await?
+        };
 
         if !response.status().is_success() {
             let status = response.status();

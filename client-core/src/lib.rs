@@ -1,5 +1,6 @@
 pub mod api;
 pub mod api_config;
+pub mod authenticated_client;
 pub mod backup;
 pub mod config;
 pub mod config_manager;
@@ -10,4 +11,4 @@ pub mod db;
 pub mod error;
 pub mod upgrade;
 
-pub use error::{DuckError, Result};
+pub use error::*;

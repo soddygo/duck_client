@@ -20,8 +20,13 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
 
     // 获取版本信息以确定下载路径
     info!("检查Docker服务版本...");
-    let current_version = &app.config.versions.docker_service;
-    match app.api_client.check_docker_version(current_version).await {
+    let current_version = app.config.versions.docker_service.clone();
+    
+    // 使用API客户端检查版本（移除自动注册逻辑，因为现在由AuthenticatedClient处理）
+    let version_result = app.api_client.check_docker_version(&current_version).await;
+    let version_info = version_result;
+
+    match version_info {
         Ok(version_info) => {
             info!("=== Docker服务版本信息 ===");
             info!("当前版本: {}", version_info.current_version);
@@ -90,13 +95,19 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
                 info!("   目标版本: {}", target_version);
                 info!("   下载类型: {} (全量)", download_type);
 
-                // 执行下载
-                match app.api_client.download_service_update(&download_path).await {
+                // 执行下载，如果失败且是认证错误，则自动重新注册
+                let download_result = app.api_client.download_service_update(&download_path).await;
+                match download_result {
                     Ok(_) => {
                         info!("✅ 服务包下载完成!");
                         info!("   文件位置: {}", download_path.display());
                         info!("📝 下一步操作:");
                         info!("   运行 'duck-cli docker-service deploy' 来部署服务");
+                    }
+                    Err(client_core::error::DuckError::Api(ref msg)) if msg.contains("401") || msg.contains("Unauthorized") => {
+                        error!("❌ 下载失败: 认证失败");
+                        info!("💡 认证问题已由AuthenticatedClient自动处理，但仍然失败");
+                        return Err(client_core::error::DuckError::Api("下载失败: 认证失败".to_string()));
                     }
                     Err(e) => {
                         error!("❌ 下载失败: {}", e);
@@ -117,7 +128,7 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
             warn!("⚠️  检查版本失败: {}", e);
 
             // 无法获取版本信息时，使用当前配置的版本构建路径
-            let fallback_version = current_version;
+            let fallback_version = &current_version;
             let download_type = "full";
             let download_path = app.config.get_version_download_file_path(
                 fallback_version,

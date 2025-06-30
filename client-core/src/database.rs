@@ -122,19 +122,11 @@ impl Database {
         self.manager.get_config("client_id").await
     }
 
-    /// 获取用于API请求的客户端标识（优先使用服务端client_id，否则使用本地uuid）
+    /// 获取用于API请求的客户端标识（只使用服务端返回的client_id）
     pub async fn get_api_client_id(&self) -> Result<Option<String>> {
-        // 优先使用服务端返回的client_id
-        if let Some(client_id) = self.get_client_id().await? {
-            return Ok(Some(client_id));
-        }
-
-        // 如果没有服务端client_id，使用本地UUID
-        if let Some(uuid) = self.get_client_uuid().await? {
-            return Ok(Some(uuid.to_string()));
-        }
-
-        Ok(None)
+        // 只使用服务端返回的client_id，不使用本地UUID
+        // 因为服务端不认识本地UUID，会导致401错误
+        self.get_client_id().await
     }
 
     /// 通用配置项获取

@@ -439,7 +439,7 @@ async fn set_frontend_port(port: u16) -> Result<()> {
 
     // 读取现有的.env文件内容
     let content = fs::read_to_string(&env_file_path)
-        .map_err(|e| client_core::DuckError::custom(format!("读取.env文件失败: {}", e)))?;
+        .map_err(|e| client_core::DuckError::custom(format!("读取.env文件失败: {e}")))?;
 
     // 处理内容，更新FRONTEND_HOST_PORT的值
     let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
@@ -464,7 +464,7 @@ async fn set_frontend_port(port: u16) -> Result<()> {
     // 写回文件
     let updated_content = lines.join("\n");
     fs::write(&env_file_path, updated_content)
-        .map_err(|e| client_core::DuckError::custom(format!("写入.env文件失败: {}", e)))?;
+        .map_err(|e| client_core::DuckError::custom(format!("写入.env文件失败: {e}")))?;
 
     info!("🔧 Frontend端口已设置为: {}", port);
     Ok(())

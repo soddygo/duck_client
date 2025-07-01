@@ -2,7 +2,6 @@ use crate::docker_service::error::{DockerServiceError, DockerServiceResult};
 use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn, error};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use walkdir::WalkDir;
 use ducker::docker::{container::DockerContainer, util::new_local_docker_connection};
 use tokio::time::{sleep, Duration};
@@ -20,11 +19,20 @@ pub struct DirectoryPermissionManager {
 impl DirectoryPermissionManager {
     /// 创建新的目录权限管理器
     pub fn new(work_dir: PathBuf) -> Self {
-        // 获取当前用户的UID和GID
-        let current_uid = unsafe { libc::getuid() };
-        let current_gid = unsafe { libc::getgid() };
+        // 获取当前用户的UID和GID（跨平台兼容）
+        #[cfg(unix)]
+        let (current_uid, current_gid) = {
+            let uid = unsafe { libc::getuid() };
+            let gid = unsafe { libc::getgid() };
+            info!("🔧 初始化权限管理器，当前用户: {}:{}", uid, gid);
+            (uid, gid)
+        };
         
-        info!("🔧 初始化权限管理器，当前用户: {}:{}", current_uid, current_gid);
+        #[cfg(windows)]
+        let (current_uid, current_gid) = {
+            info!("🔧 初始化权限管理器（Windows系统，跳过UID/GID）");
+            (1000u32, 1000u32) // Windows上使用默认值
+        };
         
         Self {
             work_dir,
@@ -295,16 +303,27 @@ DATA_DIR_PERMISSIONS=755
         Ok(())
     }
     
-    /// 设置单个目录权限
+    /// 设置目录权限（跨平台兼容）
     fn set_directory_permission(&self, path: &Path, mode: u32) -> DockerServiceResult<()> {
-        let metadata = fs::metadata(path)
-            .map_err(|e| DockerServiceError::FileSystem(format!("获取文件元数据失败: {}", e)))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
             
-        let mut permissions = metadata.permissions();
-        permissions.set_mode(mode);
+            let metadata = fs::metadata(path)
+                .map_err(|e| DockerServiceError::FileSystem(format!("获取文件元数据失败: {}", e)))?;
+                
+            let mut permissions = metadata.permissions();
+            permissions.set_mode(mode);
+            
+            fs::set_permissions(path, permissions)
+                .map_err(|e| DockerServiceError::FileSystem(format!("设置权限失败: {}", e)))?;
+        }
         
-        fs::set_permissions(path, permissions)
-            .map_err(|e| DockerServiceError::FileSystem(format!("设置权限失败: {}", e)))?;
+        #[cfg(windows)]
+        {
+            // Windows上跳过权限设置，仅记录日志
+            tracing::debug!("Windows系统跳过权限设置: {} (mode: {:o})", path.display(), mode);
+        }
             
         Ok(())
     }
@@ -638,12 +657,23 @@ DATA_DIR_PERMISSIONS=755
                 self.set_directory_permission(path, 0o777)?;
             } else {
                 // 文件设置为666（-rw-rw-rw-）
-                let metadata = fs::metadata(path)
-                    .map_err(|e| DockerServiceError::FileSystem(format!("获取文件元数据失败: {}", e)))?;
-                let mut permissions = metadata.permissions();
-                permissions.set_mode(0o666);
-                fs::set_permissions(path, permissions)
-                    .map_err(|e| DockerServiceError::FileSystem(format!("设置文件权限失败: {}", e)))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    
+                    let metadata = fs::metadata(path)
+                        .map_err(|e| DockerServiceError::FileSystem(format!("获取文件元数据失败: {}", e)))?;
+                    let mut permissions = metadata.permissions();
+                    permissions.set_mode(0o666);
+                    fs::set_permissions(path, permissions)
+                        .map_err(|e| DockerServiceError::FileSystem(format!("设置文件权限失败: {}", e)))?;
+                }
+                
+                #[cfg(windows)]
+                {
+                    // Windows上跳过文件权限设置
+                    tracing::debug!("Windows系统跳过文件权限设置: {}", path.display());
+                }
             }
         }
         

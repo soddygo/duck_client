@@ -70,15 +70,6 @@ pub enum CheckUpdateCommand {
 
 #[derive(Subcommand, Debug)]
 pub enum DockerServiceCommand {
-    /// 部署Docker服务
-    Deploy {
-        /// 指定frontend服务的端口号（默认80端口）
-        #[arg(
-            long,
-            help = "指定frontend服务的端口号，对应docker-compose.yml中的FRONTEND_HOST_PORT变量（默认: 80端口）"
-        )]
-        port: Option<u16>,
-    },
     /// 启动Docker服务
     Start,
     /// 停止Docker服务

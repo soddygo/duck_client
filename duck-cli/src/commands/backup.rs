@@ -1,10 +1,6 @@
 use crate::app::CliApp;
 use crate::docker_service::{DockerService, ServiceStatus};
-use client_core::{
-    backup::BackupOptions,
-    database::BackupType,
-    error::Result,
-};
+use client_core::{backup::BackupOptions, database::BackupType, error::Result};
 use tracing::{error, info, warn};
 
 /// 创建备份
@@ -366,7 +362,7 @@ pub async fn run_rollback(app: &CliApp, backup_id: i64, force: bool) -> Result<(
     if !force {
         warn!("⚠️  警告: 此操作将覆盖当前数据目录!");
         warn!("⚠️  注意: 此操作只恢复数据文件，不会影响配置文件");
-        
+
         use std::io::{self, Write};
         print!("请确认您要从备份 {backup_id} 恢复数据 (y/N): ");
         io::stdout().flush()?;
@@ -381,10 +377,10 @@ pub async fn run_rollback(app: &CliApp, backup_id: i64, force: bool) -> Result<(
     }
 
     info!("开始数据回滚操作...");
-    
+
     // 🔧 智能回滚：只恢复数据，保留配置文件
     run_data_only_rollback(app, backup_id).await?;
-    
+
     info!("✅ 数据回滚完成");
     Ok(())
 }
@@ -394,13 +390,17 @@ async fn run_data_only_rollback(app: &CliApp, backup_id: i64) -> Result<()> {
     info!("🛡️ 使用智能数据回滚模式");
     info!("   📁 将恢复: data/, app/ 目录");
     info!("   🔧 将保留: docker-compose.yml, .env 等配置文件");
-    
+
     // 使用 BackupManager 的智能数据恢复功能
     let docker_dir = std::path::Path::new("./docker");
-    match app.backup_manager.restore_data_only(backup_id, docker_dir).await {
+    match app
+        .backup_manager
+        .restore_data_only(backup_id, docker_dir)
+        .await
+    {
         Ok(_) => {
             info!("✅ 智能数据恢复完成");
-            
+
             // 设置正确的权限
             let mysql_data_dir = docker_dir.join("data/mysql");
             if mysql_data_dir.exists() {
@@ -415,7 +415,7 @@ async fn run_data_only_rollback(app: &CliApp, backup_id: i64) -> Result<()> {
                     }
                 }
             }
-            
+
             info!("💡 数据恢复说明:");
             info!("   ✅ 所有数据库数据已恢复");
             info!("   ✅ 配置文件保持最新版本");
@@ -430,6 +430,6 @@ async fn run_data_only_rollback(app: &CliApp, backup_id: i64) -> Result<()> {
             return Err(e);
         }
     }
-    
-        Ok(())
+
+    Ok(())
 }

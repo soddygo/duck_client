@@ -296,7 +296,7 @@ impl BackupManager {
     /// 只清理数据目录，保留配置文件
     async fn clear_data_directories_only(&self, docker_dir: &Path) -> Result<()> {
         let data_dirs_to_clear = ["data", "app"];
-        
+
         for dir_name in data_dirs_to_clear.iter() {
             let dir_path = docker_dir.join(dir_name);
             if dir_path.exists() {
@@ -304,7 +304,7 @@ impl BackupManager {
                 tokio::fs::remove_dir_all(&dir_path).await?;
             }
         }
-        
+
         tracing::info!("数据目录清理完成，配置文件已保留");
         Ok(())
     }

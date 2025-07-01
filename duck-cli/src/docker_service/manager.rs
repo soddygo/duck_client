@@ -75,7 +75,10 @@ impl DockerServiceManager {
         // 3. 渐进式权限管理（容器以原生用户运行，通过权限设置解决问题）
         info!("🔧 应用渐进式权限管理...");
         info!("   策略: 容器以原生用户运行，通过目录权限设置确保访问权限");
-        if let Err(e) = self.directory_permission_manager.progressive_permission_management() {
+        if let Err(e) = self
+            .directory_permission_manager
+            .progressive_permission_management()
+        {
             warn!("渐进式权限管理失败，回退到基础权限: {}", e);
             if let Err(fallback_err) = self.directory_permission_manager.basic_permission_fix() {
                 error!("权限设置完全失败: {}", fallback_err);
@@ -263,7 +266,10 @@ impl DockerServiceManager {
             .await?;
 
         // 2. 应用渐进式权限管理（不修改docker-compose.yml）
-        if let Err(e) = self.directory_permission_manager.progressive_permission_management() {
+        if let Err(e) = self
+            .directory_permission_manager
+            .progressive_permission_management()
+        {
             warn!("渐进式权限管理失败: {}", e);
             // 回退到基础权限修复
             if let Err(e2) = self.directory_permission_manager.basic_permission_fix() {
@@ -285,7 +291,7 @@ impl DockerServiceManager {
                 info!("等待服务启动完成...");
                 let timeout = Duration::from_secs(timeout::HEALTH_CHECK_TIMEOUT);
                 let check_interval = Duration::from_secs(timeout::HEALTH_CHECK_INTERVAL);
-                
+
                 // 提前检查MySQL状态，如果发现问题立即修复
                 tokio::time::sleep(Duration::from_secs(10)).await; // 等待10秒让容器启动
                 if let Ok(initial_report) = self.health_checker.check_health().await {
@@ -301,23 +307,31 @@ impl DockerServiceManager {
                 {
                     Ok(report) => {
                         info!("所有服务已成功启动!");
-                        
+
                         // 执行容器启动后权限维护
-                        if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
+                        if let Err(e) = self
+                            .directory_permission_manager
+                            .post_container_start_maintenance()
+                            .await
+                        {
                             warn!("容器启动后权限维护失败: {}", e);
                             // 不终止整个流程，只是记录警告
                         }
-                        
+
                         self.print_service_status(&report).await;
                     }
                     Err(e) => {
                         warn!("等待服务启动超时或失败: {}", e);
-                        
+
                         // 即使超时也执行权限维护，可能有助于解决问题
-                        if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
+                        if let Err(e) = self
+                            .directory_permission_manager
+                            .post_container_start_maintenance()
+                            .await
+                        {
                             warn!("容器启动后权限维护失败: {}", e);
                         }
-                        
+
                         // 即使超时也显示当前状态
                         if let Ok(report) = self.health_checker.check_health().await {
                             self.print_service_status_with_failures(&report).await;
@@ -334,13 +348,16 @@ impl DockerServiceManager {
                 match self.health_checker.check_health().await {
                     Ok(report) => {
                         if report.running_count > 0 {
-                            info!("🔍 发现 {}/{} 个容器正在运行，进入健康检查阶段", 
-                                  report.running_count, report.total_count);
-                            
+                            info!(
+                                "🔍 发现 {}/{} 个容器正在运行，进入健康检查阶段",
+                                report.running_count, report.total_count
+                            );
+
                             // 有部分容器成功，进入健康检查阶段
                             info!("开始180秒健康检查阶段...");
                             let timeout = Duration::from_secs(timeout::HEALTH_CHECK_TIMEOUT);
-                            let check_interval = Duration::from_secs(timeout::HEALTH_CHECK_INTERVAL);
+                            let check_interval =
+                                Duration::from_secs(timeout::HEALTH_CHECK_INTERVAL);
 
                             match self
                                 .health_checker
@@ -349,42 +366,55 @@ impl DockerServiceManager {
                             {
                                 Ok(final_report) => {
                                     info!("🎉 部分服务最终启动成功!");
-                                    
+
                                     // 执行容器启动后权限维护
-                                    if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
+                                    if let Err(e) = self
+                                        .directory_permission_manager
+                                        .post_container_start_maintenance()
+                                        .await
+                                    {
                                         warn!("容器启动后权限维护失败: {}", e);
                                     }
-                                    
+
                                     self.print_service_status(&final_report).await;
                                     return Ok(()); // 部分成功，返回 Ok
                                 }
                                 Err(_health_error) => {
                                     warn!("⏰ 健康检查超时，但有部分服务正在运行");
-                                    
+
                                     // 检查MySQL容器状态，如果失败尝试权限修复
-                                    if let Err(_) = self.check_and_fix_mysql_if_failed(&report).await {
+                                    if let Err(_) =
+                                        self.check_and_fix_mysql_if_failed(&report).await
+                                    {
                                         warn!("MySQL权限修复失败，但继续执行");
                                     }
-                                    
+
                                     // 即使超时也执行权限维护
-                                    if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
+                                    if let Err(e) = self
+                                        .directory_permission_manager
+                                        .post_container_start_maintenance()
+                                        .await
+                                    {
                                         warn!("容器启动后权限维护失败: {}", e);
                                     }
-                                    
+
                                     self.print_service_status_with_failures(&report).await;
-                                    info!("你可以查看日志排查问题: duck-cli docker-service logs [服务名]");
+                                    info!(
+                                        "你可以查看日志排查问题: duck-cli docker-service logs [服务名]"
+                                    );
                                     return Ok(()); // 部分成功，返回 Ok
                                 }
                             }
                         } else {
                             error!("没有发现运行中的容器");
-                            
+
                             // 如果没有容器运行，特别检查MySQL是否因为权限问题失败
                             if let Err(_) = self.check_and_fix_mysql_if_failed(&report).await {
                                 warn!("MySQL权限修复失败");
                             }
-                            
-                            self.print_detailed_error_analysis(&report, &e.to_string()).await;
+
+                            self.print_detailed_error_analysis(&report, &e.to_string())
+                                .await;
                         }
                     }
                     Err(_) => {
@@ -856,14 +886,20 @@ impl DockerServiceManager {
     }
 
     /// 检查并修复MySQL容器启动失败的权限问题
-    async fn check_and_fix_mysql_if_failed(&self, report: &HealthReport) -> DockerServiceResult<()> {
+    async fn check_and_fix_mysql_if_failed(
+        &self,
+        report: &HealthReport,
+    ) -> DockerServiceResult<()> {
         // 检查是否有MySQL相关的容器启动失败
-        let mysql_containers: Vec<_> = report.containers.iter()
+        let mysql_containers: Vec<_> = report
+            .containers
+            .iter()
             .filter(|container| {
                 // 检查容器名是否包含mysql相关关键词
                 let name = container.name.to_lowercase();
-                name.contains("mysql") || name.contains("db") || 
-                (container.image.to_lowercase().contains("mysql"))
+                name.contains("mysql")
+                    || name.contains("db")
+                    || (container.image.to_lowercase().contains("mysql"))
             })
             .collect();
 
@@ -873,14 +909,17 @@ impl DockerServiceManager {
 
         info!("🔍 检查到 {} 个MySQL相关容器", mysql_containers.len());
         for container in &mysql_containers {
-            info!("   - {} (状态: {}, 镜像: {})", 
-                  container.name, 
-                  container.status.display_name(), 
-                  container.image);
+            info!(
+                "   - {} (状态: {}, 镜像: {})",
+                container.name,
+                container.status.display_name(),
+                container.image
+            );
         }
 
         // 检查MySQL容器是否有启动失败的或处于重启状态
-        let problematic_mysql = mysql_containers.iter()
+        let problematic_mysql = mysql_containers
+            .iter()
             .filter(|container| {
                 // 不健康的容器或者处于转换状态(如重启)的容器都需要修复
                 !container.status.is_healthy() || container.status.is_transitioning()
@@ -889,26 +928,31 @@ impl DockerServiceManager {
 
         if !problematic_mysql.is_empty() {
             warn!("🔧 检测到MySQL容器存在问题，尝试权限修复...");
-            
+
             for container in &problematic_mysql {
-                warn!("   问题容器: {} (状态: {})", 
-                      container.name, 
-                      container.status.display_name());
+                warn!(
+                    "   问题容器: {} (状态: {})",
+                    container.name,
+                    container.status.display_name()
+                );
             }
-            
+
             // 调用权限修复
-            if let Err(e) = self.directory_permission_manager.fix_mysql_permissions_on_failure() {
+            if let Err(e) = self
+                .directory_permission_manager
+                .fix_mysql_permissions_on_failure()
+            {
                 error!("MySQL权限修复失败: {}", e);
                 return Err(e);
             }
-            
+
             info!("✅ MySQL权限修复完成");
             info!("💡 修复操作包括:");
             info!("   - 清理可能损坏的MySQL数据文件");
             info!("   - 设置MySQL目录权限为777（递归）");
             info!("   - 重新创建必要的目录结构");
             info!("🔄 建议等待容器自动重启或手动重启: duck-cli docker-service restart mysql");
-            
+
             Ok(())
         } else {
             Ok(()) // MySQL容器正常，无需修复

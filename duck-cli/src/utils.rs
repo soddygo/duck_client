@@ -232,7 +232,7 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
                 error!("🔍 发现路径冲突诊断信息:");
                 error!("   ZIP条目: {} (文件)", file.name());
                 error!("   本地路径: {} (目录)", outpath.display());
-                
+
                 // 显示目录内容
                 match std::fs::read_dir(&outpath) {
                     Ok(entries) => {
@@ -244,21 +244,27 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
                         } else {
                             error!("   目录内容 ({} 项):", items.len());
                             for (i, entry) in items.iter().enumerate() {
-                                if i < 5 { // 只显示前5项
+                                if i < 5 {
+                                    // 只显示前5项
                                     if let Ok(entry) = entry {
                                         let path = entry.path();
-                                        let file_type = if path.is_dir() { "目录" } else { "文件" };
-                                        error!("     - {} ({})", path.file_name().unwrap_or_default().to_string_lossy(), file_type);
+                                        let file_type =
+                                            if path.is_dir() { "目录" } else { "文件" };
+                                        error!(
+                                            "     - {} ({})",
+                                            path.file_name().unwrap_or_default().to_string_lossy(),
+                                            file_type
+                                        );
                                     }
                                 }
                             }
                             if items.len() > 5 {
                                 error!("     ... 还有 {} 项", items.len() - 5);
                             }
-                            
+
                             return Err(client_core::DuckError::custom(format!(
-                                "路径冲突：ZIP中的文件 '{}' 与现有目录 '{}' 冲突。\n建议：删除现有目录或检查ZIP文件结构", 
-                                file.name(), 
+                                "路径冲突：ZIP中的文件 '{}' 与现有目录 '{}' 冲突。\n建议：删除现有目录或检查ZIP文件结构",
+                                file.name(),
                                 outpath.display()
                             )));
                         }
@@ -271,7 +277,7 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
                     }
                 }
             }
-            
+
             let mut outfile = std::fs::File::create(&outpath)?;
 
             // 使用带进度显示的复制函数

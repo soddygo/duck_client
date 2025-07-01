@@ -3,11 +3,11 @@ use crate::commands::{backup, docker_service, update};
 use crate::docker_utils;
 use client_core::constants::{docker, timeout};
 use client_core::error::Result;
+use std::fs;
 use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
-use std::fs;
 
 /// 执行自动升级部署流程
 pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16>) -> Result<()> {
@@ -21,11 +21,18 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16
     // 1. 获取最新版本信息并下载
     info!("开始下载最新的Docker服务版本");
     info!("📥 正在下载最新的Docker服务版本...");
-    
+
     // 获取最新版本信息
-    let latest_version = match app.api_client.check_docker_version(&app.config.versions.docker_service).await {
+    let latest_version = match app
+        .api_client
+        .check_docker_version(&app.config.versions.docker_service)
+        .await
+    {
         Ok(version_info) => {
-            info!("📋 版本信息: {} -> {}", version_info.current_version, version_info.latest_version);
+            info!(
+                "📋 版本信息: {} -> {}",
+                version_info.current_version, version_info.latest_version
+            );
             version_info.latest_version
         }
         Err(e) => {
@@ -33,12 +40,12 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16
             app.config.versions.docker_service.clone()
         }
     };
-    
+
     update::run_upgrade(app, true, false).await?; // 全量下载
 
     // 1.5. 解压下载的docker.zip文件
     info!("📦 正在解压Docker服务包...");
-    
+
     // 🔍 检测部署类型：第一次部署 vs 升级部署
     let is_first_deployment = is_first_deployment().await;
     if is_first_deployment {
@@ -46,14 +53,14 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16
     } else {
         info!("🔄 检测到升级部署，需要保护现有数据");
     }
-    
+
     // 🛡️ 数据保护：只在升级部署时备份现有的数据目录
     let temp_data_backup = if is_first_deployment {
         None
     } else {
         backup_data_before_cleanup().await?
     };
-    
+
     // 清理现有的docker目录以避免路径冲突
     let docker_dir = std::path::Path::new("docker");
     if docker_dir.exists() {
@@ -72,26 +79,29 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16
             }
         }
     }
-    
+
     // 解压新的Docker服务包（使用最新版本）
     match docker_service::extract_docker_service(app, None, Some(latest_version.clone())).await {
         Ok(_) => {
             info!("✅ Docker服务包解压完成");
-            
+
             // 🛡️ 数据恢复：仅在升级部署时恢复备份的数据目录
             if !is_first_deployment {
                 restore_data_after_cleanup(&temp_data_backup).await?;
             } else {
                 info!("🆕 第一次部署，无需数据恢复");
             }
-            
+
             // 📝 更新配置文件中的Docker服务版本
             if latest_version != app.config.versions.docker_service {
-                info!("📝 更新Docker服务版本: {} -> {}", app.config.versions.docker_service, latest_version);
-                
+                info!(
+                    "📝 更新Docker服务版本: {} -> {}",
+                    app.config.versions.docker_service, latest_version
+                );
+
                 // 更新内存中的版本信息
                 app.config.versions.docker_service = latest_version.clone();
-                
+
                 // 持久化到配置文件
                 match app.config.save_to_file("config.toml") {
                     Ok(_) => {
@@ -405,32 +415,33 @@ fn format_duration(duration: Duration) -> String {
 async fn is_first_deployment() -> bool {
     let docker_dir = std::path::Path::new("docker");
     let docker_data_dir = docker_dir.join("data");
-    
+
     // 如果docker目录不存在，肯定是第一次部署
     if !docker_dir.exists() {
         return true;
     }
-    
+
     // 如果docker/data目录不存在，也是第一次部署
     if !docker_data_dir.exists() {
         return true;
     }
-    
+
     // 检查data目录是否有实际的数据内容
     match std::fs::read_dir(&docker_data_dir) {
         Ok(entries) => {
             let mut has_meaningful_data = false;
-            
+
             for entry in entries {
                 if let Ok(entry) = entry {
                     let path = entry.path();
-                    
+
                     // 检查是否有重要的数据目录（mysql, redis, milvus等）
                     if path.is_dir() {
-                        let dir_name = path.file_name()
+                        let dir_name = path
+                            .file_name()
                             .and_then(|name| name.to_str())
                             .unwrap_or("");
-                        
+
                         match dir_name {
                             "mysql" | "redis" | "milvus" | "postgres" | "mongodb" => {
                                 // 检查这些目录是否有实际内容
@@ -446,7 +457,7 @@ async fn is_first_deployment() -> bool {
                     }
                 }
             }
-            
+
             !has_meaningful_data
         }
         Err(_) => true, // 读取失败，当作第一次部署
@@ -456,19 +467,22 @@ async fn is_first_deployment() -> bool {
 /// 在清理docker目录前备份数据目录
 async fn backup_data_before_cleanup() -> Result<Option<std::path::PathBuf>> {
     let docker_data_dir = Path::new("docker/data");
-    
+
     if !docker_data_dir.exists() {
         info!("📁 无现有数据目录需要备份");
         return Ok(None);
     }
-    
+
     // 创建临时备份目录
     let temp_dir = std::env::temp_dir();
     let backup_name = format!("duck_data_backup_{}", chrono::Utc::now().timestamp());
     let temp_backup_path = temp_dir.join(backup_name);
-    
-    info!("🛡️ 正在备份数据目录到临时位置: {}", temp_backup_path.display());
-    
+
+    info!(
+        "🛡️ 正在备份数据目录到临时位置: {}",
+        temp_backup_path.display()
+    );
+
     // 递归复制数据目录到临时位置
     match copy_dir_recursively(docker_data_dir, &temp_backup_path) {
         Ok(_) => {
@@ -488,24 +502,24 @@ async fn restore_data_after_cleanup(temp_backup_path: &Option<std::path::PathBuf
     if let Some(backup_path) = temp_backup_path {
         if backup_path.exists() {
             let docker_data_dir = Path::new("docker/data");
-            
+
             info!("🔄 正在恢复数据目录从: {}", backup_path.display());
-            
+
             // 确保目标目录存在
             if let Some(parent) = docker_data_dir.parent() {
                 fs::create_dir_all(parent)?;
             }
-            
+
             // 如果新解压的包中有data目录，先删除它
             if docker_data_dir.exists() {
                 fs::remove_dir_all(docker_data_dir)?;
             }
-            
+
             // 从临时备份恢复数据目录
             match copy_dir_recursively(backup_path, docker_data_dir) {
                 Ok(_) => {
                     info!("✅ 数据目录恢复完成");
-                    
+
                     // 设置正确的权限（特别是MySQL目录需要777权限）
                     let mysql_data_dir = docker_data_dir.join("mysql");
                     if mysql_data_dir.exists() {
@@ -525,7 +539,7 @@ async fn restore_data_after_cleanup(temp_backup_path: &Option<std::path::PathBuf
                     )));
                 }
             }
-            
+
             // 清理临时备份
             if let Err(e) = fs::remove_dir_all(backup_path) {
                 warn!("⚠️ 清理临时备份失败: {}", e);
@@ -536,7 +550,7 @@ async fn restore_data_after_cleanup(temp_backup_path: &Option<std::path::PathBuf
     } else {
         info!("📁 无备份数据需要恢复");
     }
-    
+
     Ok(())
 }
 
@@ -545,20 +559,20 @@ fn copy_dir_recursively(src: &Path, dst: &Path) -> std::io::Result<()> {
     if !src.exists() {
         return Ok(());
     }
-    
+
     fs::create_dir_all(dst)?;
-    
+
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
-        
+
         if src_path.is_dir() {
             copy_dir_recursively(&src_path, &dst_path)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
         }
     }
-    
+
     Ok(())
 }

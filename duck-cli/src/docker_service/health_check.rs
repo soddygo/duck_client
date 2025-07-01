@@ -43,12 +43,12 @@ impl ContainerStatus {
             if is_oneshot {
                 // 一次性任务：检查退出码
                 if status.contains("(0)") {
-                    ContainerStatus::Completed  // 成功完成
+                    ContainerStatus::Completed // 成功完成
                 } else {
-                    ContainerStatus::Stopped    // 失败退出
+                    ContainerStatus::Stopped // 失败退出
                 }
             } else {
-                ContainerStatus::Stopped       // 持续服务退出都视为异常
+                ContainerStatus::Stopped // 持续服务退出都视为异常
             }
         } else if status.to_lowercase().contains("restarting") {
             ContainerStatus::Starting
@@ -83,7 +83,10 @@ impl ContainerStatus {
 
     /// 判断状态是否为失败状态
     pub fn is_failed(&self) -> bool {
-        matches!(self, ContainerStatus::Stopped | ContainerStatus::Unhealthy | ContainerStatus::Unknown)
+        matches!(
+            self,
+            ContainerStatus::Stopped | ContainerStatus::Unhealthy | ContainerStatus::Unknown
+        )
     }
 }
 
@@ -189,7 +192,7 @@ impl HealthReport {
     /// 完成报告并计算整体状态
     pub fn finalize(&mut self) {
         let healthy_count = self.running_count + self.completed_count;
-        
+
         self.overall_status = if self.total_count == 0 {
             ServiceStatus::Unknown
         } else if healthy_count == self.total_count {
@@ -255,7 +258,8 @@ impl HealthReport {
     /// 获取状态摘要字符串
     pub fn get_status_summary(&self) -> String {
         let failed_containers = self.get_failed_container_names();
-        let starting_containers: Vec<String> = self.get_starting_containers()
+        let starting_containers: Vec<String> = self
+            .get_starting_containers()
             .iter()
             .map(|c| c.name.clone())
             .collect();
@@ -321,7 +325,7 @@ impl HealthChecker {
                             } else {
                                 ContainerStatus::Stopped
                             }
-                        },
+                        }
                         client_core::container::ServiceStatus::Unknown => ContainerStatus::Unknown,
                     };
 
@@ -347,7 +351,7 @@ impl HealthChecker {
         report.finalize();
         info!(
             "健康检查完成: {}/{} 容器健康 (运行: {}, 已完成: {})",
-            report.get_healthy_count(), 
+            report.get_healthy_count(),
             report.total_count,
             report.running_count,
             report.completed_count
@@ -359,8 +363,17 @@ impl HealthChecker {
     async fn is_oneshot_service(&self, service_name: &str) -> bool {
         // 基于服务名称模式检测一次性任务
         let oneshot_patterns = [
-            "init", "setup", "migration", "migrate", "seed", "bootstrap",
-            "minio-init", "db-init", "setup-", "-init", "-setup"
+            "init",
+            "setup",
+            "migration",
+            "migrate",
+            "seed",
+            "bootstrap",
+            "minio-init",
+            "db-init",
+            "setup-",
+            "-init",
+            "-setup",
         ];
 
         let service_name_lower = service_name.to_lowercase();

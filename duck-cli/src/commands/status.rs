@@ -22,7 +22,7 @@ pub async fn run_status(app: &CliApp) -> Result<()> {
     // 检查文件状态
     info!("📁 文件状态:");
     let docker_compose_path = std::path::Path::new(&app.config.docker.compose_file);
-    
+
     // 使用新的版本化路径检查服务包文件
     let current_version = &app.config.versions.docker_service;
     let download_path = app.config.get_version_download_file_path(

@@ -1,7 +1,7 @@
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 #[cfg(windows)]
 use std::env;
@@ -17,7 +17,7 @@ impl UserMapping {
     pub fn detect_current_user() -> Result<Self, String> {
         #[cfg(unix)]
         {
-            use nix::unistd::{getuid, getgid};
+            use nix::unistd::{getgid, getuid};
             let uid = getuid().as_raw();
             let gid = getgid().as_raw();
             info!("检测到Unix系统用户 - UID: {}, GID: {}", uid, gid);
@@ -29,7 +29,10 @@ impl UserMapping {
             // Windows系统使用默认值
             let uid = 1000u32;
             let gid = 1000u32;
-            info!("检测到Windows系统 - 使用默认Docker用户 UID: {}, GID: {}", uid, gid);
+            info!(
+                "检测到Windows系统 - 使用默认Docker用户 UID: {}, GID: {}",
+                uid, gid
+            );
             Ok(UserMapping { uid, gid })
         }
     }
@@ -46,20 +49,20 @@ impl UserMapping {
     /// 更新或创建.env文件
     pub fn update_env_file(&self, docker_dir: &Path) -> Result<(), String> {
         let env_file = docker_dir.join(".env");
-        
+
         // 读取现有的.env文件内容（如果存在）
         let mut lines = Vec::new();
         let mut uid_found = false;
         let mut gid_found = false;
 
         if env_file.exists() {
-            let file = std::fs::File::open(&env_file)
-                .map_err(|e| format!("无法打开.env文件: {e}"))?;
-            
+            let file =
+                std::fs::File::open(&env_file).map_err(|e| format!("无法打开.env文件: {e}"))?;
+
             let reader = BufReader::new(file);
             for line in reader.lines() {
                 let line = line.map_err(|e| format!("读取.env文件失败: {e}"))?;
-                
+
                 if line.starts_with("UID=") {
                     lines.push(format!("UID={}", self.uid));
                     uid_found = true;
@@ -89,8 +92,7 @@ impl UserMapping {
             .map_err(|e| format!("无法创建.env文件: {e}"))?;
 
         for line in lines {
-            writeln!(file, "{line}")
-                .map_err(|e| format!("写入.env文件失败: {e}"))?;
+            writeln!(file, "{line}").map_err(|e| format!("写入.env文件失败: {e}"))?;
         }
 
         info!("已更新.env文件: UID={}, GID={}", self.uid, self.gid);
@@ -106,7 +108,9 @@ impl UserMapping {
 
         #[cfg(windows)]
         {
-            env::var("DOCKER_HOST").map(|host| host.contains("unix://")).unwrap_or(false)
+            env::var("DOCKER_HOST")
+                .map(|host| host.contains("unix://"))
+                .unwrap_or(false)
         }
     }
 
@@ -159,9 +163,12 @@ impl UserMappingManager {
     pub fn show_mapping_info(&self) {
         if let Some(mapping) = &self.user_mapping {
             info!("当前用户映射: UID={}, GID={}", mapping.uid, mapping.gid);
-            info!("Docker Compose将使用: user: \"{}:{}\"", mapping.uid, mapping.gid);
+            info!(
+                "Docker Compose将使用: user: \"{}:{}\"",
+                mapping.uid, mapping.gid
+            );
         } else {
             info!("当前平台无需用户映射");
         }
     }
-} 
+}

@@ -63,4 +63,4 @@ pub fn get_architecture_suffix(arch: Architecture) -> &'static str {
         Architecture::Amd64 => "amd64",
         Architecture::Arm64 => "arm64",
     }
-} 
+}

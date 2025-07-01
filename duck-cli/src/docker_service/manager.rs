@@ -72,14 +72,15 @@ impl DockerServiceManager {
         // 2. 设置必要目录
         self.setup_directories().await?;
 
-        // 3. 初始化并应用用户映射设置
-        info!("🔐 配置跨平台用户权限映射...");
-        if let Err(e) = self.user_mapping_manager.initialize() {
-            warn!("用户映射初始化失败，将跳过用户映射: {}", e);
-        } else if let Err(e) = self.user_mapping_manager.apply_user_mapping() {
-            warn!("应用用户映射失败，将跳过用户映射: {}", e);
-        } else {
-            self.user_mapping_manager.show_mapping_info();
+        // 3. 渐进式权限管理（容器以原生用户运行，通过权限设置解决问题）
+        info!("🔧 应用渐进式权限管理...");
+        info!("   策略: 容器以原生用户运行，通过目录权限设置确保访问权限");
+        if let Err(e) = self.directory_permission_manager.progressive_permission_management() {
+            warn!("渐进式权限管理失败，回退到基础权限: {}", e);
+            if let Err(fallback_err) = self.directory_permission_manager.basic_permission_fix() {
+                error!("权限设置完全失败: {}", fallback_err);
+                return Err(fallback_err);
+            }
         }
 
         // 4. 检查和修复脚本权限
@@ -261,9 +262,9 @@ impl DockerServiceManager {
             .check_and_fix_script_permissions()
             .await?;
 
-        // 2. 应用智能权限管理
-        if let Err(e) = self.directory_permission_manager.smart_permission_management() {
-            warn!("智能权限管理失败: {}", e);
+        // 2. 应用渐进式权限管理（不修改docker-compose.yml）
+        if let Err(e) = self.directory_permission_manager.progressive_permission_management() {
+            warn!("渐进式权限管理失败: {}", e);
             // 回退到基础权限修复
             if let Err(e2) = self.directory_permission_manager.basic_permission_fix() {
                 warn!("基础权限修复也失败: {}", e2);
@@ -284,6 +285,14 @@ impl DockerServiceManager {
                 info!("等待服务启动完成...");
                 let timeout = Duration::from_secs(timeout::HEALTH_CHECK_TIMEOUT);
                 let check_interval = Duration::from_secs(timeout::HEALTH_CHECK_INTERVAL);
+                
+                // 提前检查MySQL状态，如果发现问题立即修复
+                tokio::time::sleep(Duration::from_secs(10)).await; // 等待10秒让容器启动
+                if let Ok(initial_report) = self.health_checker.check_health().await {
+                    if let Err(_) = self.check_and_fix_mysql_if_failed(&initial_report).await {
+                        warn!("MySQL初始权限修复失败，继续监控");
+                    }
+                }
 
                 match self
                     .health_checker
@@ -352,6 +361,11 @@ impl DockerServiceManager {
                                 Err(_health_error) => {
                                     warn!("⏰ 健康检查超时，但有部分服务正在运行");
                                     
+                                    // 检查MySQL容器状态，如果失败尝试权限修复
+                                    if let Err(_) = self.check_and_fix_mysql_if_failed(&report).await {
+                                        warn!("MySQL权限修复失败，但继续执行");
+                                    }
+                                    
                                     // 即使超时也执行权限维护
                                     if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
                                         warn!("容器启动后权限维护失败: {}", e);
@@ -364,6 +378,12 @@ impl DockerServiceManager {
                             }
                         } else {
                             error!("没有发现运行中的容器");
+                            
+                            // 如果没有容器运行，特别检查MySQL是否因为权限问题失败
+                            if let Err(_) = self.check_and_fix_mysql_if_failed(&report).await {
+                                warn!("MySQL权限修复失败");
+                            }
+                            
                             self.print_detailed_error_analysis(&report, &e.to_string()).await;
                         }
                     }
@@ -833,5 +853,65 @@ impl DockerServiceManager {
         self.script_permission_manager
             .check_script_encoding(&script_path)
             .await
+    }
+
+    /// 检查并修复MySQL容器启动失败的权限问题
+    async fn check_and_fix_mysql_if_failed(&self, report: &HealthReport) -> DockerServiceResult<()> {
+        // 检查是否有MySQL相关的容器启动失败
+        let mysql_containers: Vec<_> = report.containers.iter()
+            .filter(|container| {
+                // 检查容器名是否包含mysql相关关键词
+                let name = container.name.to_lowercase();
+                name.contains("mysql") || name.contains("db") || 
+                (container.image.to_lowercase().contains("mysql"))
+            })
+            .collect();
+
+        if mysql_containers.is_empty() {
+            return Ok(()); // 没有MySQL容器，无需处理
+        }
+
+        info!("🔍 检查到 {} 个MySQL相关容器", mysql_containers.len());
+        for container in &mysql_containers {
+            info!("   - {} (状态: {}, 镜像: {})", 
+                  container.name, 
+                  container.status.display_name(), 
+                  container.image);
+        }
+
+        // 检查MySQL容器是否有启动失败的或处于重启状态
+        let problematic_mysql = mysql_containers.iter()
+            .filter(|container| {
+                // 不健康的容器或者处于转换状态(如重启)的容器都需要修复
+                !container.status.is_healthy() || container.status.is_transitioning()
+            })
+            .collect::<Vec<_>>();
+
+        if !problematic_mysql.is_empty() {
+            warn!("🔧 检测到MySQL容器存在问题，尝试权限修复...");
+            
+            for container in &problematic_mysql {
+                warn!("   问题容器: {} (状态: {})", 
+                      container.name, 
+                      container.status.display_name());
+            }
+            
+            // 调用权限修复
+            if let Err(e) = self.directory_permission_manager.fix_mysql_permissions_on_failure() {
+                error!("MySQL权限修复失败: {}", e);
+                return Err(e);
+            }
+            
+            info!("✅ MySQL权限修复完成");
+            info!("💡 修复操作包括:");
+            info!("   - 清理可能损坏的MySQL数据文件");
+            info!("   - 设置MySQL目录权限为777（递归）");
+            info!("   - 重新创建必要的目录结构");
+            info!("🔄 建议等待容器自动重启或手动重启: duck-cli docker-service restart mysql");
+            
+            Ok(())
+        } else {
+            Ok(()) // MySQL容器正常，无需修复
+        }
     }
 }

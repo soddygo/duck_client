@@ -14,11 +14,13 @@ mod manager;
 mod port_manager;
 mod script_permissions;
 mod service_manager;
+mod user_mapping;
 
 // 公共接口导出
 pub use architecture::{Architecture, detect_architecture};
 #[allow(unused_imports)]
 pub use config::DockerServiceConfig;
+pub use directory_permissions::DirectoryPermissionManager;
 #[allow(unused_imports)]
 pub use environment::EnvironmentChecker;
 #[allow(unused_imports)]
@@ -32,6 +34,8 @@ pub use manager::DockerServiceManager;
 pub use port_manager::{PortConflict, PortConflictReport, PortManager, PortMapping};
 #[allow(unused_imports)]
 pub use service_manager::ServiceManager;
+#[allow(unused_imports)]
+pub use user_mapping::{UserMapping, UserMappingManager};
 
 /// Docker 服务管理的主要入口点
 pub struct DockerService;
@@ -60,4 +64,4 @@ pub fn get_architecture_suffix(arch: Architecture) -> &'static str {
         Architecture::Amd64 => "amd64",
         Architecture::Arm64 => "arm64",
     }
-}
+} 

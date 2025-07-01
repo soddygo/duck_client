@@ -227,6 +227,51 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
                 );
             }
 
+            // 诊断和处理路径冲突
+            if outpath.exists() && outpath.is_dir() {
+                error!("🔍 发现路径冲突诊断信息:");
+                error!("   ZIP条目: {} (文件)", file.name());
+                error!("   本地路径: {} (目录)", outpath.display());
+                
+                // 显示目录内容
+                match std::fs::read_dir(&outpath) {
+                    Ok(entries) => {
+                        let items: Vec<_> = entries.collect();
+                        if items.is_empty() {
+                            warn!("   目录为空，可能是之前解压失败留下的");
+                            warn!("   正在删除空目录...");
+                            std::fs::remove_dir(&outpath)?;
+                        } else {
+                            error!("   目录内容 ({} 项):", items.len());
+                            for (i, entry) in items.iter().enumerate() {
+                                if i < 5 { // 只显示前5项
+                                    if let Ok(entry) = entry {
+                                        let path = entry.path();
+                                        let file_type = if path.is_dir() { "目录" } else { "文件" };
+                                        error!("     - {} ({})", path.file_name().unwrap_or_default().to_string_lossy(), file_type);
+                                    }
+                                }
+                            }
+                            if items.len() > 5 {
+                                error!("     ... 还有 {} 项", items.len() - 5);
+                            }
+                            
+                            return Err(client_core::DuckError::custom(format!(
+                                "路径冲突：ZIP中的文件 '{}' 与现有目录 '{}' 冲突。\n建议：删除现有目录或检查ZIP文件结构", 
+                                file.name(), 
+                                outpath.display()
+                            )));
+                        }
+                    }
+                    Err(e) => {
+                        error!("   无法读取目录内容: {}", e);
+                        return Err(client_core::DuckError::custom(format!(
+                            "无法处理路径冲突: {}", e
+                        )));
+                    }
+                }
+            }
+            
             let mut outfile = std::fs::File::create(&outpath)?;
 
             // 使用带进度显示的复制函数

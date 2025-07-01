@@ -5,6 +5,7 @@ use crate::docker_service::health_check::{HealthChecker, HealthReport};
 use crate::docker_service::image_loader::{ImageLoader, LoadResult, TagResult};
 use crate::docker_service::port_manager::{PortConflictReport, PortManager};
 use crate::docker_service::script_permissions::ScriptPermissionManager;
+use crate::docker_service::user_mapping::UserMappingManager;
 use client_core::config::AppConfig;
 use client_core::constants::timeout;
 use client_core::container::DockerManager;
@@ -24,6 +25,7 @@ pub struct DockerServiceManager {
     port_manager: PortManager,
     script_permission_manager: ScriptPermissionManager,
     directory_permission_manager: DirectoryPermissionManager,
+    user_mapping_manager: UserMappingManager,
 }
 
 impl DockerServiceManager {
@@ -45,7 +47,8 @@ impl DockerServiceManager {
             health_checker,
             port_manager: PortManager::new(),
             script_permission_manager: ScriptPermissionManager::new(work_dir.clone()),
-            directory_permission_manager: DirectoryPermissionManager::new(work_dir),
+            directory_permission_manager: DirectoryPermissionManager::new(work_dir.clone()),
+            user_mapping_manager: UserMappingManager::new(work_dir),
         }
     }
 
@@ -69,19 +72,29 @@ impl DockerServiceManager {
         // 2. 设置必要目录
         self.setup_directories().await?;
 
-        // 3. 检查和修复脚本权限
+        // 3. 初始化并应用用户映射设置
+        info!("🔐 配置跨平台用户权限映射...");
+        if let Err(e) = self.user_mapping_manager.initialize() {
+            warn!("用户映射初始化失败，将跳过用户映射: {}", e);
+        } else if let Err(e) = self.user_mapping_manager.apply_user_mapping() {
+            warn!("应用用户映射失败，将跳过用户映射: {}", e);
+        } else {
+            self.user_mapping_manager.show_mapping_info();
+        }
+
+        // 4. 检查和修复脚本权限
         self.script_permission_manager
             .check_and_fix_script_permissions()
             .await?;
 
-        // 4. 加载镜像并获取映射信息
+        // 5. 加载镜像并获取映射信息
         let load_result = self.load_images().await?;
 
-        // 5. 使用ducker验证并设置镜像标签（推荐方法）
+        // 6. 使用ducker验证并设置镜像标签（推荐方法）
         self.setup_image_tags_with_ducker_validation(&load_result.image_mappings)
             .await?;
 
-        // 6. 启动服务
+        // 7. 启动服务
         self.start_services().await?;
 
         info!("Docker 服务部署完成");
@@ -248,9 +261,14 @@ impl DockerServiceManager {
             .check_and_fix_script_permissions()
             .await?;
 
-        // 2. 智能权限管理：优先转换为Named Volumes，失败时回退到传统权限设置
-        self.directory_permission_manager
-            .smart_permission_management()?;
+        // 2. 应用智能权限管理
+        if let Err(e) = self.directory_permission_manager.smart_permission_management() {
+            warn!("智能权限管理失败: {}", e);
+            // 回退到基础权限修复
+            if let Err(e2) = self.directory_permission_manager.basic_permission_fix() {
+                warn!("基础权限修复也失败: {}", e2);
+            }
+        }
 
         // 3. 检查端口冲突
         self.check_port_conflicts().await?;
@@ -274,10 +292,23 @@ impl DockerServiceManager {
                 {
                     Ok(report) => {
                         info!("所有服务已成功启动!");
+                        
+                        // 执行容器启动后权限维护
+                        if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
+                            warn!("容器启动后权限维护失败: {}", e);
+                            // 不终止整个流程，只是记录警告
+                        }
+                        
                         self.print_service_status(&report).await;
                     }
                     Err(e) => {
                         warn!("等待服务启动超时或失败: {}", e);
+                        
+                        // 即使超时也执行权限维护，可能有助于解决问题
+                        if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
+                            warn!("容器启动后权限维护失败: {}", e);
+                        }
+                        
                         // 即使超时也显示当前状态
                         if let Ok(report) = self.health_checker.check_health().await {
                             self.print_service_status_with_failures(&report).await;
@@ -309,11 +340,23 @@ impl DockerServiceManager {
                             {
                                 Ok(final_report) => {
                                     info!("🎉 部分服务最终启动成功!");
+                                    
+                                    // 执行容器启动后权限维护
+                                    if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
+                                        warn!("容器启动后权限维护失败: {}", e);
+                                    }
+                                    
                                     self.print_service_status(&final_report).await;
                                     return Ok(()); // 部分成功，返回 Ok
                                 }
-                                Err(health_error) => {
+                                Err(_health_error) => {
                                     warn!("⏰ 健康检查超时，但有部分服务正在运行");
+                                    
+                                    // 即使超时也执行权限维护
+                                    if let Err(e) = self.directory_permission_manager.post_container_start_maintenance().await {
+                                        warn!("容器启动后权限维护失败: {}", e);
+                                    }
+                                    
                                     self.print_service_status_with_failures(&report).await;
                                     info!("你可以查看日志排查问题: duck-cli docker-service logs [服务名]");
                                     return Ok(()); // 部分成功，返回 Ok

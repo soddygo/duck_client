@@ -67,6 +67,10 @@ toml = "0.8"
 
 nom = "8"
 
+# Unix用户权限检测
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.27", features = ["user"] }
+
 [lib]
 name = "duck_cli"
 path = "src/lib.rs"

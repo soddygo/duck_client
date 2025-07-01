@@ -24,6 +24,21 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16
 
     // 1.5. 解压下载的docker.zip文件
     info!("📦 正在解压Docker服务包...");
+    
+    // 在解压前，先彻底清理现有的docker目录以避免路径冲突
+    let docker_dir = std::path::Path::new("docker");
+    if docker_dir.exists() {
+        info!("🧹 清理现有docker目录以避免文件冲突...");
+        match std::fs::remove_dir_all(docker_dir) {
+            Ok(_) => info!("✅ docker目录清理完成"),
+            Err(e) => {
+                warn!("⚠️ 清理docker目录失败: {}, 尝试继续解压", e);
+                // 失败时给出更详细的提示
+                warn!("💡 如果解压失败，请手动删除docker目录后重试");
+            }
+        }
+    }
+    
     docker_service::extract_docker_service(app, None, None).await?;
 
     // 2. 检查Docker服务状态

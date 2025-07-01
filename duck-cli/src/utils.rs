@@ -266,7 +266,7 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
                     Err(e) => {
                         error!("   无法读取目录内容: {}", e);
                         return Err(client_core::DuckError::custom(format!(
-                            "无法处理路径冲突: {}", e
+                            "无法处理路径冲突: {e}"
                         )));
                     }
                 }

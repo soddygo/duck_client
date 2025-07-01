@@ -3,8 +3,6 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn, error};
 use std::fs;
 use walkdir::WalkDir;
-use ducker::docker::{container::DockerContainer, util::new_local_docker_connection};
-use tokio::time::{sleep, Duration};
 
 /// 目录权限管理器 - 专注于统一用户ID映射
 #[derive(Debug, Clone)]
@@ -78,7 +76,7 @@ impl DirectoryPermissionManager {
         
         if let Some(compose_file) = self.find_compose_file() {
             let content = fs::read_to_string(&compose_file)
-                .map_err(|e| DockerServiceError::FileSystem(format!("读取docker-compose.yml失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("读取docker-compose.yml失败: {e}")))?;
             
             // 检查是否已经有.env文件
             let env_file = compose_file.parent().unwrap().join(".env");
@@ -92,10 +90,10 @@ impl DirectoryPermissionManager {
             // 备份并写入
             let backup_file = compose_file.with_extension("yml.backup");
             fs::copy(&compose_file, &backup_file)
-                .map_err(|e| DockerServiceError::FileSystem(format!("备份文件失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("备份文件失败: {e}")))?;
             
             fs::write(&compose_file, modified_content)
-                .map_err(|e| DockerServiceError::FileSystem(format!("写入docker-compose.yml失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("写入docker-compose.yml失败: {e}")))?;
             
             info!("✅ 环境变量用户映射配置完成");
             Ok(())
@@ -124,7 +122,7 @@ DATA_DIR_PERMISSIONS=755
         );
         
         fs::write(env_file, env_content)
-            .map_err(|e| DockerServiceError::FileSystem(format!("创建.env文件失败: {}", e)))?;
+            .map_err(|e| DockerServiceError::FileSystem(format!("创建.env文件失败: {e}")))?;
         
         info!("✅ 已创建.env文件: {}", env_file.display());
         Ok(())
@@ -188,7 +186,7 @@ DATA_DIR_PERMISSIONS=755
         
         if let Some(compose_file) = self.find_compose_file() {
             let content = fs::read_to_string(&compose_file)
-                .map_err(|e| DockerServiceError::FileSystem(format!("读取docker-compose.yml失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("读取docker-compose.yml失败: {e}")))?;
             
             // 动态提取所有bind mount目录
             let bind_mount_dirs = self.extract_bind_mount_directories(&content)?;
@@ -206,7 +204,7 @@ DATA_DIR_PERMISSIONS=755
             let data_dir = self.work_dir.join("data");
             if !data_dir.exists() {
                 fs::create_dir_all(&data_dir)
-                    .map_err(|e| DockerServiceError::FileSystem(format!("创建基础data目录失败: {}", e)))?;
+                    .map_err(|e| DockerServiceError::FileSystem(format!("创建基础data目录失败: {e}")))?;
                 info!("✅ 已创建基础data目录");
             }
             self.set_directory_permission(&data_dir, 0o755)?;
@@ -310,13 +308,13 @@ DATA_DIR_PERMISSIONS=755
             use std::os::unix::fs::PermissionsExt;
             
             let metadata = fs::metadata(path)
-                .map_err(|e| DockerServiceError::FileSystem(format!("获取文件元数据失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("获取文件元数据失败: {e}")))?;
                 
             let mut permissions = metadata.permissions();
             permissions.set_mode(mode);
             
             fs::set_permissions(path, permissions)
-                .map_err(|e| DockerServiceError::FileSystem(format!("设置权限失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("设置权限失败: {e}")))?;
         }
         
         #[cfg(windows)]
@@ -351,7 +349,7 @@ DATA_DIR_PERMISSIONS=755
     /// 递归设置目录权限
     fn set_directory_permissions_recursive(&self, dir: &Path, mode: u32) -> DockerServiceResult<()> {
         for entry in WalkDir::new(dir) {
-            let entry = entry.map_err(|e| DockerServiceError::FileSystem(format!("访问目录失败: {}", e)))?;
+            let entry = entry.map_err(|e| DockerServiceError::FileSystem(format!("访问目录失败: {e}")))?;
             let path = entry.path();
             
             if path.is_dir() {
@@ -369,7 +367,7 @@ DATA_DIR_PERMISSIONS=755
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        format!("secure_{}_pwd", timestamp)
+        format!("secure_{timestamp}_pwd")
     }
     
     /// 基础权限修复（兼容性方法）
@@ -432,7 +430,7 @@ DATA_DIR_PERMISSIONS=755
         // 确保MySQL数据目录存在
         if !mysql_data_dir.exists() {
             fs::create_dir_all(&mysql_data_dir)
-                .map_err(|e| DockerServiceError::FileSystem(format!("创建MySQL数据目录失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("创建MySQL数据目录失败: {e}")))?;
             info!("✅ 已创建MySQL数据目录");
         }
         
@@ -498,13 +496,13 @@ DATA_DIR_PERMISSIONS=755
     /// 判断MySQL目录是否安全清理（只包含损坏的初始化文件）
     fn is_safe_to_clean_mysql_dir(&self, mysql_dir: &Path) -> DockerServiceResult<bool> {
         let entries = fs::read_dir(mysql_dir)
-            .map_err(|e| DockerServiceError::FileSystem(format!("读取MySQL目录失败: {}", e)))?;
+            .map_err(|e| DockerServiceError::FileSystem(format!("读取MySQL目录失败: {e}")))?;
         
         let mut has_user_data = false;
         let mut has_init_files = false;
         
         for entry in entries {
-            let entry = entry.map_err(|e| DockerServiceError::FileSystem(format!("读取目录项失败: {}", e)))?;
+            let entry = entry.map_err(|e| DockerServiceError::FileSystem(format!("读取目录项失败: {e}")))?;
             let file_name = entry.file_name().to_string_lossy().to_string();
             
             // 检查是否有用户数据表明真实使用
@@ -594,12 +592,12 @@ DATA_DIR_PERMISSIONS=755
         info!("🗑️  安全清理损坏的MySQL初始化文件...");
         
         let entries = fs::read_dir(mysql_dir)
-            .map_err(|e| DockerServiceError::FileSystem(format!("读取MySQL目录失败: {}", e)))?;
+            .map_err(|e| DockerServiceError::FileSystem(format!("读取MySQL目录失败: {e}")))?;
         
         let mut cleaned_count = 0;
         
         for entry in entries {
-            let entry = entry.map_err(|e| DockerServiceError::FileSystem(format!("读取目录项失败: {}", e)))?;
+            let entry = entry.map_err(|e| DockerServiceError::FileSystem(format!("读取目录项失败: {e}")))?;
             let path = entry.path();
             let file_name = entry.file_name().to_string_lossy().to_string();
             
@@ -640,7 +638,7 @@ DATA_DIR_PERMISSIONS=755
             "sys",
         ];
         
-        safe_dirs.iter().any(|&pattern| dir_name == pattern)
+        safe_dirs.contains(&dir_name)
     }
     
     /// 修复现有MySQL数据的权限（不删除数据）
@@ -649,7 +647,7 @@ DATA_DIR_PERMISSIONS=755
         
         // 递归修复所有文件和目录的权限
         for entry in WalkDir::new(mysql_dir) {
-            let entry = entry.map_err(|e| DockerServiceError::FileSystem(format!("访问目录失败: {}", e)))?;
+            let entry = entry.map_err(|e| DockerServiceError::FileSystem(format!("访问目录失败: {e}")))?;
             let path = entry.path();
             
             if path.is_dir() {
@@ -662,11 +660,11 @@ DATA_DIR_PERMISSIONS=755
                     use std::os::unix::fs::PermissionsExt;
                     
                     let metadata = fs::metadata(path)
-                        .map_err(|e| DockerServiceError::FileSystem(format!("获取文件元数据失败: {}", e)))?;
+                        .map_err(|e| DockerServiceError::FileSystem(format!("获取文件元数据失败: {e}")))?;
                     let mut permissions = metadata.permissions();
                     permissions.set_mode(0o666);
                     fs::set_permissions(path, permissions)
-                        .map_err(|e| DockerServiceError::FileSystem(format!("设置文件权限失败: {}", e)))?;
+                        .map_err(|e| DockerServiceError::FileSystem(format!("设置文件权限失败: {e}")))?;
                 }
                 
                 #[cfg(windows)]
@@ -685,13 +683,13 @@ DATA_DIR_PERMISSIONS=755
     fn ensure_mysql_directories(&self, mysql_data_dir: &Path, mysql_logs_dir: &Path) -> DockerServiceResult<()> {
         if !mysql_data_dir.exists() {
             fs::create_dir_all(mysql_data_dir)
-                .map_err(|e| DockerServiceError::FileSystem(format!("创建MySQL数据目录失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("创建MySQL数据目录失败: {e}")))?;
             info!("✅ 已创建MySQL数据目录");
         }
         
         if !mysql_logs_dir.exists() {
             fs::create_dir_all(mysql_logs_dir)
-                .map_err(|e| DockerServiceError::FileSystem(format!("创建MySQL日志目录失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("创建MySQL日志目录失败: {e}")))?;
             info!("✅ 已创建MySQL日志目录");
         }
         

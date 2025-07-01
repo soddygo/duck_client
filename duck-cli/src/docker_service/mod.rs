@@ -20,7 +20,6 @@ mod user_mapping;
 pub use architecture::{Architecture, detect_architecture};
 #[allow(unused_imports)]
 pub use config::DockerServiceConfig;
-pub use directory_permissions::DirectoryPermissionManager;
 #[allow(unused_imports)]
 pub use environment::EnvironmentChecker;
 #[allow(unused_imports)]

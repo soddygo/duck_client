@@ -67,7 +67,7 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16
                     restore_data_after_cleanup(&temp_data_backup).await?;
                 }
                 return Err(client_core::error::DuckError::custom(format!(
-                    "清理docker目录失败: {}", e
+                    "清理docker目录失败: {e}"
                 )));
             }
         }
@@ -521,7 +521,7 @@ async fn restore_data_after_cleanup(temp_backup_path: &Option<std::path::PathBuf
                 Err(e) => {
                     error!("❌ 数据目录恢复失败: {}", e);
                     return Err(client_core::error::DuckError::custom(format!(
-                        "数据目录恢复失败: {}", e
+                        "数据目录恢复失败: {e}"
                     )));
                 }
             }

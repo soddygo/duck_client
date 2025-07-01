@@ -5,7 +5,6 @@ use client_core::{
     database::BackupType,
     error::Result,
 };
-use std::path::PathBuf;
 use tracing::{error, info, warn};
 
 /// 创建备份

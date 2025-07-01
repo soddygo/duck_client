@@ -1,4 +1,3 @@
-use std::env;
 use std::fs::OpenOptions;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -52,11 +51,11 @@ impl UserMapping {
 
         if env_file.exists() {
             let file = std::fs::File::open(&env_file)
-                .map_err(|e| format!("无法打开.env文件: {}", e))?;
+                .map_err(|e| format!("无法打开.env文件: {e}"))?;
             
             let reader = BufReader::new(file);
             for line in reader.lines() {
-                let line = line.map_err(|e| format!("读取.env文件失败: {}", e))?;
+                let line = line.map_err(|e| format!("读取.env文件失败: {e}"))?;
                 
                 if line.starts_with("UID=") {
                     lines.push(format!("UID={}", self.uid));
@@ -84,11 +83,11 @@ impl UserMapping {
             .create(true)
             .truncate(true)
             .open(&env_file)
-            .map_err(|e| format!("无法创建.env文件: {}", e))?;
+            .map_err(|e| format!("无法创建.env文件: {e}"))?;
 
         for line in lines {
-            writeln!(file, "{}", line)
-                .map_err(|e| format!("写入.env文件失败: {}", e))?;
+            writeln!(file, "{line}")
+                .map_err(|e| format!("写入.env文件失败: {e}"))?;
         }
 
         info!("已更新.env文件: UID={}, GID={}", self.uid, self.gid);

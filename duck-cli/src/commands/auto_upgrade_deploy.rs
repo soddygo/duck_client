@@ -88,8 +88,22 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16
             // 📝 更新配置文件中的Docker服务版本
             if latest_version != app.config.versions.docker_service {
                 info!("📝 更新Docker服务版本: {} -> {}", app.config.versions.docker_service, latest_version);
-                // 这里可以添加更新配置文件的逻辑
-                // 目前先在内存中更新，重启后会重新读取
+                
+                // 更新内存中的版本信息
+                app.config.versions.docker_service = latest_version.clone();
+                
+                // 持久化到配置文件
+                match app.config.save_to_file("config.toml") {
+                    Ok(_) => {
+                        info!("✅ 配置文件版本号已更新并保存");
+                    }
+                    Err(e) => {
+                        warn!("⚠️ 保存配置文件失败: {}", e);
+                        warn!("   版本号已在内存中更新，但配置文件未同步");
+                    }
+                }
+            } else {
+                info!("📝 版本号无需更新 (已是最新版本: {})", latest_version);
             }
         }
         Err(e) => {

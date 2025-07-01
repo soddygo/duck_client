@@ -3,6 +3,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use tracing::{info, debug};
 
+#[cfg(windows)]
+use std::env;
+
 #[derive(Clone, Debug)]
 pub struct UserMapping {
     pub uid: u32,

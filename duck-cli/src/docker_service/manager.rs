@@ -281,14 +281,46 @@ impl DockerServiceManager {
                 Ok(())
             }
             Err(e) => {
-                error!("服务启动失败，正在分析具体原因...");
+                error!("Docker Compose 启动命令失败，正在检查容器状态...");
 
-                // 尝试获取详细的服务状态来提供更好的错误信息
-                if let Ok(report) = self.health_checker.check_health().await {
-                    self.print_detailed_error_analysis(&report, &e.to_string())
-                        .await;
-                } else {
-                    error!("❌ 原始错误: {}", e);
+                // 基于 ducker 思路：即使 compose 失败，也要检查是否有部分容器成功启动
+                match self.health_checker.check_health().await {
+                    Ok(report) => {
+                        if report.running_count > 0 {
+                            info!("🔍 发现 {}/{} 个容器正在运行，进入健康检查阶段", 
+                                  report.running_count, report.total_count);
+                            
+                            // 有部分容器成功，进入健康检查阶段
+                            info!("开始180秒健康检查阶段...");
+                            let timeout = Duration::from_secs(timeout::HEALTH_CHECK_TIMEOUT);
+                            let check_interval = Duration::from_secs(timeout::HEALTH_CHECK_INTERVAL);
+
+                            match self
+                                .health_checker
+                                .wait_for_services_ready(timeout, check_interval)
+                                .await
+                            {
+                                Ok(final_report) => {
+                                    info!("🎉 部分服务最终启动成功!");
+                                    self.print_service_status(&final_report).await;
+                                    return Ok(()); // 部分成功，返回 Ok
+                                }
+                                Err(health_error) => {
+                                    warn!("⏰ 健康检查超时，但有部分服务正在运行");
+                                    self.print_service_status_with_failures(&report).await;
+                                    info!("你可以查看日志排查问题: duck-cli docker-service logs [服务名]");
+                                    return Ok(()); // 部分成功，返回 Ok
+                                }
+                            }
+                        } else {
+                            error!("没有发现运行中的容器");
+                            self.print_detailed_error_analysis(&report, &e.to_string()).await;
+                        }
+                    }
+                    Err(_) => {
+                        error!("❌ 无法获取容器状态信息");
+                        error!("原始错误: {}", e);
+                    }
                 }
 
                 Err(DockerServiceError::ServiceManagement(e.to_string()))

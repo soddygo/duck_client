@@ -16,6 +16,8 @@ pub enum ContainerStatus {
     Starting,
     /// 不健康
     Unhealthy,
+    /// 已完成 (一次性任务成功退出)
+    Completed,
     /// 未知状态
     Unknown,
 }
@@ -33,6 +35,30 @@ impl ContainerStatus {
         }
     }
 
+    /// 从ducker的容器状态和退出码解析状态
+    pub fn from_ducker_status(running: bool, status: &str, is_oneshot: bool) -> Self {
+        if running {
+            ContainerStatus::Running
+        } else if status.to_lowercase().contains("exited") {
+            if is_oneshot {
+                // 一次性任务：检查退出码
+                if status.contains("(0)") {
+                    ContainerStatus::Completed  // 成功完成
+                } else {
+                    ContainerStatus::Stopped    // 失败退出
+                }
+            } else {
+                ContainerStatus::Stopped       // 持续服务退出都视为异常
+            }
+        } else if status.to_lowercase().contains("restarting") {
+            ContainerStatus::Starting
+        } else if status.to_lowercase().contains("created") {
+            ContainerStatus::Starting
+        } else {
+            ContainerStatus::Unknown
+        }
+    }
+
     /// 获取状态的显示名称
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -40,18 +66,24 @@ impl ContainerStatus {
             ContainerStatus::Stopped => "已停止",
             ContainerStatus::Starting => "启动中",
             ContainerStatus::Unhealthy => "不健康",
+            ContainerStatus::Completed => "已完成",
             ContainerStatus::Unknown => "未知",
         }
     }
 
-    /// 判断状态是否健康
+    /// 判断状态是否健康（运行中或已完成都算健康）
     pub fn is_healthy(&self) -> bool {
-        matches!(self, ContainerStatus::Running)
+        matches!(self, ContainerStatus::Running | ContainerStatus::Completed)
     }
 
     /// 判断状态是否为过渡状态（需要继续等待）
     pub fn is_transitioning(&self) -> bool {
         matches!(self, ContainerStatus::Starting)
+    }
+
+    /// 判断状态是否为失败状态
+    pub fn is_failed(&self) -> bool {
+        matches!(self, ContainerStatus::Stopped | ContainerStatus::Unhealthy | ContainerStatus::Unknown)
     }
 }
 
@@ -114,6 +146,8 @@ pub struct HealthReport {
     pub containers: Vec<ContainerInfo>,
     /// 运行中的容器数量
     pub running_count: usize,
+    /// 已完成的容器数量 (一次性任务)
+    pub completed_count: usize,
     /// 总容器数量
     pub total_count: usize,
     /// 检查时间
@@ -129,6 +163,7 @@ impl HealthReport {
             overall_status: ServiceStatus::Unknown,
             containers: Vec::new(),
             running_count: 0,
+            completed_count: 0,
             total_count: 0,
             check_time: chrono::Utc::now(),
             errors: Vec::new(),
@@ -137,8 +172,10 @@ impl HealthReport {
 
     /// 添加容器信息
     pub fn add_container(&mut self, container: ContainerInfo) {
-        if container.status.is_healthy() {
-            self.running_count += 1;
+        match container.status {
+            ContainerStatus::Running => self.running_count += 1,
+            ContainerStatus::Completed => self.completed_count += 1,
+            _ => {}
         }
         self.total_count += 1;
         self.containers.push(container);
@@ -151,11 +188,13 @@ impl HealthReport {
 
     /// 完成报告并计算整体状态
     pub fn finalize(&mut self) {
+        let healthy_count = self.running_count + self.completed_count;
+        
         self.overall_status = if self.total_count == 0 {
             ServiceStatus::Unknown
-        } else if self.running_count == self.total_count {
+        } else if healthy_count == self.total_count {
             ServiceStatus::AllRunning
-        } else if self.running_count == 0 {
+        } else if healthy_count == 0 {
             ServiceStatus::AllStopped
         } else {
             // 检查是否有正在启动的容器
@@ -168,11 +207,27 @@ impl HealthReport {
         };
     }
 
+    /// 获取运行中的容器列表
+    pub fn get_running_containers(&self) -> Vec<&ContainerInfo> {
+        self.containers
+            .iter()
+            .filter(|c| matches!(c.status, ContainerStatus::Running))
+            .collect()
+    }
+
+    /// 获取已完成的容器列表
+    pub fn get_completed_containers(&self) -> Vec<&ContainerInfo> {
+        self.containers
+            .iter()
+            .filter(|c| matches!(c.status, ContainerStatus::Completed))
+            .collect()
+    }
+
     /// 获取失败的容器列表
     pub fn get_failed_containers(&self) -> Vec<&ContainerInfo> {
         self.containers
             .iter()
-            .filter(|c| !c.status.is_healthy() && !c.status.is_transitioning())
+            .filter(|c| c.status.is_failed())
             .collect()
     }
 
@@ -182,6 +237,48 @@ impl HealthReport {
             .iter()
             .filter(|c| c.status.is_transitioning())
             .collect()
+    }
+
+    /// 获取健康容器总数（运行中 + 已完成）
+    pub fn get_healthy_count(&self) -> usize {
+        self.running_count + self.completed_count
+    }
+
+    /// 获取失败容器名称列表
+    pub fn get_failed_container_names(&self) -> Vec<String> {
+        self.get_failed_containers()
+            .iter()
+            .map(|c| c.name.clone())
+            .collect()
+    }
+
+    /// 获取状态摘要字符串
+    pub fn get_status_summary(&self) -> String {
+        let failed_containers = self.get_failed_container_names();
+        let starting_containers: Vec<String> = self.get_starting_containers()
+            .iter()
+            .map(|c| c.name.clone())
+            .collect();
+
+        let mut summary = format!(
+            "📊 [健康: {}/{}] ✅ 运行: {} | ✔️ 已完成: {} | ❌ 失败: {} | ⏳ 启动中: {}",
+            self.get_healthy_count(),
+            self.total_count,
+            self.running_count,
+            self.completed_count,
+            failed_containers.len(),
+            starting_containers.len()
+        );
+
+        if !failed_containers.is_empty() {
+            summary.push_str(&format!(" | 失败容器: {}", failed_containers.join(", ")));
+        }
+
+        if !starting_containers.is_empty() {
+            summary.push_str(&format!(" | 启动中: {}", starting_containers.join(", ")));
+        }
+
+        summary
     }
 }
 
@@ -206,14 +303,25 @@ impl HealthChecker {
     pub async fn check_health(&self) -> DockerServiceResult<HealthReport> {
         let mut report = HealthReport::new();
 
-        // 获取服务状态
+        // 获取ducker库的详细容器信息
         match self.docker_manager.get_services_status().await {
             Ok(services) => {
                 info!("健康检查: 获取到 {} 个服务", services.len());
                 for service in services {
+                    // 检查是否为一次性服务（基于服务名称）
+                    let is_oneshot = self.is_oneshot_service(&service.name).await;
+
+                    // 使用增强的状态解析逻辑
                     let status = match service.status {
                         client_core::container::ServiceStatus::Running => ContainerStatus::Running,
-                        client_core::container::ServiceStatus::Stopped => ContainerStatus::Stopped,
+                        client_core::container::ServiceStatus::Stopped => {
+                            if is_oneshot {
+                                // 一次性任务停止通常表示已完成
+                                ContainerStatus::Completed
+                            } else {
+                                ContainerStatus::Stopped
+                            }
+                        },
                         client_core::container::ServiceStatus::Unknown => ContainerStatus::Unknown,
                     };
 
@@ -238,10 +346,32 @@ impl HealthChecker {
 
         report.finalize();
         info!(
-            "健康检查完成: {}/{} 容器运行正常",
-            report.running_count, report.total_count
+            "健康检查完成: {}/{} 容器健康 (运行: {}, 已完成: {})",
+            report.get_healthy_count(), 
+            report.total_count,
+            report.running_count,
+            report.completed_count
         );
         Ok(report)
+    }
+
+    /// 检查服务是否为一次性任务
+    async fn is_oneshot_service(&self, service_name: &str) -> bool {
+        // 基于服务名称模式检测一次性任务
+        let oneshot_patterns = [
+            "init", "setup", "migration", "migrate", "seed", "bootstrap",
+            "minio-init", "db-init", "setup-", "-init", "-setup"
+        ];
+
+        let service_name_lower = service_name.to_lowercase();
+        for pattern in &oneshot_patterns {
+            if service_name_lower.contains(pattern) {
+                return true;
+            }
+        }
+
+        // TODO: 未来可以添加docker-compose.yml解析来检查restart策略
+        false
     }
 
     /// 等待服务启动完成 - 智能等待策略

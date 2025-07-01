@@ -174,6 +174,7 @@ pub async fn check_docker_services_status(app: &CliApp) -> Result<()> {
                         ContainerStatus::Stopped => "🔴",
                         ContainerStatus::Starting => "🟡",
                         ContainerStatus::Unhealthy => "🟠",
+                        ContainerStatus::Completed => "✅",
                         ContainerStatus::Unknown => "⚪",
                     };
 

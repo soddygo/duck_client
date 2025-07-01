@@ -1,4 +1,5 @@
 use crate::docker_service::architecture::{Architecture, detect_architecture};
+use crate::docker_service::directory_permissions::DirectoryPermissionManager;
 use crate::docker_service::error::{DockerServiceError, DockerServiceResult};
 use crate::docker_service::health_check::{HealthChecker, HealthReport};
 use crate::docker_service::image_loader::{ImageLoader, LoadResult, TagResult};
@@ -22,6 +23,7 @@ pub struct DockerServiceManager {
     health_checker: HealthChecker,
     port_manager: PortManager,
     script_permission_manager: ScriptPermissionManager,
+    directory_permission_manager: DirectoryPermissionManager,
 }
 
 impl DockerServiceManager {
@@ -42,7 +44,8 @@ impl DockerServiceManager {
             image_loader,
             health_checker,
             port_manager: PortManager::new(),
-            script_permission_manager: ScriptPermissionManager::new(work_dir),
+            script_permission_manager: ScriptPermissionManager::new(work_dir.clone()),
+            directory_permission_manager: DirectoryPermissionManager::new(work_dir),
         }
     }
 
@@ -245,7 +248,12 @@ impl DockerServiceManager {
             .check_and_fix_script_permissions()
             .await?;
 
-        // 2. 检查端口冲突
+        // 2. 检查和修复目录权限
+        self.directory_permission_manager
+            .check_and_fix_directory_permissions()
+            .await?;
+
+        // 3. 检查端口冲突
         self.check_port_conflicts().await?;
 
         // 直接使用已配置的 DockerManager，无需切换目录

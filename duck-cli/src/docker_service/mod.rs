@@ -5,6 +5,7 @@ use client_core::error::Result;
 // 子模块声明
 mod architecture;
 mod config;
+mod directory_permissions;
 mod environment;
 mod error;
 mod health_check;
@@ -18,6 +19,7 @@ mod service_manager;
 pub use architecture::{Architecture, detect_architecture};
 #[allow(unused_imports)]
 pub use config::DockerServiceConfig;
+pub use directory_permissions::DirectoryPermissionManager;
 #[allow(unused_imports)]
 pub use environment::EnvironmentChecker;
 #[allow(unused_imports)]

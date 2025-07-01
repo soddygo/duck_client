@@ -1,7 +1,7 @@
 use crate::app::CliApp;
 use crate::docker_service::{DockerService, ServiceStatus};
 use client_core::{
-    backup::{BackupOptions, RestoreOptions},
+    backup::BackupOptions,
     database::BackupType,
     error::Result,
 };
@@ -365,8 +365,12 @@ pub async fn run_list_backups(app: &CliApp) -> Result<()> {
 /// 从备份恢复
 pub async fn run_rollback(app: &CliApp, backup_id: i64, force: bool) -> Result<()> {
     if !force {
-        warn!("⚠️  警告: 此操作将覆盖当前所有服务文件和数据!");
-        print!("请确认您要从备份 {backup_id} 恢复 (y/N): ");
+        warn!("⚠️  警告: 此操作将覆盖当前数据目录!");
+        warn!("⚠️  注意: 此操作只恢复数据文件，不会影响配置文件");
+        
+        use std::io::{self, Write};
+        print!("请确认您要从备份 {backup_id} 恢复数据 (y/N): ");
+        io::stdout().flush()?;
 
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
@@ -377,15 +381,56 @@ pub async fn run_rollback(app: &CliApp, backup_id: i64, force: bool) -> Result<(
         }
     }
 
-    info!("开始回滚操作...");
-
-    let options = RestoreOptions {
-        target_dir: PathBuf::from("./docker"),
-        force_overwrite: true,
-    };
-    app.backup_manager
-        .restore_from_backup(backup_id, options)
-        .await?;
-    info!("✅ 回滚完成");
+    info!("开始数据回滚操作...");
+    
+    // 🔧 智能回滚：只恢复数据，保留配置文件
+    run_data_only_rollback(app, backup_id).await?;
+    
+    info!("✅ 数据回滚完成");
     Ok(())
+}
+
+/// 只恢复数据的智能回滚
+async fn run_data_only_rollback(app: &CliApp, backup_id: i64) -> Result<()> {
+    info!("🛡️ 使用智能数据回滚模式");
+    info!("   📁 将恢复: data/, app/ 目录");
+    info!("   🔧 将保留: docker-compose.yml, .env 等配置文件");
+    
+    // 使用 BackupManager 的智能数据恢复功能
+    let docker_dir = std::path::Path::new("./docker");
+    match app.backup_manager.restore_data_only(backup_id, docker_dir).await {
+        Ok(_) => {
+            info!("✅ 智能数据恢复完成");
+            
+            // 设置正确的权限
+            let mysql_data_dir = docker_dir.join("data/mysql");
+            if mysql_data_dir.exists() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let permissions = std::fs::Permissions::from_mode(0o777);
+                    if let Err(e) = std::fs::set_permissions(&mysql_data_dir, permissions) {
+                        warn!("⚠️ 设置MySQL权限失败: {}", e);
+                    } else {
+                        info!("🔒 已设置MySQL数据目录权限为777");
+                    }
+                }
+            }
+            
+            info!("💡 数据恢复说明:");
+            info!("   ✅ 所有数据库数据已恢复");
+            info!("   ✅ 配置文件保持最新版本");
+            info!("   ✅ Docker服务已自动启动");
+        }
+        Err(e) => {
+            error!("❌ 数据恢复失败: {}", e);
+            warn!("💡 建议操作:");
+            warn!("   1. 检查备份文件是否存在且完整");
+            warn!("   2. 确保有足够的磁盘空间");
+            warn!("   3. 手动启动服务: duck-cli docker-service start");
+            return Err(e);
+        }
+    }
+    
+        Ok(())
 }

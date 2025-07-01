@@ -255,6 +255,60 @@ impl BackupManager {
         Ok(())
     }
 
+    /// 只恢复数据文件，保留配置文件的智能恢复
+    pub async fn restore_data_only(&self, backup_id: i64, target_dir: &Path) -> Result<()> {
+        // 获取备份记录
+        let backup_record = self
+            .database
+            .get_backup_by_id(backup_id)
+            .await?
+            .ok_or_else(|| DuckError::Backup(format!("备份记录不存在: {backup_id}")))?;
+
+        let backup_path = PathBuf::from(&backup_record.file_path);
+        if !backup_path.exists() {
+            return Err(DuckError::Backup(format!(
+                "备份文件不存在: {}",
+                backup_path.display()
+            )));
+        }
+
+        tracing::info!("开始智能数据恢复: {}", backup_path.display());
+        tracing::info!("目标目录: {}", target_dir.display());
+
+        // 停止服务，准备恢复
+        tracing::info!("正在停止服务...");
+        self.docker_manager.stop_services().await?;
+
+        // 清理现有数据目录，但保留配置文件
+        self.clear_data_directories_only(target_dir).await?;
+
+        // 执行恢复
+        self.perform_restore(&backup_path, target_dir).await?;
+
+        // 启动服务
+        tracing::info!("数据恢复完成，正在启动服务...");
+        self.docker_manager.start_services().await?;
+
+        tracing::info!("数据已成功恢复并启动: {}", target_dir.display());
+        Ok(())
+    }
+
+    /// 只清理数据目录，保留配置文件
+    async fn clear_data_directories_only(&self, docker_dir: &Path) -> Result<()> {
+        let data_dirs_to_clear = ["data", "app"];
+        
+        for dir_name in data_dirs_to_clear.iter() {
+            let dir_path = docker_dir.join(dir_name);
+            if dir_path.exists() {
+                tracing::info!("清理数据目录: {}", dir_path.display());
+                tokio::fs::remove_dir_all(&dir_path).await?;
+            }
+        }
+        
+        tracing::info!("数据目录清理完成，配置文件已保留");
+        Ok(())
+    }
+
     /// 执行实际的恢复操作
     async fn perform_restore(&self, backup_path: &Path, target_dir: &Path) -> Result<()> {
         use flate2::read::GzDecoder;

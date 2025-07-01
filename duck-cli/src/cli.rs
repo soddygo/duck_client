@@ -171,7 +171,7 @@ pub enum Commands {
     #[command(subcommand)]
     DockerService(DockerServiceCommand),
 
-    /// 集成的ducker Docker TUI工具
+    /// 🐋 一个用于管理 Docker 容器的终端应用
     Ducker {
         /// 传递给ducker的参数
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]

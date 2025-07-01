@@ -14,7 +14,7 @@ pub struct DuckerArgs {
 
 /// 集成ducker命令 - 提供Docker TUI界面（直接集成，不需要外部安装）
 pub async fn run_ducker(args: Vec<String>) -> Result<()> {
-    info!("启动集成的ducker Docker TUI工具...");
+    info!("启动ducker Docker TUI工具...");
 
     // 解析ducker参数
     let ducker_args = parse_ducker_args(args)?;

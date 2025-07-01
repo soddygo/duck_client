@@ -12,6 +12,11 @@ on:
         required: false
         default: 'nightly'
 
+# 添加必要的权限配置
+permissions:
+  contents: write  # 允许创建release和上传文件
+  discussions: write  # 允许创建讨论（可选）
+
 env:
   CARGO_TERM_COLOR: always
 

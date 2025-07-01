@@ -248,10 +248,9 @@ impl DockerServiceManager {
             .check_and_fix_script_permissions()
             .await?;
 
-        // 2. 检查和修复目录权限
+        // 2. 智能权限管理：优先转换为Named Volumes，失败时回退到传统权限设置
         self.directory_permission_manager
-            .check_and_fix_directory_permissions()
-            .await?;
+            .smart_permission_management()?;
 
         // 3. 检查端口冲突
         self.check_port_conflicts().await?;

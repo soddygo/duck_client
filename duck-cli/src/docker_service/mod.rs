@@ -12,14 +12,13 @@ mod health_check;
 mod image_loader;
 mod manager;
 mod port_manager;
-pub mod script_permissions;
+mod script_permissions;
 mod service_manager;
 
 // 公共接口导出
 pub use architecture::{Architecture, detect_architecture};
 #[allow(unused_imports)]
 pub use config::DockerServiceConfig;
-pub use directory_permissions::DirectoryPermissionManager;
 #[allow(unused_imports)]
 pub use environment::EnvironmentChecker;
 #[allow(unused_imports)]

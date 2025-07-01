@@ -41,8 +41,7 @@ impl DockerComposeVolumeConverter {
 
         let content = fs::read_to_string(&self.compose_file_path)
             .map_err(|e| DockerServiceError::FileSystem(format!(
-                "无法读取docker-compose.yml: {}",
-                e
+                "无法读取docker-compose.yml: {e}"
             )))?;
 
         let data_mount_patterns = self.identify_data_mounts(&content);
@@ -66,16 +65,14 @@ impl DockerComposeVolumeConverter {
         let backup_path = self.compose_file_path.with_extension("yml.backup");
         fs::copy(&self.compose_file_path, &backup_path)
             .map_err(|e| DockerServiceError::FileSystem(format!(
-                "备份原文件失败: {}",
-                e
+                "备份原文件失败: {e}"
             )))?;
         info!("📋 已备份原文件到: {}", backup_path.display());
 
         // 写入转换后的内容
         fs::write(&self.compose_file_path, converted_content)
             .map_err(|e| DockerServiceError::FileSystem(format!(
-                "写入转换后的文件失败: {}",
-                e
+                "写入转换后的文件失败: {e}"
             )))?;
 
         info!("🎉 docker-compose.yml转换完成！");
@@ -188,7 +185,7 @@ impl DockerComposeVolumeConverter {
                 
                 // 精确替换原始挂载行
                 let original_line = format!("      - {}", mount.original_line);
-                let new_line = format!("      - {}", new_mount);
+                let new_line = format!("      - {new_mount}");
                 
                 if result.contains(&original_line) {
                     result = result.replace(&original_line, &new_line);
@@ -231,14 +228,14 @@ impl DockerComposeVolumeConverter {
             .strip_prefix("./data/")
             .unwrap_or(host_path)
             .replace('/', "_");
-        format!("{}_data_{}", service, path_part)
+        format!("{service}_data_{path_part}")
     }
 
     /// 生成volumes部分
     fn generate_volumes_section(&self, volume_names: &[String]) -> String {
         let mut section = String::from("volumes:\n");
         for volume_name in volume_names {
-            section.push_str(&format!("  {}:\n", volume_name));
+            section.push_str(&format!("  {volume_name}:\n"));
         }
         section
     }
@@ -392,15 +389,14 @@ impl DirectoryPermissionManager {
         debug!("设置所有者: chown -R {}:{} {}", uid, gid, path_str);
         
         let output = std::process::Command::new("chown")
-            .args(&["-R", &format!("{}:{}", uid, gid), &path_str])
+            .args(["-R", &format!("{uid}:{gid}"), &path_str])
             .output()
-            .map_err(|e| DockerServiceError::FileSystem(format!("执行chown命令失败: {}", e)))?;
+            .map_err(|e| DockerServiceError::FileSystem(format!("执行chown命令失败: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(DockerServiceError::FileSystem(format!(
-                "chown命令执行失败: {}",
-                stderr
+                "chown命令执行失败: {stderr}"
             )));
         }
 
@@ -414,15 +410,14 @@ impl DirectoryPermissionManager {
         debug!("设置权限: chmod -R {} {}", permission, path_str);
         
         let output = std::process::Command::new("chmod")
-            .args(&["-R", permission, &path_str])
+            .args(["-R", permission, &path_str])
             .output()
-            .map_err(|e| DockerServiceError::FileSystem(format!("执行chmod命令失败: {}", e)))?;
+            .map_err(|e| DockerServiceError::FileSystem(format!("执行chmod命令失败: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(DockerServiceError::FileSystem(format!(
-                "chmod命令执行失败: {}",
-                stderr
+                "chmod命令执行失败: {stderr}"
             )));
         }
 
@@ -449,9 +444,9 @@ impl DirectoryPermissionManager {
 
             // 检查权限
             let output = std::process::Command::new("ls")
-                .args(&["-ld", &full_path.to_string_lossy()])
+                .args(["-ld", &full_path.to_string_lossy()])
                 .output()
-                .map_err(|e| DockerServiceError::FileSystem(format!("检查权限失败: {}", e)))?;
+                .map_err(|e| DockerServiceError::FileSystem(format!("检查权限失败: {e}")))?;
 
             if output.status.success() {
                 let output_str = String::from_utf8_lossy(&output.stdout);

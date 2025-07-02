@@ -5,7 +5,7 @@ use crate::docker_service::health_check::{HealthChecker, HealthReport};
 use crate::docker_service::image_loader::{ImageLoader, LoadResult, TagResult};
 use crate::docker_service::port_manager::{PortConflictReport, PortManager};
 use crate::docker_service::script_permissions::ScriptPermissionManager;
-use crate::docker_service::user_mapping::UserMappingManager;
+
 use client_core::config::AppConfig;
 use client_core::constants::timeout;
 use client_core::container::DockerManager;
@@ -25,7 +25,6 @@ pub struct DockerServiceManager {
     port_manager: PortManager,
     script_permission_manager: ScriptPermissionManager,
     directory_permission_manager: DirectoryPermissionManager,
-    user_mapping_manager: UserMappingManager,
 }
 
 impl DockerServiceManager {
@@ -48,7 +47,6 @@ impl DockerServiceManager {
             port_manager: PortManager::new(),
             script_permission_manager: ScriptPermissionManager::new(work_dir.clone()),
             directory_permission_manager: DirectoryPermissionManager::new(work_dir.clone()),
-            user_mapping_manager: UserMappingManager::new(work_dir),
         }
     }
 

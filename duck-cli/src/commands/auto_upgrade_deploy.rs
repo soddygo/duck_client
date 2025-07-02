@@ -431,29 +431,27 @@ async fn is_first_deployment() -> bool {
         Ok(entries) => {
             let mut has_meaningful_data = false;
 
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
+            for entry in entries.flatten() {
+                let path = entry.path();
 
-                    // 检查是否有重要的数据目录（mysql, redis, milvus等）
-                    if path.is_dir() {
-                        let dir_name = path
-                            .file_name()
-                            .and_then(|name| name.to_str())
-                            .unwrap_or("");
+                // 检查是否有重要的数据目录（mysql, redis, milvus等）
+                if path.is_dir() {
+                    let dir_name = path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("");
 
-                        match dir_name {
-                            "mysql" | "redis" | "milvus" | "postgres" | "mongodb" => {
-                                // 检查这些目录是否有实际内容
-                                if let Ok(sub_entries) = std::fs::read_dir(&path) {
-                                    if sub_entries.count() > 0 {
-                                        has_meaningful_data = true;
-                                        break;
-                                    }
+                    match dir_name {
+                        "mysql" | "redis" | "milvus" | "postgres" | "mongodb" => {
+                            // 检查这些目录是否有实际内容
+                            if let Ok(sub_entries) = std::fs::read_dir(&path) {
+                                if sub_entries.count() > 0 {
+                                    has_meaningful_data = true;
+                                    break;
                                 }
                             }
-                            _ => {}
                         }
+                        _ => {}
                     }
                 }
             }

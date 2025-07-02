@@ -138,7 +138,7 @@ impl ScriptPermissionManager {
         // 递归查找 config 目录下的所有 .sh 文件
         if let Ok(config_dir) = self.work_dir.join("config").canonicalize() {
             if config_dir.exists() {
-                self.find_shell_scripts_recursive(&config_dir, &mut script_paths)?;
+                Self::find_shell_scripts_recursive(&config_dir, &mut script_paths)?;
             }
         }
 
@@ -146,7 +146,7 @@ impl ScriptPermissionManager {
         for script_dir_name in ["script", "scripts"] {
             if let Ok(script_dir) = self.work_dir.join(script_dir_name).canonicalize() {
                 if script_dir.exists() {
-                    self.find_shell_scripts_recursive(&script_dir, &mut script_paths)?;
+                    Self::find_shell_scripts_recursive(&script_dir, &mut script_paths)?;
                 }
             }
         }
@@ -160,7 +160,6 @@ impl ScriptPermissionManager {
 
     /// 递归查找shell脚本文件
     fn find_shell_scripts_recursive(
-        &self,
         dir: &Path,
         script_paths: &mut Vec<PathBuf>,
     ) -> DockerServiceResult<()> {
@@ -179,7 +178,7 @@ impl ScriptPermissionManager {
 
             if path.is_dir() {
                 // 递归搜索子目录
-                self.find_shell_scripts_recursive(&path, script_paths)?;
+                Self::find_shell_scripts_recursive(&path, script_paths)?;
             } else if path.extension().and_then(|s| s.to_str()) == Some("sh") {
                 script_paths.push(path);
             }

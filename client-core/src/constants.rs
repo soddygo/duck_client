@@ -222,14 +222,9 @@ pub mod docker {
 
 /// API服务相关常量
 pub mod api {
+
     /// 默认API服务器地址
-    pub const DEFAULT_BASE_URL: &str = "http://127.0.0.1:3000";
-
-    /// 默认API服务器主机
-    pub const DEFAULT_HOST: &str = "127.0.0.1";
-
-    /// 默认API服务器端口
-    pub const DEFAULT_PORT: u16 = 3000;
+    pub const DEFAULT_BASE_URL: &str = "http://192.168.1.14:3000";
 
     /// API版本前缀
     pub const VERSION_PREFIX: &str = "/api/v1";

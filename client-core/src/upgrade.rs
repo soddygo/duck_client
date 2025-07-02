@@ -1,11 +1,11 @@
 use crate::{
+    DuckError, Result,
     api::ApiClient,
     backup::{BackupManager, BackupOptions, RestoreOptions},
     config::AppConfig,
     constants::timeout,
-    database::{BackupType, Database},
     container::DockerManager,
-    DuckError, Result,
+    database::{BackupType, Database},
 };
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -15,6 +15,7 @@ use tracing::{info, warn};
 #[derive(Debug, Clone)]
 pub struct UpgradeManager {
     config: AppConfig,
+    #[allow(dead_code)]
     config_path: PathBuf,
     docker_manager: DockerManager,
     backup_manager: BackupManager,
@@ -81,7 +82,10 @@ impl UpgradeManager {
     pub async fn check_for_updates(&self) -> Result<bool> {
         info!("检查服务更新...");
         let current_version = &self.config.versions.docker_service;
-        let version_info = self.api_client.check_docker_version(current_version).await?;
+        let version_info = self
+            .api_client
+            .check_docker_version(current_version)
+            .await?;
         Ok(version_info.has_update)
     }
 
@@ -95,7 +99,7 @@ impl UpgradeManager {
 
         self.send_progress(callback, UpgradeStep::CheckingUpdates, "检查服务更新");
         let has_update = self.check_for_updates().await?;
-        
+
         if !has_update {
             info!("服务已是最新版本");
             self.send_progress(callback, UpgradeStep::Completed, "服务已是最新版本");
@@ -143,12 +147,23 @@ impl UpgradeManager {
         let temp_dir = TempDir::new()?;
 
         let result: Result<()> = async {
-            backup_id = self.create_backup_if_needed(&options, progress_callback).await?;
+            backup_id = self
+                .create_backup_if_needed(&options, progress_callback)
+                .await?;
 
             if options.download_only {
-                let package_filename = download_url.split('/').last().unwrap_or(crate::constants::upgrade::DEFAULT_UPDATE_PACKAGE);
+                let package_filename = download_url
+                    .split('/')
+                    .next_back()
+                    .unwrap_or(crate::constants::upgrade::DEFAULT_UPDATE_PACKAGE);
                 let download_path = temp_dir.path().join(package_filename);
-                self.download_and_extract(download_url, &download_path, temp_dir.path(), progress_callback).await?;
+                self.download_and_extract(
+                    download_url,
+                    &download_path,
+                    temp_dir.path(),
+                    progress_callback,
+                )
+                .await?;
                 self.send_progress(progress_callback, UpgradeStep::Completed, "仅下载模式完成");
                 return Ok(());
             }
@@ -156,16 +171,26 @@ impl UpgradeManager {
             self.stop_services(progress_callback).await?;
             services_stopped = true;
 
-            let package_filename = download_url.split('/').last().unwrap_or(crate::constants::upgrade::DEFAULT_UPDATE_PACKAGE);
+            let package_filename = download_url
+                .split('/')
+                .next_back()
+                .unwrap_or(crate::constants::upgrade::DEFAULT_UPDATE_PACKAGE);
             let download_path = temp_dir.path().join(package_filename);
-            self.download_and_extract(download_url, &download_path, temp_dir.path(), progress_callback).await?;
-            
-            self.load_new_images(temp_dir.path(), progress_callback).await?;
+            self.download_and_extract(
+                download_url,
+                &download_path,
+                temp_dir.path(),
+                progress_callback,
+            )
+            .await?;
+
+            self.load_new_images(temp_dir.path(), progress_callback)
+                .await?;
             self.apply_files(temp_dir.path(), progress_callback).await?;
             self.start_services(progress_callback).await?;
             self.verify_services(progress_callback).await?;
             self.cleanup(&download_path, progress_callback).await?;
-            
+
             Ok(())
         }
         .await;
@@ -177,53 +202,77 @@ impl UpgradeManager {
                 UpgradeStep::Failed("升级失败，正在回滚...".to_string()),
                 &e.to_string(),
             );
-            
+
             if let Some(id) = backup_id {
                 match self.rollback_from_backup(id, progress_callback).await {
                     Ok(_) => {
-                        let final_error_msg = format!("升级失败 ({})，但已成功回滚到备份 ID {}", e, id);
+                        let final_error_msg = format!("升级失败 ({e})，但已成功回滚到备份 ID {id}");
                         return Ok(UpgradeResult {
-                            success: false, from_version: from_version.to_string(), to_version: to_version.to_string(),
-                            error: Some(final_error_msg), backup_id,
+                            success: false,
+                            from_version: from_version.to_string(),
+                            to_version: to_version.to_string(),
+                            error: Some(final_error_msg),
+                            backup_id,
                         });
                     }
                     Err(rollback_err) => {
-                        let final_error_msg = format!("升级失败 ({})，且回滚操作也失败了: {}", e, rollback_err);
+                        let final_error_msg =
+                            format!("升级失败 ({e})，且回滚操作也失败了: {rollback_err}");
                         return Ok(UpgradeResult {
-                            success: false, from_version: from_version.to_string(), to_version: to_version.to_string(),
-                            error: Some(final_error_msg), backup_id,
+                            success: false,
+                            from_version: from_version.to_string(),
+                            to_version: to_version.to_string(),
+                            error: Some(final_error_msg),
+                            backup_id,
                         });
                     }
                 }
             } else if services_stopped {
                 warn!("升级失败，且没有备份。正在尝试重启服务...");
-                self.send_progress(progress_callback, UpgradeStep::Failed("正在重启服务...".to_string()), "");
+                self.send_progress(
+                    progress_callback,
+                    UpgradeStep::Failed("正在重启服务...".to_string()),
+                    "",
+                );
                 if let Err(restart_err) = self.docker_manager.start_services().await {
                     warn!("重启服务也失败了: {}", restart_err);
-                    let final_error_msg = format!("升级失败 ({}), 并且无法重启原始服务: {}", e, restart_err);
+                    let final_error_msg =
+                        format!("升级失败 ({e}), 并且无法重启原始服务: {restart_err}");
                     return Ok(UpgradeResult {
-                        success: false, from_version: from_version.to_string(), to_version: to_version.to_string(),
-                        error: Some(final_error_msg), backup_id,
+                        success: false,
+                        from_version: from_version.to_string(),
+                        to_version: to_version.to_string(),
+                        error: Some(final_error_msg),
+                        backup_id,
                     });
                 } else {
-                    let final_error_msg = format!("升级失败 ({})，服务已重启", e);
-                     return Ok(UpgradeResult {
-                        success: false, from_version: from_version.to_string(), to_version: to_version.to_string(),
-                        error: Some(final_error_msg), backup_id,
+                    let final_error_msg = format!("升级失败 ({e})，服务已重启");
+                    return Ok(UpgradeResult {
+                        success: false,
+                        from_version: from_version.to_string(),
+                        to_version: to_version.to_string(),
+                        error: Some(final_error_msg),
+                        backup_id,
                     });
                 }
             }
 
-             return Ok(UpgradeResult {
-                success: false, from_version: from_version.to_string(), to_version: to_version.to_string(),
-                error: Some(e.to_string()), backup_id,
+            return Ok(UpgradeResult {
+                success: false,
+                from_version: from_version.to_string(),
+                to_version: to_version.to_string(),
+                error: Some(e.to_string()),
+                backup_id,
             });
         }
-        
+
         if options.download_only {
-             return Ok(UpgradeResult {
-                success: true, from_version: from_version.to_string(), to_version: to_version.to_string(),
-                error: None, backup_id,
+            return Ok(UpgradeResult {
+                success: true,
+                from_version: from_version.to_string(),
+                to_version: to_version.to_string(),
+                error: None,
+                backup_id,
             });
         }
 
@@ -231,16 +280,29 @@ impl UpgradeManager {
         self.send_progress(progress_callback, UpgradeStep::Completed, "升级成功完成");
 
         Ok(UpgradeResult {
-            success: true, from_version: from_version.to_string(), to_version: to_version.to_string(),
-            error: None, backup_id,
+            success: true,
+            from_version: from_version.to_string(),
+            to_version: to_version.to_string(),
+            error: None,
+            backup_id,
         })
     }
 
-    async fn rollback_from_backup(&self, backup_id: i64, progress_callback: Option<&ProgressCallback>) -> Result<()> {
+    async fn rollback_from_backup(
+        &self,
+        backup_id: i64,
+        progress_callback: Option<&ProgressCallback>,
+    ) -> Result<()> {
         warn!("从备份 ID {} 进行回滚。", backup_id);
-        self.send_progress(progress_callback, UpgradeStep::Failed(format!("正在从备份 {} 回滚...", backup_id)), "");
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::Failed(format!("正在从备份 {backup_id} 回滚...")),
+            "",
+        );
 
-        let docker_dir = self.docker_manager.get_working_directory()
+        let docker_dir = self
+            .docker_manager
+            .get_working_directory()
             .ok_or_else(|| DuckError::Custom("无法确定 Docker 工作目录".to_string()))?;
 
         let options = RestoreOptions {
@@ -248,11 +310,17 @@ impl UpgradeManager {
             force_overwrite: true,
         };
 
-        self.docker_manager.stop_services().await.ok(); 
-        self.backup_manager.restore_from_backup(backup_id, options).await?;
-        
+        self.docker_manager.stop_services().await.ok();
+        self.backup_manager
+            .restore_from_backup(backup_id, options)
+            .await?;
+
         info!("回滚成功。正在尝试重启旧服务...");
-        self.send_progress(progress_callback, UpgradeStep::Failed("回滚成功，正在重启服务...".to_string()), "");
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::Failed("回滚成功，正在重启服务...".to_string()),
+            "",
+        );
         self.docker_manager.start_services().await?;
         info!("回滚并重启服务成功。");
         Ok(())
@@ -268,8 +336,14 @@ impl UpgradeManager {
             return Ok(None);
         }
 
-        self.send_progress(progress_callback, UpgradeStep::CreatingBackup, "正在创建备份");
-        let docker_dir = self.docker_manager.get_working_directory()
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::CreatingBackup,
+            "正在创建备份",
+        );
+        let docker_dir = self
+            .docker_manager
+            .get_working_directory()
             .ok_or_else(|| DuckError::Custom("无法确定 Docker 工作目录".to_string()))?;
 
         let backup_options = BackupOptions {
@@ -285,26 +359,44 @@ impl UpgradeManager {
     }
 
     async fn stop_services(&self, progress_callback: Option<&ProgressCallback>) -> Result<()> {
-        self.send_progress(progress_callback, UpgradeStep::StoppingServices, "正在停止服务");
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::StoppingServices,
+            "正在停止服务",
+        );
         self.docker_manager.stop_services().await
     }
 
     async fn start_services(&self, progress_callback: Option<&ProgressCallback>) -> Result<()> {
-        self.send_progress(progress_callback, UpgradeStep::StartingServices, "正在启动服务");
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::StartingServices,
+            "正在启动服务",
+        );
         self.docker_manager.start_services().await
     }
 
     async fn download_and_extract(
         &self,
-        download_url: &str,
+        _download_url: &str,
         download_path: &Path,
         extract_dir: &Path,
         progress_callback: Option<&ProgressCallback>,
     ) -> Result<()> {
-        self.send_progress(progress_callback, UpgradeStep::DownloadingUpdate, "正在下载更新");
-        self.api_client.download_service_update(download_path).await?;
-        
-        self.send_progress(progress_callback, UpgradeStep::ExtractingUpdate, "正在解压文件");
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::DownloadingUpdate,
+            "正在下载更新",
+        );
+        self.api_client
+            .download_service_update(download_path)
+            .await?;
+
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::ExtractingUpdate,
+            "正在解压文件",
+        );
 
         let path_for_blocking = download_path.to_path_buf();
         let extract_dir_for_blocking = extract_dir.to_path_buf();
@@ -312,14 +404,23 @@ impl UpgradeManager {
         tokio::task::spawn_blocking(move || -> Result<()> {
             let file = std::fs::File::open(path_for_blocking)?;
             zip_extract::extract(file, &extract_dir_for_blocking, true)
-                .map_err(|e| DuckError::Custom(format!("解压失败: {}", e)))
-        }).await??;
+                .map_err(|e| DuckError::Custom(format!("解压失败: {e}")))
+        })
+        .await??;
 
         Ok(())
     }
 
-    async fn load_new_images(&self, temp_dir: &Path, progress_callback: Option<&ProgressCallback>) -> Result<()> {
-        self.send_progress(progress_callback, UpgradeStep::LoadingImages, "正在加载镜像");
+    async fn load_new_images(
+        &self,
+        temp_dir: &Path,
+        progress_callback: Option<&ProgressCallback>,
+    ) -> Result<()> {
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::LoadingImages,
+            "正在加载镜像",
+        );
         let images_dir = temp_dir.join("images");
         if !images_dir.exists() {
             info!("未找到 'images' 目录，跳过加载镜像步骤。");
@@ -329,7 +430,7 @@ impl UpgradeManager {
         let mut entries = tokio::fs::read_dir(images_dir).await?;
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "tar") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "tar") {
                 info!("加载镜像: {}", path.display());
                 self.docker_manager.load_image(&path).await?;
             }
@@ -337,26 +438,46 @@ impl UpgradeManager {
         Ok(())
     }
 
-    async fn apply_files(&self, temp_dir: &Path, _progress_callback: Option<&ProgressCallback>) -> Result<()> {
-        let target_dir = self.docker_manager.get_working_directory()
+    async fn apply_files(
+        &self,
+        temp_dir: &Path,
+        _progress_callback: Option<&ProgressCallback>,
+    ) -> Result<()> {
+        let target_dir = self
+            .docker_manager
+            .get_working_directory()
             .ok_or_else(|| DuckError::Custom("无法确定 Docker 工作目录".to_string()))?;
-        self.copy_directory_with_data_preservation(temp_dir, target_dir).await
+        self.copy_directory_with_data_preservation(temp_dir, target_dir)
+            .await
     }
 
     async fn verify_services(&self, progress_callback: Option<&ProgressCallback>) -> Result<()> {
-        self.send_progress(progress_callback, UpgradeStep::VerifyingServices, "正在验证服务状态");
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::VerifyingServices,
+            "正在验证服务状态",
+        );
         tokio::time::sleep(std::time::Duration::from_secs(timeout::SERVICE_VERIFY_WAIT)).await;
         self.docker_manager.check_services_health().await
     }
 
-    async fn cleanup(&self, download_path: &Path, progress_callback: Option<&ProgressCallback>) -> Result<()> {
-        self.send_progress(progress_callback, UpgradeStep::CleaningUp, "正在清理临时文件");
+    async fn cleanup(
+        &self,
+        download_path: &Path,
+        progress_callback: Option<&ProgressCallback>,
+    ) -> Result<()> {
+        self.send_progress(
+            progress_callback,
+            UpgradeStep::CleaningUp,
+            "正在清理临时文件",
+        );
         if let Some(parent) = download_path.parent() {
-             tokio::fs::remove_dir_all(parent).await?;
+            tokio::fs::remove_dir_all(parent).await?;
         }
         Ok(())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn copy_directory_with_data_preservation<'a>(
         &'a self,
         src: &'a Path,
@@ -372,13 +493,18 @@ impl UpgradeManager {
                 let src_path = entry.path();
                 let dest_path = dest.join(entry.file_name());
 
-                if dest_path.strip_prefix(dest).map_or(false, |p| p.starts_with("data")) && dest_path.exists() {
+                if dest_path
+                    .strip_prefix(dest)
+                    .is_ok_and(|p| p.starts_with("data"))
+                    && dest_path.exists()
+                {
                     info!("保留现有数据文件: {}", dest_path.display());
                     continue;
                 }
-                
+
                 if src_path.is_dir() {
-                    self.copy_directory_with_data_preservation(&src_path, &dest_path).await?;
+                    self.copy_directory_with_data_preservation(&src_path, &dest_path)
+                        .await?;
                 } else {
                     if let Some(parent) = dest_path.parent() {
                         tokio::fs::create_dir_all(parent).await?;
@@ -401,4 +527,4 @@ impl UpgradeManager {
             callback(step, message);
         }
     }
-} 
+}

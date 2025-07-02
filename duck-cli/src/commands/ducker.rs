@@ -1,7 +1,7 @@
-use client_core::{Result, DuckError};
-use std::path::PathBuf;
-use tracing::{info, warn, error};
+use client_core::{DuckError, Result};
 use color_eyre::eyre::Context;
+use std::path::PathBuf;
+use tracing::{error, info, warn};
 
 /// ducker 命令行参数结构
 #[derive(Debug, Default)]
@@ -14,22 +14,22 @@ pub struct DuckerArgs {
 
 /// 集成ducker命令 - 提供Docker TUI界面（直接集成，不需要外部安装）
 pub async fn run_ducker(args: Vec<String>) -> Result<()> {
-    info!("启动集成的ducker Docker TUI工具...");
-    
+    info!("启动ducker Docker TUI工具...");
+
     // 解析ducker参数
     let ducker_args = parse_ducker_args(args)?;
-    
+
     // 运行ducker的核心逻辑
     run_ducker_tui(ducker_args).await.map_err(|e| {
         error!("ducker执行失败: {}", e);
-        DuckError::custom(format!("ducker执行失败: {}", e))
+        DuckError::custom(format!("ducker执行失败: {e}"))
     })
 }
 
 /// 解析ducker命令行参数
 fn parse_ducker_args(args: Vec<String>) -> Result<DuckerArgs> {
     let mut ducker_args = DuckerArgs::default();
-    
+
     // 简单的参数解析 (处理常用的ducker参数)
     let mut i = 0;
     while i < args.len() {
@@ -67,7 +67,7 @@ fn parse_ducker_args(args: Vec<String>) -> Result<DuckerArgs> {
         }
         i += 1;
     }
-    
+
     Ok(ducker_args)
 }
 
@@ -80,15 +80,15 @@ async fn run_ducker_tui(args: DuckerArgs) -> color_eyre::Result<()> {
         state, terminal,
         ui::App,
     };
-    
+
     // 跳过ducker的日志初始化，因为我们已经在duck-cli中初始化了
     info!("使用duck-cli的日志系统，跳过ducker的日志初始化");
-    
+
     // 安装color_eyre (跳过如果已经安装)
-    if let Err(_) = color_eyre::install() {
+    if color_eyre::install().is_err() {
         warn!("color_eyre已经安装，跳过");
     }
-    
+
     // 创建ducker配置
     let config = Config::new(
         &args.export_default_config,
@@ -100,7 +100,7 @@ async fn run_ducker_tui(args: DuckerArgs) -> color_eyre::Result<()> {
     let docker = new_local_docker_connection(&config.docker_path, config.docker_host.as_deref())
         .await
         .context("failed to create docker connection, potentially due to misconfiguration")?;
-    
+
     // 初始化终端
     terminal::init_panic_hook();
     let mut terminal = ratatui::init();
@@ -162,7 +162,8 @@ async fn run_ducker_tui(args: DuckerArgs) -> color_eyre::Result<()> {
 
 /// 显示ducker集成帮助
 fn show_ducker_help() {
-    println!(r#"
+    println!(
+        r#"
 🦆 Ducker 集成版本 - Docker TUI 工具
 
 用法: duck-cli ducker [选项]
@@ -191,7 +192,8 @@ ducker 主要功能:
   :          命令模式
 
 注意: 此版本已集成到duck-cli中，无需单独安装ducker。
-"#);
+"#
+    );
 }
 
 #[cfg(test)]
@@ -200,8 +202,11 @@ mod tests {
 
     #[test]
     fn test_parse_ducker_args() {
-        let args = vec!["--docker-host".to_string(), "tcp://localhost:2375".to_string()];
+        let args = vec![
+            "--docker-host".to_string(),
+            "tcp://localhost:2375".to_string(),
+        ];
         let parsed = parse_ducker_args(args).unwrap();
         assert_eq!(parsed.docker_host, Some("tcp://localhost:2375".to_string()));
     }
-} 
+}

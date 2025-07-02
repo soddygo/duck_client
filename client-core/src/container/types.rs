@@ -8,6 +8,17 @@ pub enum ServiceStatus {
     Unknown,
 }
 
+impl ServiceStatus {
+    /// 获取状态的中文显示名称
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            ServiceStatus::Running => "运行中",
+            ServiceStatus::Stopped => "已停止",
+            ServiceStatus::Unknown => "未知",
+        }
+    }
+}
+
 /// Docker 服务信息
 #[derive(Debug, Clone)]
 pub struct ServiceInfo {
@@ -27,4 +38,4 @@ pub struct ServiceConfig {
 #[derive(Debug, Clone)]
 pub struct DockerManager {
     pub(crate) compose_file: PathBuf,
-} 
+}

@@ -1,6 +1,6 @@
-use std::path::PathBuf;
-use clap::{Parser, Subcommand};
 use crate::project_info::{metadata, version_info};
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 /// 自动备份相关命令
 #[derive(Subcommand, Debug)]
@@ -27,14 +27,25 @@ pub enum AutoBackupCommand {
 #[derive(Subcommand, Debug)]
 pub enum AutoUpgradeDeployCommand {
     /// 立即执行自动升级部署
-    Run,
+    Run {
+        /// 指定frontend服务的端口号（默认80端口）
+        #[arg(
+            long,
+            help = "指定frontend服务的端口号，对应docker-compose.yml中的FRONTEND_HOST_PORT变量（默认: 80端口）"
+        )]
+        port: Option<u16>,
+    },
     /// 延迟执行自动升级部署
     DelayTimeDeploy {
         /// 延迟时间数值
         #[arg(help = "延迟时间数值，例如 2")]
         time: u32,
         /// 时间单位 (hours, minutes, days)
-        #[arg(long, default_value = "hours", help = "时间单位：hours(小时), minutes(分钟), days(天)")]
+        #[arg(
+            long,
+            default_value = "hours",
+            help = "时间单位：hours(小时), minutes(分钟), days(天)"
+        )]
         unit: String,
     },
     /// 显示当前自动升级配置
@@ -59,8 +70,6 @@ pub enum CheckUpdateCommand {
 
 #[derive(Subcommand, Debug)]
 pub enum DockerServiceCommand {
-    /// 部署Docker服务
-    Deploy,
     /// 启动Docker服务
     Start,
     /// 停止Docker服务
@@ -74,12 +83,23 @@ pub enum DockerServiceCommand {
         /// 容器名称
         container_name: String,
     },
+    /// 解压Docker服务包
+    Extract {
+        /// 指定docker.zip文件路径（可选，默认使用当前版本的下载文件）
+        #[arg(long)]
+        file: Option<String>,
+        /// 目标版本（可选，默认使用当前配置版本）
+        #[arg(long)]
+        version: Option<String>,
+    },
     /// 加载Docker镜像
     LoadImages,
     /// 设置镜像标签
     SetupTags,
     /// 显示架构信息
     ArchInfo,
+    /// 列出Docker镜像（使用ducker）
+    ListImages,
 }
 
 /// Duck Client CLI - Docker 服务管理和升级工具
@@ -142,7 +162,7 @@ pub enum Commands {
     #[command(subcommand)]
     DockerService(DockerServiceCommand),
 
-    /// 集成的ducker Docker TUI工具
+    /// 🐋 一个用于管理 Docker 容器的终端应用
     Ducker {
         /// 传递给ducker的参数
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -156,4 +176,4 @@ pub enum Commands {
     /// 自动升级部署
     #[command(subcommand)]
     AutoUpgradeDeploy(AutoUpgradeDeployCommand),
-} 
+}

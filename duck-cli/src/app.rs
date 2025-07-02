@@ -1,15 +1,11 @@
-use std::path::PathBuf;
 use client_core::{
-    api::ApiClient,
-    backup::BackupManager,
-    config::AppConfig,
-    database::Database,
-    container::DockerManager,
-    error::Result,
+    api::ApiClient, authenticated_client::AuthenticatedClient, backup::BackupManager,
+    config::AppConfig, container::DockerManager, database::Database, error::Result,
     upgrade::UpgradeManager,
 };
+use std::path::PathBuf;
 
-use crate::cli::{Commands, DockerServiceCommand, AutoBackupCommand, AutoUpgradeDeployCommand, CheckUpdateCommand};
+use crate::cli::{AutoBackupCommand, AutoUpgradeDeployCommand, Commands, DockerServiceCommand};
 use crate::commands;
 use tracing::info;
 
@@ -18,6 +14,7 @@ pub struct CliApp {
     pub config: AppConfig,
     pub database: Database,
     pub api_client: ApiClient,
+    pub authenticated_client: AuthenticatedClient,
     pub docker_manager: DockerManager,
     pub backup_manager: BackupManager,
     pub upgrade_manager: UpgradeManager,
@@ -34,20 +31,28 @@ impl CliApp {
         // 初始化数据库
         let database = Database::connect("history.db").await?;
 
-        // 获取用于API请求的客户端ID（优先使用服务端返回的client_id）
-        let client_id = database.get_api_client_id().await?;
-        let api_client = ApiClient::new(client_id);
+        // 创建认证客户端（自动处理注册和认证）
+        let server_base_url = client_core::constants::api::DEFAULT_BASE_URL.to_string();
+        let authenticated_client =
+            AuthenticatedClient::new(database.clone(), server_base_url).await?;
 
-        // 初始化其他管理器
+        // 获取用于API请求的客户端ID（只使用服务端返回的client_id）
+        let client_id = database.get_api_client_id().await?;
+        let mut api_client = ApiClient::new(client_id.clone());
+
+        // 将AuthenticatedClient设置到ApiClient中，这样ApiClient可以使用自动认证功能
+        api_client.set_authenticated_client(authenticated_client.clone());
+
+        // 创建其他管理器
         let docker_manager = DockerManager::new(PathBuf::from(&config.docker.compose_file))?;
         let backup_manager = BackupManager::new(
-            config.get_backup_dir(),
+            PathBuf::from(&config.backup.storage_dir),
             database.clone(),
             docker_manager.clone(),
         )?;
         let upgrade_manager = UpgradeManager::new(
             config.clone(),
-            PathBuf::from("config.toml"), // 使用默认路径
+            PathBuf::from("config.toml"), // 使用默认配置路径
             docker_manager.clone(),
             backup_manager.clone(),
             api_client.clone(),
@@ -58,26 +63,27 @@ impl CliApp {
             config,
             database,
             api_client,
+            authenticated_client,
             docker_manager,
             backup_manager,
             upgrade_manager,
         })
     }
 
-    /// 运行 CLI 命令
-    pub async fn run(&mut self, command: Commands) -> Result<()> {
+    /// 运行应用命令
+    pub async fn run_command(&mut self, command: Commands) -> Result<()> {
         match command {
             Commands::Status => commands::run_status(self).await,
             Commands::ApiInfo => commands::run_api_info(self).await,
             Commands::Init { .. } => unreachable!(), // 已经在 main.rs 中处理
             Commands::CheckUpdate(check_update_cmd) => {
-                commands::handle_check_update_command(check_update_cmd).await.map_err(|e| {
-                    client_core::error::DuckError::custom(format!("检查更新失败: {}", e))
-                })
-            },
-            Commands::Upgrade { full, force } => {
-                commands::run_upgrade(self, full, force).await
+                commands::handle_check_update_command(check_update_cmd)
+                    .await
+                    .map_err(|e| {
+                        client_core::error::DuckError::custom(format!("检查更新失败: {e}"))
+                    })
             }
+            Commands::Upgrade { full, force } => commands::run_upgrade(self, full, force).await,
             Commands::Backup => commands::run_backup(self).await,
             Commands::ListBackups => commands::run_list_backups(self).await,
             Commands::Rollback { backup_id, force } => {
@@ -86,9 +92,7 @@ impl CliApp {
             Commands::DockerService(docker_cmd) => {
                 self.run_docker_service_command(docker_cmd).await
             }
-            Commands::Ducker { args } => {
-                commands::run_ducker(args).await
-            }
+            Commands::Ducker { args } => commands::run_ducker(args).await,
             Commands::AutoBackup(auto_backup_cmd) => {
                 self.run_auto_backup_command(auto_backup_cmd).await
             }
@@ -101,10 +105,6 @@ impl CliApp {
     /// 运行 Docker 服务相关命令
     async fn run_docker_service_command(&mut self, cmd: DockerServiceCommand) -> Result<()> {
         match cmd {
-            DockerServiceCommand::Deploy => {
-                info!("🚀 部署 Docker 服务...");
-                commands::deploy_docker_services(self).await
-            }
             DockerServiceCommand::Start => {
                 info!("▶️  启动 Docker 服务...");
                 commands::start_docker_services(self).await
@@ -125,6 +125,10 @@ impl CliApp {
                 info!("🔄 重启容器: {}", container_name);
                 commands::restart_container(self, &container_name).await
             }
+            DockerServiceCommand::Extract { file, version } => {
+                info!("📦 解压 Docker 服务包...");
+                commands::extract_docker_service(self, file, version).await
+            }
             DockerServiceCommand::LoadImages => {
                 info!("📦 加载 Docker 镜像...");
                 commands::load_docker_images(self).await
@@ -136,6 +140,10 @@ impl CliApp {
             DockerServiceCommand::ArchInfo => {
                 info!("🏗️  系统架构信息:");
                 commands::show_architecture_info(self).await
+            }
+            DockerServiceCommand::ListImages => {
+                info!("🔍 列出 Docker 镜像:");
+                commands::list_docker_images_with_ducker(self).await
             }
         }
     }
@@ -163,11 +171,14 @@ impl CliApp {
     }
 
     /// 运行自动升级部署相关命令
-    async fn run_auto_upgrade_deploy_command(&mut self, cmd: AutoUpgradeDeployCommand) -> Result<()> {
+    async fn run_auto_upgrade_deploy_command(
+        &mut self,
+        cmd: AutoUpgradeDeployCommand,
+    ) -> Result<()> {
         match cmd {
-            AutoUpgradeDeployCommand::Run => {
+            AutoUpgradeDeployCommand::Run { port } => {
                 info!("🚀 开始自动升级部署流程...");
-                commands::run_auto_upgrade_deploy(self).await
+                commands::run_auto_upgrade_deploy(self, port).await
             }
             AutoUpgradeDeployCommand::DelayTimeDeploy { time, unit } => {
                 info!("配置延迟自动升级部署: {} {}", time, unit);
@@ -179,4 +190,4 @@ impl CliApp {
             }
         }
     }
-} 
+}

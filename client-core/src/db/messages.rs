@@ -73,4 +73,4 @@ pub enum DbMessage {
         task_type: String,
         respond_to: oneshot::Sender<Result<()>>,
     },
-} 
+}

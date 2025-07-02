@@ -1,4 +1,4 @@
-use crate::{db::DuckDbManager, Result};
+use crate::{Result, db::DuckDbManager};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -107,7 +107,9 @@ impl Database {
 
     /// 设置客户端UUID
     pub async fn set_client_uuid(&self, uuid: &Uuid) -> Result<()> {
-        self.manager.set_config("client_uuid", &uuid.to_string()).await
+        self.manager
+            .set_config("client_uuid", &uuid.to_string())
+            .await
     }
 
     /// 更新客户端ID（服务端返回的ID）
@@ -120,19 +122,11 @@ impl Database {
         self.manager.get_config("client_id").await
     }
 
-    /// 获取用于API请求的客户端标识（优先使用服务端client_id，否则使用本地uuid）
+    /// 获取用于API请求的客户端标识（只使用服务端返回的client_id）
     pub async fn get_api_client_id(&self) -> Result<Option<String>> {
-        // 优先使用服务端返回的client_id
-        if let Some(client_id) = self.get_client_id().await? {
-            return Ok(Some(client_id));
-        }
-        
-        // 如果没有服务端client_id，使用本地UUID
-        if let Some(uuid) = self.get_client_uuid().await? {
-            return Ok(Some(uuid.to_string()));
-        }
-        
-        Ok(None)
+        // 只使用服务端返回的client_id，不使用本地UUID
+        // 因为服务端不认识本地UUID，会导致401错误
+        self.get_client_id().await
     }
 
     /// 通用配置项获取
@@ -149,16 +143,19 @@ impl Database {
     pub async fn get_client_identity(&self) -> Result<Option<ClientIdentity>> {
         if let Some(uuid) = self.get_client_uuid().await? {
             // 从配置中获取创建时间，如果不存在则使用当前时间
-            let created_at = if let Some(created_at_str) = self.get_config("client_created_at").await? {
-                DateTime::parse_from_rfc3339(&created_at_str)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now())
-            } else {
-                let now = Utc::now();
-                // 保存创建时间
-                let _ = self.set_config("client_created_at", &now.to_rfc3339()).await;
-                now
-            };
+            let created_at =
+                if let Some(created_at_str) = self.get_config("client_created_at").await? {
+                    DateTime::parse_from_rfc3339(&created_at_str)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now())
+                } else {
+                    let now = Utc::now();
+                    // 保存创建时间
+                    let _ = self
+                        .set_config("client_created_at", &now.to_rfc3339())
+                        .await;
+                    now
+                };
 
             Ok(Some(ClientIdentity {
                 id: 1, // 固定ID，因为只有一个客户端身份
@@ -196,7 +193,7 @@ impl Database {
     /// 获取所有备份记录
     pub async fn get_all_backups(&self) -> Result<Vec<BackupRecord>> {
         let duckdb_backups = self.manager.get_all_backups().await?;
-        
+
         let mut backups = Vec::new();
         for backup in duckdb_backups {
             let backup_type = match backup.backup_type.as_str() {
@@ -274,7 +271,7 @@ impl Database {
     /// 获取待执行的任务
     pub async fn get_pending_tasks(&self) -> Result<Vec<ScheduledTask>> {
         let duckdb_tasks = self.manager.get_pending_tasks().await?;
-        
+
         let mut tasks = Vec::new();
         for task in duckdb_tasks {
             let task_type = match task.task_type.as_str() {
@@ -333,20 +330,22 @@ impl Database {
 
     /// 更新备份文件路径
     pub async fn update_backup_file_path(&self, backup_id: i64, new_path: String) -> Result<()> {
-        self.manager.update_backup_file_path(backup_id, new_path).await
+        self.manager
+            .update_backup_file_path(backup_id, new_path)
+            .await
     }
 
     /// 批量更新备份文件路径（用于存储目录迁移）
     pub async fn update_all_backup_paths(&self, old_prefix: &str, new_prefix: &str) -> Result<()> {
         let backups = self.get_all_backups().await?;
-        
+
         for backup in backups {
             if backup.file_path.starts_with(old_prefix) {
                 let new_path = backup.file_path.replace(old_prefix, new_prefix);
                 self.update_backup_file_path(backup.id, new_path).await?;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -369,12 +368,12 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let db = Database::connect(&db_path).await.unwrap();
-        
+
         // 测试配置存储
         db.set_config("test_key", "test_value").await.unwrap();
         let value = db.get_config("test_key").await.unwrap();
         assert_eq!(value, Some("test_value".to_string()));
-        
+
         // 测试不存在的配置
         let missing = db.get_config("missing_key").await.unwrap();
         assert_eq!(missing, None);
@@ -385,10 +384,10 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let db = Database::connect(&db_path).await.unwrap();
-        
+
         // 首次获取应该生成新的UUID
         let uuid1 = db.get_or_create_client_uuid().await.unwrap();
-        
+
         // 再次获取应该返回相同的UUID
         let uuid2 = db.get_or_create_client_uuid().await.unwrap();
         assert_eq!(uuid1, uuid2);
@@ -399,15 +398,18 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let db = Database::connect(&db_path).await.unwrap();
-        
+
         // 创建备份记录
-        let backup_id = db.create_backup_record(
-            "/test/backup.zip".to_string(),
-            "1.0.0".to_string(),
-            BackupType::Manual,
-            BackupStatus::Completed,
-        ).await.unwrap();
-        
+        let backup_id = db
+            .create_backup_record(
+                "/test/backup.zip".to_string(),
+                "1.0.0".to_string(),
+                BackupType::Manual,
+                BackupStatus::Completed,
+            )
+            .await
+            .unwrap();
+
         // 验证备份记录
         let backup = db.get_backup_by_id(backup_id).await.unwrap();
         assert!(backup.is_some());
@@ -415,4 +417,4 @@ mod tests {
         assert_eq!(backup.file_path, "/test/backup.zip");
         assert_eq!(backup.service_version, "1.0.0");
     }
-} 
+}

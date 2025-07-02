@@ -10,3 +10,4 @@ cacheDuckData
 history.db
 history.db.wal
 config.toml
+test_deploy

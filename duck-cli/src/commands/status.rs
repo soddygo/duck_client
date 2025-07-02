@@ -1,20 +1,29 @@
-use client_core::error::Result;
-use client_core::container::{DockerManager, ServiceStatus};
 use crate::app::CliApp;
 use crate::docker_utils;
-use tracing::{info, warn, error};
+use client_core::container::{DockerManager, ServiceStatus};
+use client_core::error::Result;
+use tracing::{error, info, warn};
 
-/// 显示服务状态
-pub async fn run_status(app: &CliApp) -> Result<()> {
+/// 显示客户端版本信息（标题和基本信息）
+pub fn show_client_version() {
     info!("🦆 Duck Client 状态");
     info!("==================");
-    
-    // 基本信息
     info!("📋 基本信息:");
-    info!("   客户端版本: {}", app.config.versions.client);
+    info!("   客户端版本: v{}", env!("CARGO_PKG_VERSION"));
+}
+
+/// 显示服务状态（完整版本，包含基本信息）
+pub async fn run_status(app: &CliApp) -> Result<()> {
+    show_client_version();
+    run_status_details(app).await
+}
+
+/// 显示详细状态信息（不包含基本信息标题）
+pub async fn run_status_details(app: &CliApp) -> Result<()> {
+    // 继续显示其他基本信息
     info!("   Docker服务版本: {}", app.config.versions.docker_service);
     info!("   配置文件: {}", "config.toml");
-    
+
     // 显示客户端UUID
     let client_uuid = app.database.get_or_create_client_uuid().await?;
     info!("   客户端UUID: {}", client_uuid);
@@ -22,14 +31,27 @@ pub async fn run_status(app: &CliApp) -> Result<()> {
     // 检查文件状态
     info!("📁 文件状态:");
     let docker_compose_path = std::path::Path::new(&app.config.docker.compose_file);
-            let download_path = app.config.get_download_dir().join(client_core::constants::upgrade::DOCKER_SERVICE_PACKAGE);
-    
+
+    // 使用新的版本化路径检查服务包文件
+    let current_version = &app.config.versions.docker_service;
+    let download_path = app.config.get_version_download_file_path(
+        current_version,
+        "full",
+        client_core::constants::upgrade::DOCKER_SERVICE_PACKAGE,
+    );
+
     if docker_compose_path.exists() {
-        info!("   ✅ Docker Compose文件: {}", app.config.docker.compose_file);
+        info!(
+            "   ✅ Docker Compose文件: {}",
+            app.config.docker.compose_file
+        );
     } else {
-        info!("   ❌ Docker Compose文件: {} (不存在)", app.config.docker.compose_file);
+        info!(
+            "   ❌ Docker Compose文件: {} (不存在)",
+            app.config.docker.compose_file
+        );
     }
-    
+
     if download_path.exists() {
         info!("   ✅ 服务包文件: {}", download_path.display());
     } else {
@@ -40,7 +62,7 @@ pub async fn run_status(app: &CliApp) -> Result<()> {
     info!("🐳 Docker服务状态:");
     if docker_compose_path.exists() {
         info!("   📋 Docker Compose文件已就绪");
-        
+
         // 检查具体的服务状态
         match check_docker_services_status(docker_compose_path).await {
             Ok(()) => {
@@ -60,7 +82,7 @@ pub async fn run_status(app: &CliApp) -> Result<()> {
 
     // 根据状态提供建议
     info!("💡 状态分析和建议:");
-    
+
     if !docker_compose_path.exists() && !download_path.exists() {
         info!("   🆕 您似乎是首次使用");
         info!("   📝 建议执行以下步骤:");
@@ -97,45 +119,57 @@ async fn check_docker_services_status(compose_file_path: &std::path::Path) -> Re
         Ok(services_running) => {
             if services_running {
                 info!("   ✅ 服务正在运行");
-                
+
                 // 尝试获取详细的服务状态信息
                 if let Ok(docker_manager) = DockerManager::new(compose_file_path) {
                     match docker_manager.get_services_status().await {
                         Ok(services) => {
                             if !services.is_empty() {
                                 info!("   📋 服务详情:");
-                                                                 let mut running_count = 0;
-                                 let total_count = services.len();
-                                
+                                let mut running_count = 0;
+                                let total_count = services.len();
+
                                 for service in &services {
                                     let status_icon = match service.status {
                                         ServiceStatus::Running => {
                                             running_count += 1;
                                             "🟢"
-                                        },
+                                        }
                                         ServiceStatus::Stopped => "🔴",
                                         ServiceStatus::Unknown => "🟡",
                                     };
-                                    
-                                    info!("      {} {} - {} ({})", 
-                                             status_icon, 
-                                             service.name, 
-                                             format!("{:?}", service.status).to_lowercase(),
-                                             service.image);
-                                             
+
+                                    info!(
+                                        "      {} {} - {} ({})",
+                                        status_icon,
+                                        service.name,
+                                        service.status.display_name(),
+                                        service.image
+                                    );
+
                                     // 显示端口信息（如果有的话）
                                     if !service.ports.is_empty() {
                                         info!("         端口: {}", service.ports.join(", "));
                                     }
                                 }
-                                
-                                info!("   📊 状态摘要: {}/{} 服务运行中", running_count, total_count);
-                                
+
+                                info!(
+                                    "   📊 状态摘要: {}/{} 服务运行中",
+                                    running_count, total_count
+                                );
+
                                 // 提供访问信息
                                 if running_count > 0 {
                                     info!("   🌐 可能的访问地址:");
-                                    info!("      - 前端页面: http://localhost:80");
-                                    info!("      - 后端API: http://localhost:8080");
+                                    use client_core::constants::docker::ports;
+                                    info!(
+                                        "      - 前端页面: http://localhost:{}",
+                                        ports::DEFAULT_FRONTEND_PORT
+                                    );
+                                    info!(
+                                        "      - 后端API: http://localhost:{}",
+                                        ports::DEFAULT_BACKEND_PORT
+                                    );
                                 }
                             } else {
                                 info!("   📋 没有检测到运行中的服务容器");
@@ -158,7 +192,7 @@ async fn check_docker_services_status(compose_file_path: &std::path::Path) -> Re
         }
         Err(e) => {
             error!("   ❌ 无法检查服务状态: {}", e);
-            
+
             // 尝试进行基本的Docker环境检查
             if let Ok(docker_manager) = DockerManager::new(compose_file_path) {
                 match docker_manager.check_docker_status().await {
@@ -176,10 +210,10 @@ async fn check_docker_services_status(compose_file_path: &std::path::Path) -> Re
                     }
                 }
             }
-            
+
             return Err(e);
         }
     }
-    
+
     Ok(())
-} 
+}

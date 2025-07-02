@@ -1,6 +1,6 @@
 use crate::Result;
 use chrono::{DateTime, Utc};
-use duckdb::{params, Connection};
+use duckdb::{Connection, params};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tracing::{debug, info};
@@ -29,11 +29,11 @@ impl DuckDbActor {
     /// 运行Actor消息循环
     pub async fn run(mut self, mut receiver: mpsc::Receiver<DbMessage>) {
         info!("DuckDB Actor 已启动");
-        
+
         while let Some(message) = receiver.recv().await {
             self.handle_message(message).await;
         }
-        
+
         info!("DuckDB Actor 已关闭");
     }
 
@@ -48,7 +48,11 @@ impl DuckDbActor {
                 let result = self.get_config(&key);
                 let _ = respond_to.send(result);
             }
-            DbMessage::SetConfig { key, value, respond_to } => {
+            DbMessage::SetConfig {
+                key,
+                value,
+                respond_to,
+            } => {
                 let result = self.set_config(&key, &value);
                 let _ = respond_to.send(result);
             }
@@ -59,7 +63,8 @@ impl DuckDbActor {
                 status,
                 respond_to,
             } => {
-                let result = self.create_backup_record(&file_path, &service_version, &backup_type, &status);
+                let result =
+                    self.create_backup_record(&file_path, &service_version, &backup_type, &status);
                 let _ = respond_to.send(result);
             }
             DbMessage::GetAllBackups { respond_to } => {
@@ -70,11 +75,18 @@ impl DuckDbActor {
                 let result = self.get_backup_by_id(id);
                 let _ = respond_to.send(result);
             }
-            DbMessage::DeleteBackupRecord { backup_id, respond_to } => {
+            DbMessage::DeleteBackupRecord {
+                backup_id,
+                respond_to,
+            } => {
                 let result = self.delete_backup_record(backup_id);
                 let _ = respond_to.send(result);
             }
-            DbMessage::UpdateBackupFilePath { backup_id, new_path, respond_to } => {
+            DbMessage::UpdateBackupFilePath {
+                backup_id,
+                new_path,
+                respond_to,
+            } => {
                 let result = self.update_backup_file_path(backup_id, &new_path);
                 let _ = respond_to.send(result);
             }
@@ -84,7 +96,12 @@ impl DuckDbActor {
                 scheduled_at,
                 respond_to,
             } => {
-                let result = self.create_scheduled_task(&task_type, &target_version, scheduled_at, "PENDING");
+                let result = self.create_scheduled_task(
+                    &task_type,
+                    &target_version,
+                    scheduled_at,
+                    "PENDING",
+                );
                 let _ = respond_to.send(result);
             }
             DbMessage::GetPendingTasks { respond_to } => {
@@ -100,7 +117,10 @@ impl DuckDbActor {
                 let result = self.update_task_status(task_id, &status, details.as_deref());
                 let _ = respond_to.send(result);
             }
-            DbMessage::CancelPendingTasks { task_type, respond_to } => {
+            DbMessage::CancelPendingTasks {
+                task_type,
+                respond_to,
+            } => {
                 let result = self.cancel_pending_tasks(&task_type);
                 let _ = respond_to.send(result);
             }
@@ -113,7 +133,7 @@ impl DuckDbActor {
 
         // 读取并执行SQL初始化脚本
         let sql_content = include_str!("../../migrations/init_duckdb.sql");
-        
+
         // 按分号分割SQL语句并执行
         for statement in sql_content.split(';').filter(|s| !s.trim().is_empty()) {
             let trimmed = statement.trim();
@@ -128,9 +148,11 @@ impl DuckDbActor {
 
     /// 获取配置值
     fn get_config(&mut self, key: &str) -> Result<Option<String>> {
-        let mut stmt = self.connection.prepare("SELECT value FROM config WHERE key = ?")?;
+        let mut stmt = self
+            .connection
+            .prepare("SELECT value FROM config WHERE key = ?")?;
         let mut rows = stmt.query(params![key])?;
-        
+
         if let Some(row) = rows.next()? {
             let value: String = row.get(0)?;
             Ok(Some(value))
@@ -164,11 +186,9 @@ impl DuckDbActor {
         )?;
 
         // 获取最后插入的ID
-        let id: i64 = self.connection.query_row(
-            "SELECT currval('backup_id_seq')",
-            [],
-            |row| row.get(0),
-        )?;
+        let id: i64 = self
+            .connection
+            .query_row("SELECT currval('backup_id_seq')", [], |row| row.get(0))?;
 
         Ok(id)
     }
@@ -177,9 +197,9 @@ impl DuckDbActor {
     fn get_all_backups(&mut self) -> Result<Vec<BackupRecord>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, file_path, service_version, backup_type, status, created_at 
-             FROM backups ORDER BY created_at DESC"
+             FROM backups ORDER BY created_at DESC",
         )?;
-        
+
         let backup_iter = stmt.query_map([], |row| {
             Ok(BackupRecord {
                 id: row.get(0)?,
@@ -203,11 +223,11 @@ impl DuckDbActor {
     fn get_backup_by_id(&mut self, id: i64) -> Result<Option<BackupRecord>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, file_path, service_version, backup_type, status, created_at 
-             FROM backups WHERE id = ?"
+             FROM backups WHERE id = ?",
         )?;
-        
+
         let mut rows = stmt.query(params![id])?;
-        
+
         if let Some(row) = rows.next()? {
             Ok(Some(BackupRecord {
                 id: row.get(0)?,
@@ -224,7 +244,8 @@ impl DuckDbActor {
 
     /// 删除备份记录
     fn delete_backup_record(&mut self, backup_id: i64) -> Result<()> {
-        self.connection.execute("DELETE FROM backups WHERE id = ?", params![backup_id])?;
+        self.connection
+            .execute("DELETE FROM backups WHERE id = ?", params![backup_id])?;
         Ok(())
     }
 
@@ -253,11 +274,9 @@ impl DuckDbActor {
         )?;
 
         // 获取最后插入的ID
-        let id: i64 = self.connection.query_row(
-            "SELECT currval('task_id_seq')",
-            [],
-            |row| row.get(0),
-        )?;
+        let id: i64 = self
+            .connection
+            .query_row("SELECT currval('task_id_seq')", [], |row| row.get(0))?;
 
         Ok(id)
     }
@@ -268,7 +287,7 @@ impl DuckDbActor {
             "SELECT id, task_type, target_version, scheduled_at, status, details, created_at, completed_at 
              FROM scheduled_tasks WHERE status = 'PENDING' ORDER BY scheduled_at"
         )?;
-        
+
         let task_iter = stmt.query_map([], |row| {
             Ok(ScheduledTask {
                 id: row.get(0)?,
@@ -291,7 +310,12 @@ impl DuckDbActor {
     }
 
     /// 更新任务状态
-    fn update_task_status(&mut self, task_id: i64, status: &str, details: Option<&str>) -> Result<()> {
+    fn update_task_status(
+        &mut self,
+        task_id: i64,
+        status: &str,
+        details: Option<&str>,
+    ) -> Result<()> {
         if let Some(details) = details {
             self.connection.execute(
                 "UPDATE scheduled_tasks SET status = ?, details = ?, completed_at = NOW() WHERE id = ?",
@@ -315,4 +339,4 @@ impl DuckDbActor {
         )?;
         Ok(())
     }
-} 
+}

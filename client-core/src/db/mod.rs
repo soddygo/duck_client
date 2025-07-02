@@ -1,5 +1,5 @@
 // DuckDB数据库模块
-// 
+//
 // 这个模块提供了一个线程安全的DuckDB数据库接口，通过Actor模式确保
 // DuckDB的单线程访问要求，同时为客户端提供异步、类型安全的API。
 //
@@ -18,4 +18,4 @@ pub use manager::DuckDbManager;
 pub use models::{BackupRecord, ScheduledTask};
 
 // 重新导出常用类型
-pub type DbManager = DuckDbManager; 
+pub type DbManager = DuckDbManager;

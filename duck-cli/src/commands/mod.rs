@@ -8,7 +8,7 @@ mod status;
 mod update;
 
 // Status commands
-pub use status::{run_api_info, run_status};
+pub use status::{run_api_info, run_status, run_status_details};
 
 // Update commands
 pub use update::run_upgrade;

@@ -80,7 +80,7 @@ impl GitHubRepo {
 
 /// 获取当前版本
 pub fn get_current_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+    format!("v{}", env!("CARGO_PKG_VERSION"))
 }
 
 /// 从GitHub获取最新版本信息

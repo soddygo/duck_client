@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [ "client-core", "duck-cli" ]
+exclude = [ "client-ui" ]
 
 
 

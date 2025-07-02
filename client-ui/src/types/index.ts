@@ -41,13 +41,14 @@ export interface VersionInfoUI {
 
 // 更新数据目录信息接口
 export interface DataDirectoryInfo {
-  path: string;
+  work_dir: string;
   backup_path: string;
   cache_path: string;
   docker_path: string;
-  exists: boolean;
+  config_exists: boolean;
   backup_exists: boolean;
   cache_exists: boolean;
   docker_exists: boolean;
   total_size_mb: number;
+  is_initialized: boolean;
 }

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use tauri::command;
 use std::path::PathBuf;
 use std::env;
+use std::fs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ServiceStatus {
@@ -26,30 +27,145 @@ pub struct BackupInfo {
 
 #[derive(serde::Serialize)]
 struct DataDirectoryInfo {
-    path: String,
+    work_dir: String,
     backup_path: String,
     cache_path: String,
     docker_path: String,
-    exists: bool,
+    config_exists: bool,
     backup_exists: bool,
     cache_exists: bool,
     docker_exists: bool,
     total_size_mb: f64,
+    is_initialized: bool,
 }
 
-// 获取数据目录信息（基于当前工作目录）
+// duck-cli 配置文件结构（简化版本）
+#[derive(Debug, Serialize, Deserialize)]
+struct DuckConfig {
+    versions: Versions,
+    backup: BackupConfig,
+    cache: CacheConfig,
+    docker: DockerConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Versions {
+    docker_service: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BackupConfig {
+    storage_dir: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CacheConfig {
+    cache_dir: String,
+    download_dir: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct DockerConfig {
+    compose_file: String,
+}
+
+// 获取存储的工作目录路径
+fn get_stored_work_dir() -> Option<PathBuf> {
+    // 尝试从应用数据目录读取存储的工作目录
+    if let Some(app_data_dir) = dirs::data_dir() {
+        let settings_file = app_data_dir.join("duck_client").join("work_dir.txt");
+        if let Ok(content) = fs::read_to_string(settings_file) {
+            let path = PathBuf::from(content.trim());
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+// 保存工作目录路径
+fn save_work_dir(work_dir: &PathBuf) -> Result<(), String> {
+    if let Some(app_data_dir) = dirs::data_dir() {
+        let duck_client_dir = app_data_dir.join("duck_client");
+        fs::create_dir_all(&duck_client_dir)
+            .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+        
+        let settings_file = duck_client_dir.join("work_dir.txt");
+        fs::write(settings_file, work_dir.to_string_lossy().as_bytes())
+            .map_err(|e| format!("Failed to save work directory: {}", e))?;
+    }
+    Ok(())
+}
+
+// 读取 duck-cli 配置文件
+fn read_duck_config(work_dir: &PathBuf) -> Result<DuckConfig, String> {
+    let config_file = work_dir.join("config.toml");
+    if !config_file.exists() {
+        return Err("配置文件 config.toml 不存在".to_string());
+    }
+    
+    let content = fs::read_to_string(config_file)
+        .map_err(|e| format!("读取配置文件失败: {}", e))?;
+    
+    let config: DuckConfig = toml::from_str(&content)
+        .map_err(|e| format!("解析配置文件失败: {}", e))?;
+    
+    Ok(config)
+}
+
+// 获取数据目录信息
 #[command]
 async fn get_data_directory() -> Result<DataDirectoryInfo, String> {
-    let current_dir = env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {}", e))?;
+    let work_dir = get_stored_work_dir().ok_or("未设置工作目录")?;
     
-    // 各个子目录路径
-    let backup_path = current_dir.join("backups");
-    let cache_path = current_dir.join("cacheDuckData");
-    let docker_path = current_dir.join("docker");
+    // 检查基础文件存在性
+    let config_exists = work_dir.join("config.toml").exists();
+    let is_initialized = config_exists && work_dir.join("history.db").exists();
+    
+    let (backup_path, cache_path, docker_path) = if config_exists {
+        // 尝试读取配置文件获取准确路径
+        match read_duck_config(&work_dir) {
+            Ok(config) => {
+                let backup_path = if config.backup.storage_dir.starts_with("./") {
+                    work_dir.join(&config.backup.storage_dir[2..])
+                } else {
+                    PathBuf::from(&config.backup.storage_dir)
+                };
+                
+                let cache_path = if config.cache.cache_dir.starts_with("./") {
+                    work_dir.join(&config.cache.cache_dir[2..])
+                } else {
+                    PathBuf::from(&config.cache.cache_dir)
+                };
+                
+                let docker_path = if config.docker.compose_file.starts_with("./") {
+                    work_dir.join(&config.docker.compose_file[2..]).parent().unwrap().to_path_buf()
+                } else {
+                    work_dir.join("docker")
+                };
+                
+                (backup_path, cache_path, docker_path)
+            }
+            Err(_) => {
+                // 配置文件解析失败，使用默认路径
+                (
+                    work_dir.join("backups"),
+                    work_dir.join("cacheDuckData"),
+                    work_dir.join("docker")
+                )
+            }
+        }
+    } else {
+        // 配置文件不存在，使用默认路径
+        (
+            work_dir.join("backups"),
+            work_dir.join("cacheDuckData"),
+            work_dir.join("docker")
+        )
+    };
     
     // 检查目录是否存在
-    let exists = current_dir.exists();
     let backup_exists = backup_path.exists();
     let cache_exists = cache_path.exists();
     let docker_exists = docker_path.exists();
@@ -67,128 +183,237 @@ async fn get_data_directory() -> Result<DataDirectoryInfo, String> {
     }
     
     Ok(DataDirectoryInfo {
-        path: current_dir.to_string_lossy().to_string(),
+        work_dir: work_dir.to_string_lossy().to_string(),
         backup_path: backup_path.to_string_lossy().to_string(),
         cache_path: cache_path.to_string_lossy().to_string(),
         docker_path: docker_path.to_string_lossy().to_string(),
-        exists,
+        config_exists,
         backup_exists,
         cache_exists,
         docker_exists,
         total_size_mb,
+        is_initialized,
     })
 }
 
-// 打开数据目录
+// 设置工作目录
 #[command]
-async fn open_data_directory() -> Result<(), String> {
-    let current_dir = env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {}", e))?;
+async fn set_work_directory(_app: tauri::AppHandle, path: String) -> Result<(), String> {
+    let work_dir = PathBuf::from(path);
     
-    // 使用系统默认程序打开目录
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(&current_dir)
-            .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    if !work_dir.exists() {
+        return Err("选择的目录不存在".to_string());
     }
     
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&current_dir)
-            .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    if !work_dir.is_dir() {
+        return Err("选择的路径不是目录".to_string());
     }
     
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&current_dir)
-            .spawn()
-            .map_err(|e| format!("Failed to open directory: {}", e))?;
-    }
+    // 保存工作目录设置
+    save_work_dir(&work_dir)?;
     
     Ok(())
+}
+
+// 选择工作目录
+#[command]
+async fn select_work_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use std::sync::{Arc, Mutex};
+    use std::sync::mpsc;
+    
+    let (tx, rx) = mpsc::channel();
+    let tx = Arc::new(Mutex::new(Some(tx)));
+    
+    tauri_plugin_dialog::DialogExt::dialog(&app)
+        .file()
+        .pick_folder(move |folder_path| {
+            if let Ok(sender) = tx.lock() {
+                if let Some(sender) = sender.as_ref() {
+                    let _ = sender.send(folder_path);
+                }
+            }
+        });
+    
+    match rx.recv() {
+        Ok(Some(folder_path)) => {
+            let path = folder_path.to_string();
+            // 设置工作目录
+            set_work_directory(app, path.clone()).await?;
+            Ok(Some(path))
+        }
+        _ => Ok(None),
+    }
+}
+
+// 打开工作目录
+#[command]
+async fn open_data_directory() -> Result<(), String> {
+    let work_dir = get_stored_work_dir().ok_or("未设置工作目录")?;
+    open_directory(&work_dir)
 }
 
 // 打开备份目录
 #[command]
 async fn open_backup_directory() -> Result<(), String> {
-    let current_dir = env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {}", e))?;
-    let backup_path = current_dir.join("backups");
+    let data_info = get_data_directory().await?;
+    let backup_path = PathBuf::from(data_info.backup_path);
     
     // 如果备份目录不存在，创建它
     if !backup_path.exists() {
-        std::fs::create_dir_all(&backup_path)
+        fs::create_dir_all(&backup_path)
             .map_err(|e| format!("Failed to create backup directory: {}", e))?;
     }
     
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(&backup_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open backup directory: {}", e))?;
-    }
-    
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&backup_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open backup directory: {}", e))?;
-    }
-    
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&backup_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open backup directory: {}", e))?;
-    }
-    
-    Ok(())
+    open_directory(&backup_path)
 }
 
 // 打开缓存目录
 #[command]
 async fn open_cache_directory() -> Result<(), String> {
-    let current_dir = env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {}", e))?;
-    let cache_path = current_dir.join("cacheDuckData");
+    let data_info = get_data_directory().await?;
+    let cache_path = PathBuf::from(data_info.cache_path);
     
     if !cache_path.exists() {
         return Err("缓存目录不存在，请先运行 duck-cli upgrade 下载服务包".to_string());
     }
     
+    open_directory(&cache_path)
+}
+
+// 通用的打开目录函数
+fn open_directory(path: &PathBuf) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
-            .arg(&cache_path)
+            .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open cache directory: {}", e))?;
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
     }
     
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
-            .arg(&cache_path)
+            .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open cache directory: {}", e))?;
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
     }
     
     #[cfg(target_os = "linux")]
     {
         std::process::Command::new("xdg-open")
-            .arg(&cache_path)
+            .arg(path)
             .spawn()
-            .map_err(|e| format!("Failed to open cache directory: {}", e))?;
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
     }
     
     Ok(())
+}
+
+// 清理缓存
+#[command]
+async fn clear_cache() -> Result<String, String> {
+    let work_dir = get_stored_work_dir().ok_or("未设置工作目录")?;
+    
+    // 执行 duck-cli 清理缓存命令（我们稍后会添加这个命令）
+    let output = std::process::Command::new("duck-cli")
+        .arg("cache")
+        .arg("clear")
+        .current_dir(&work_dir)
+        .output()
+        .map_err(|e| format!("执行清理命令失败: {}", e))?;
+    
+    if output.status.success() {
+        Ok("缓存清理完成".to_string())
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("清理缓存失败: {}", error))
+    }
+}
+
+// 初始化客户端
+#[command]
+async fn init_client() -> Result<String, String> {
+    let work_dir = get_stored_work_dir().ok_or("未设置工作目录")?;
+    
+    let output = std::process::Command::new("duck-cli")
+        .arg("init")
+        .arg("--force")
+        .current_dir(&work_dir)
+        .output()
+        .map_err(|e| format!("执行初始化命令失败: {}", e))?;
+    
+    if output.status.success() {
+        Ok("客户端初始化完成".to_string())
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("初始化失败: {}", error))
+    }
+}
+
+// 自动部署服务
+#[command]
+async fn auto_deploy_service(port: Option<u16>) -> Result<String, String> {
+    let work_dir = get_stored_work_dir().ok_or("未设置工作目录")?;
+    
+    let mut cmd = std::process::Command::new("duck-cli");
+    cmd.arg("auto-upgrade-deploy")
+        .arg("run")
+        .current_dir(&work_dir);
+    
+    // 如果指定了端口，添加端口参数
+    if let Some(p) = port {
+        cmd.arg("--port").arg(p.to_string());
+    }
+    
+    let output = cmd.output()
+        .map_err(|e| format!("执行自动部署命令失败: {}", e))?;
+    
+    if output.status.success() {
+        Ok("自动部署完成".to_string())
+    } else {
+        let error = String::from_utf8_lossy(&output.stderr);
+        Err(format!("自动部署失败: {}", error))
+    }
+}
+
+// 初始化并自动部署（一键完成）
+#[command]
+async fn init_and_deploy(port: Option<u16>) -> Result<String, String> {
+    let work_dir = get_stored_work_dir().ok_or("未设置工作目录")?;
+    
+    // 1. 首先初始化
+    let init_output = std::process::Command::new("duck-cli")
+        .arg("init")
+        .arg("--force")
+        .current_dir(&work_dir)
+        .output()
+        .map_err(|e| format!("执行初始化命令失败: {}", e))?;
+    
+    if !init_output.status.success() {
+        let error = String::from_utf8_lossy(&init_output.stderr);
+        return Err(format!("初始化失败: {}", error));
+    }
+    
+    // 2. 然后自动部署
+    let mut deploy_cmd = std::process::Command::new("duck-cli");
+    deploy_cmd.arg("auto-upgrade-deploy")
+        .arg("run")
+        .current_dir(&work_dir);
+    
+    // 如果指定了端口，添加端口参数
+    if let Some(p) = port {
+        deploy_cmd.arg("--port").arg(p.to_string());
+    }
+    
+    let deploy_output = deploy_cmd.output()
+        .map_err(|e| format!("执行自动部署命令失败: {}", e))?;
+    
+    if deploy_output.status.success() {
+        Ok("初始化和自动部署完成".to_string())
+    } else {
+        let error = String::from_utf8_lossy(&deploy_output.stderr);
+        Err(format!("自动部署失败: {}", error))
+    }
 }
 
 // 计算目录大小的辅助函数
@@ -196,7 +421,7 @@ fn calculate_directory_size(dir: &PathBuf) -> Result<f64, Box<dyn std::error::Er
     let mut total_size = 0u64;
     
     if dir.is_dir() {
-        for entry in std::fs::read_dir(dir)? {
+        for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             
@@ -315,9 +540,15 @@ pub fn run() {
             list_backups,
             restore_backup,
             get_data_directory,
+            set_work_directory,
+            select_work_directory,
             open_data_directory,
             open_backup_directory,
             open_cache_directory,
+            clear_cache,
+            init_client,
+            auto_deploy_service,
+            init_and_deploy,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

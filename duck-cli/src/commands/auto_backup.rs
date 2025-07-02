@@ -1,10 +1,33 @@
 use crate::app::CliApp;
+use crate::cli::AutoBackupCommand;
 use crate::commands::{backup, docker_service};
 use crate::docker_utils;
 use client_core::constants::{cron, timeout};
 use client_core::error::Result;
 
 use tracing::{debug, error, info, instrument, warn};
+
+/// 运行自动备份相关命令的统一入口
+pub async fn handle_auto_backup_command(app: &mut CliApp, cmd: AutoBackupCommand) -> Result<()> {
+    match cmd {
+        AutoBackupCommand::Run => {
+            info!("🔄 开始自动备份流程...");
+            run_auto_backup(app).await
+        }
+        AutoBackupCommand::Cron { expression } => {
+            info!("配置自动备份 cron 表达式");
+            configure_cron(app, expression).await
+        }
+        AutoBackupCommand::Enabled { enabled } => {
+            info!("设置自动备份启用状态");
+            set_enabled(app, enabled).await
+        }
+        AutoBackupCommand::Status => {
+            info!("显示自动备份状态");
+            show_status(app).await
+        }
+    }
+}
 
 /// 执行自动备份流程：停止服务 -> 备份 -> 重启服务
 #[instrument(skip(app))]

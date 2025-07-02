@@ -5,9 +5,8 @@ use client_core::{
 };
 use std::path::PathBuf;
 
-use crate::cli::{AutoBackupCommand, AutoUpgradeDeployCommand, Commands, DockerServiceCommand};
+use crate::cli::Commands;
 use crate::commands;
-use tracing::info;
 
 #[derive(Clone)]
 pub struct CliApp {
@@ -90,104 +89,22 @@ impl CliApp {
                 commands::run_rollback(self, backup_id, force).await
             }
             Commands::DockerService(docker_cmd) => {
-                self.run_docker_service_command(docker_cmd).await
+                commands::run_docker_service_command(self, docker_cmd).await
             }
             Commands::Ducker { args } => commands::run_ducker(args).await,
             Commands::AutoBackup(auto_backup_cmd) => {
-                self.run_auto_backup_command(auto_backup_cmd).await
+                commands::handle_auto_backup_command(self, auto_backup_cmd).await
             }
-            Commands::AutoUpgradeDeploy(auto_upgrade_cmd) => {
-                self.run_auto_upgrade_deploy_command(auto_upgrade_cmd).await
+            Commands::AutoUpgradeDeploy(auto_upgrade_deploy_cmd) => {
+                commands::handle_auto_upgrade_deploy_command(self, auto_upgrade_deploy_cmd).await
             }
-        }
-    }
-
-    /// 运行 Docker 服务相关命令
-    async fn run_docker_service_command(&mut self, cmd: DockerServiceCommand) -> Result<()> {
-        match cmd {
-            DockerServiceCommand::Start => {
-                info!("▶️  启动 Docker 服务...");
-                commands::start_docker_services(self).await
-            }
-            DockerServiceCommand::Stop => {
-                info!("⏹️  停止 Docker 服务...");
-                commands::stop_docker_services(self).await
-            }
-            DockerServiceCommand::Restart => {
-                info!("🔄 重启 Docker 服务...");
-                commands::restart_docker_services(self).await
-            }
-            DockerServiceCommand::Status => {
-                info!("📊 检查 Docker 服务状态...");
-                commands::check_docker_services_status(self).await
-            }
-            DockerServiceCommand::RestartContainer { container_name } => {
-                info!("🔄 重启容器: {}", container_name);
-                commands::restart_container(self, &container_name).await
-            }
-            DockerServiceCommand::Extract { file, version } => {
-                info!("📦 解压 Docker 服务包...");
-                commands::extract_docker_service(self, file, version).await
-            }
-            DockerServiceCommand::LoadImages => {
-                info!("📦 加载 Docker 镜像...");
-                commands::load_docker_images(self).await
-            }
-            DockerServiceCommand::SetupTags => {
-                info!("🏷️  设置镜像标签...");
-                commands::setup_image_tags(self).await
-            }
-            DockerServiceCommand::ArchInfo => {
-                info!("🏗️  系统架构信息:");
-                commands::show_architecture_info(self).await
-            }
-            DockerServiceCommand::ListImages => {
-                info!("🔍 列出 Docker 镜像:");
-                commands::list_docker_images_with_ducker(self).await
+            Commands::Cache(cache_cmd) => {
+                commands::handle_cache_command(self, cache_cmd).await
             }
         }
     }
 
-    /// 运行自动备份相关命令
-    async fn run_auto_backup_command(&mut self, cmd: AutoBackupCommand) -> Result<()> {
-        match cmd {
-            AutoBackupCommand::Run => {
-                info!("🔄 开始自动备份流程...");
-                commands::run_auto_backup(self).await
-            }
-            AutoBackupCommand::Cron { expression } => {
-                info!("配置自动备份 cron 表达式");
-                commands::configure_cron(self, expression).await
-            }
-            AutoBackupCommand::Enabled { enabled } => {
-                info!("设置自动备份启用状态");
-                commands::set_enabled(self, enabled).await
-            }
-            AutoBackupCommand::Status => {
-                info!("显示自动备份状态");
-                commands::show_auto_backup_status(self).await
-            }
-        }
-    }
 
-    /// 运行自动升级部署相关命令
-    async fn run_auto_upgrade_deploy_command(
-        &mut self,
-        cmd: AutoUpgradeDeployCommand,
-    ) -> Result<()> {
-        match cmd {
-            AutoUpgradeDeployCommand::Run { port } => {
-                info!("🚀 开始自动升级部署流程...");
-                commands::run_auto_upgrade_deploy(self, port).await
-            }
-            AutoUpgradeDeployCommand::DelayTimeDeploy { time, unit } => {
-                info!("配置延迟自动升级部署: {} {}", time, unit);
-                commands::schedule_delayed_deploy(self, time, &unit).await
-            }
-            AutoUpgradeDeployCommand::Status => {
-                info!("显示自动升级部署状态");
-                commands::show_auto_upgrade_status(self).await
-            }
-        }
-    }
+
+
 }

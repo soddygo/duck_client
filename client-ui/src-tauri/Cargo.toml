@@ -2,8 +2,8 @@
 name = "client-ui"
 version = "0.1.0"
 description = "A Tauri App"
-authors = ["soddy"]
-edition = "2024"
+authors = ["you"]
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -27,6 +27,8 @@ anyhow = "1.0"
 
 # 添加client-core依赖
 client-core = { path = "../../client-core" }
-tauri-plugin-fs = "2.4"
-tauri-plugin-dialog = "2.3"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+dirs = "6.0"
+toml = "0.8"
 

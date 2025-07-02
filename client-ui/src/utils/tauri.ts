@@ -78,6 +78,47 @@ export const dataDirectoryAPI = {
   },
 };
 
+// 数据目录管理
+export async function getDataDirectory() {
+  return await invoke('get_data_directory');
+}
+
+export async function setWorkDirectory(path: string) {
+  return await invoke('set_work_directory', { path });
+}
+
+export async function selectWorkDirectory() {
+  return await invoke('select_work_directory');
+}
+
+export async function openDataDirectory() {
+  return await invoke('open_data_directory');
+}
+
+export async function openBackupDirectory() {
+  return await invoke('open_backup_directory');
+}
+
+export async function openCacheDirectory() {
+  return await invoke('open_cache_directory');
+}
+
+export async function clearCache() {
+  return await invoke('clear_cache');
+}
+
+export async function initClient() {
+  return await invoke('init_client');
+}
+
+export async function autoDeployService(port?: number) {
+  return await invoke('auto_deploy_service', { port });
+}
+
+export async function initAndDeploy(port?: number) {
+  return await invoke('init_and_deploy', { port });
+}
+
 // 统一的API对象
 export const tauriAPI = {
   service: serviceAPI,

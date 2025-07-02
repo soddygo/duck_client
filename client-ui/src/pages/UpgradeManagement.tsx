@@ -16,7 +16,8 @@ import {
   Input,
   message,
   Timeline,
-  Tag
+  Tag,
+  InputNumber
 } from 'antd';
 import {
   UploadOutlined,
@@ -26,8 +27,9 @@ import {
   ReloadOutlined,
   SettingOutlined,
   HistoryOutlined,
+  RocketOutlined,
 } from '@ant-design/icons';
-import { tauriAPI } from '../utils/tauri';
+import { tauriAPI, autoDeployService } from '../utils/tauri';
 
 const { Title, Text } = Typography;
 const { Step } = Steps;
@@ -60,6 +62,8 @@ interface AutoUpgradeConfig {
 
 const UpgradeManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [deployLoading, setDeployLoading] = useState(false);
+  const [port, setPort] = useState<number>(3000);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo>({
     hasUpdate: false,
     currentVersion: '1.2.0',
@@ -262,6 +266,40 @@ const UpgradeManagement: React.FC = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // 执行升级
+  // 自动部署服务
+  const handleAutoDeploy = async () => {
+    Modal.confirm({
+      title: '自动部署服务',
+      content: (
+        <div>
+          <p>将从服务器拉取最新的Docker服务并自动部署到本地。</p>
+          <p style={{ marginTop: 16 }}>
+            <strong>部署端口: </strong>
+            <InputNumber 
+              value={port} 
+              onChange={(value) => setPort(value || 3000)} 
+              min={1000} 
+              max={65535} 
+              style={{ width: 120 }}
+            />
+          </p>
+        </div>
+      ),
+      onOk: async () => {
+        try {
+          setDeployLoading(true);
+          const result = await autoDeployService(port);
+          message.success(result as string);
+        } catch (error) {
+          message.error(`自动部署失败: ${error}`);
+        } finally {
+          setDeployLoading(false);
+        }
+      },
+    });
+  };
+
   return (
     <div>
       <Title level={2}>升级管理</Title>
@@ -318,6 +356,15 @@ const UpgradeManagement: React.FC = () => {
                       </Button>
                     </>
                   )}
+                  <Button 
+                    type="primary" 
+                    icon={<RocketOutlined />}
+                    onClick={handleAutoDeploy}
+                    loading={deployLoading}
+                    style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                  >
+                    自动部署服务
+                  </Button>
                 </Space>
               </Col>
             </Row>

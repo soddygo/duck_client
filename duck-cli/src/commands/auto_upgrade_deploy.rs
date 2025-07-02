@@ -1,4 +1,5 @@
 use crate::app::CliApp;
+use crate::cli::AutoUpgradeDeployCommand;
 use crate::commands::{backup, docker_service, update};
 use crate::docker_utils;
 use client_core::constants::{docker, timeout};
@@ -8,6 +9,24 @@ use std::path::Path;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
+
+/// 运行自动升级部署相关命令的统一入口
+pub async fn handle_auto_upgrade_deploy_command(app: &mut CliApp, cmd: AutoUpgradeDeployCommand) -> Result<()> {
+    match cmd {
+        AutoUpgradeDeployCommand::Run { port } => {
+            info!("🚀 开始自动升级部署流程...");
+            run_auto_upgrade_deploy(app, port).await
+        }
+        AutoUpgradeDeployCommand::DelayTimeDeploy { time, unit } => {
+            info!("配置延迟自动升级部署: {} {}", time, unit);
+            schedule_delayed_deploy(app, time, &unit).await
+        }
+        AutoUpgradeDeployCommand::Status => {
+            info!("显示自动升级部署状态");
+            show_status(app).await
+        }
+    }
+}
 
 /// 执行自动升级部署流程
 pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16>) -> Result<()> {

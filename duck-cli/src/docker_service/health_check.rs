@@ -50,9 +50,7 @@ impl ContainerStatus {
             } else {
                 ContainerStatus::Stopped // 持续服务退出都视为异常
             }
-        } else if status.to_lowercase().contains("restarting") {
-            ContainerStatus::Starting
-        } else if status.to_lowercase().contains("created") {
+        } else if status.to_lowercase().contains("restarting") || status.to_lowercase().contains("created") {
             ContainerStatus::Starting
         } else {
             ContainerStatus::Unknown

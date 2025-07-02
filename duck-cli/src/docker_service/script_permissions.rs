@@ -659,7 +659,7 @@ impl ScriptPermissionManager {
         info!("🪟 执行Windows兼容性检查...");
 
         // 检查Docker Desktop是否运行
-        if let Err(_) = Command::new("docker").arg("version").output() {
+        if Command::new("docker").arg("version").output().is_err() {
             suggestions.push("Docker Desktop可能未运行，请启动Docker Desktop".to_string());
         }
 

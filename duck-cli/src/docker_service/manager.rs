@@ -295,7 +295,7 @@ impl DockerServiceManager {
                 // 提前检查MySQL状态，如果发现问题立即修复
                 tokio::time::sleep(Duration::from_secs(10)).await; // 等待10秒让容器启动
                 if let Ok(initial_report) = self.health_checker.check_health().await {
-                    if let Err(_) = self.check_and_fix_mysql_if_failed(&initial_report).await {
+                    if (self.check_and_fix_mysql_if_failed(&initial_report).await).is_err() {
                         warn!("MySQL初始权限修复失败，继续监控");
                     }
                 }
@@ -383,9 +383,7 @@ impl DockerServiceManager {
                                     warn!("⏰ 健康检查超时，但有部分服务正在运行");
 
                                     // 检查MySQL容器状态，如果失败尝试权限修复
-                                    if let Err(_) =
-                                        self.check_and_fix_mysql_if_failed(&report).await
-                                    {
+                                    if (self.check_and_fix_mysql_if_failed(&report).await).is_err() {
                                         warn!("MySQL权限修复失败，但继续执行");
                                     }
 
@@ -409,7 +407,7 @@ impl DockerServiceManager {
                             error!("没有发现运行中的容器");
 
                             // 如果没有容器运行，特别检查MySQL是否因为权限问题失败
-                            if let Err(_) = self.check_and_fix_mysql_if_failed(&report).await {
+                            if (self.check_and_fix_mysql_if_failed(&report).await).is_err() {
                                 warn!("MySQL权限修复失败");
                             }
 

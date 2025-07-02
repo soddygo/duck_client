@@ -1,6 +1,6 @@
 [package]
 name = "duck-cli"
-version = "1.0.9"
+version = "1.0.10"
 edition = "2024"
 description = "Docker 服务管理和升级工具"
 authors = ["soddygo"]

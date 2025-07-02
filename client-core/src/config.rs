@@ -18,7 +18,6 @@ pub struct AppConfig {
 /// 版本信息配置
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Versions {
-    pub client: String,
     pub docker_service: String,
 }
 
@@ -51,7 +50,6 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             versions: Versions {
-                client: version::version_info::CORE_VERSION.to_string(),
                 docker_service: version::version_info::DEFAULT_DOCKER_SERVICE_VERSION.to_string(),
             },
             docker: DockerConfig {
@@ -117,7 +115,6 @@ impl AppConfig {
         const TEMPLATE: &str = include_str!("../templates/config.toml.template");
 
         TEMPLATE
-            .replace("{client_version}", &self.versions.client)
             .replace("{docker_service_version}", &self.versions.docker_service)
             .replace("{compose_file}", &self.docker.compose_file)
             .replace("{backup_storage_dir}", &self.backup.storage_dir)

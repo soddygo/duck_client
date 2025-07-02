@@ -2,9 +2,8 @@
 # 本地配置文件，服务器端点已内置到程序中
 
 # [versions]
-# 统一管理客户端和服务端的版本号
+# 服务端版本管理（客户端版本已内置到程序中）
 [versions]
-client = "{client_version}"   # duck-cli 工具自身的当前版本
 docker_service = "{docker_service_version}"  # 已部署的 Docker 服务的当前版本
 
 # [docker]

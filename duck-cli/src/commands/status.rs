@@ -11,7 +11,7 @@ pub async fn run_status(app: &CliApp) -> Result<()> {
 
     // 基本信息
     info!("📋 基本信息:");
-    info!("   客户端版本: {}", app.config.versions.client);
+    info!("   客户端版本: {}", env!("CARGO_PKG_VERSION"));
     info!("   Docker服务版本: {}", app.config.versions.docker_service);
     info!("   配置文件: {}", "config.toml");
 

@@ -11,7 +11,7 @@ mod utils;
 // 通过 pub use 精确控制对外暴露的接口
 pub use app::CliApp;
 pub use cli::{Cli, Commands};
-pub use commands::run_status_details; // 导出新的status详细信息函数
+pub use commands::{run_status_details, show_client_version}; // 导出status相关函数
 pub use docker_service::{
     ContainerStatus, DockerService, DockerServiceManager, get_architecture_suffix,
     get_system_architecture,

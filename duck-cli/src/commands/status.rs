@@ -4,16 +4,17 @@ use client_core::container::{DockerManager, ServiceStatus};
 use client_core::error::Result;
 use tracing::{error, info, warn};
 
-/// 显示服务状态（完整版本，包含基本信息）
-pub async fn run_status(app: &CliApp) -> Result<()> {
+/// 显示客户端版本信息（标题和基本信息）
+pub fn show_client_version() {
     info!("🦆 Duck Client 状态");
     info!("==================");
-
-    // 基本信息
     info!("📋 基本信息:");
-    // 使用当前二进制文件的实际版本，而不是配置文件中的版本
-    info!("   客户端版本: {}", env!("CARGO_PKG_VERSION"));
+    info!("   客户端版本: v{}", env!("CARGO_PKG_VERSION"));
+}
 
+/// 显示服务状态（完整版本，包含基本信息）
+pub async fn run_status(app: &CliApp) -> Result<()> {
+    show_client_version();
     run_status_details(app).await
 }
 

@@ -13,7 +13,7 @@ pub async fn run_status(app: &CliApp) -> Result<()> {
     info!("📋 基本信息:");
     // 使用当前二进制文件的实际版本，而不是配置文件中的版本
     info!("   客户端版本: {}", env!("CARGO_PKG_VERSION"));
-    
+
     run_status_details(app).await
 }
 

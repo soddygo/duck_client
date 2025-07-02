@@ -381,7 +381,8 @@ impl DockerServiceManager {
                                     warn!("⏰ 健康检查超时，但有部分服务正在运行");
 
                                     // 检查MySQL容器状态，如果失败尝试权限修复
-                                    if (self.check_and_fix_mysql_if_failed(&report).await).is_err() {
+                                    if (self.check_and_fix_mysql_if_failed(&report).await).is_err()
+                                    {
                                         warn!("MySQL权限修复失败，但继续执行");
                                     }
 

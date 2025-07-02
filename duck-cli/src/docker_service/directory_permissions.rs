@@ -17,11 +17,6 @@ impl DirectoryPermissionManager {
         Self { work_dir }
     }
 
-
-
-
-
-
     /// 设置基础权限（回退方案）
     fn set_basic_permissions(&self) -> DockerServiceResult<()> {
         info!("🔧 应用基础权限设置（回退方案）");
@@ -89,8 +84,6 @@ impl DirectoryPermissionManager {
 
         Ok(())
     }
-
-
 
     /// 基础权限修复（兼容性方法）
     pub fn basic_permission_fix(&self) -> DockerServiceResult<()> {
@@ -451,5 +444,3 @@ impl DirectoryPermissionManager {
         Ok(())
     }
 }
-
-

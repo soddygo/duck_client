@@ -28,7 +28,7 @@ async fn main() {
         info!("==================");
         info!("📋 基本信息:");
         info!("   客户端版本: {}", env!("CARGO_PKG_VERSION"));
-        
+
         // 尝试初始化应用显示完整状态
         match CliApp::new_with_auto_config().await {
             Ok(app) => {

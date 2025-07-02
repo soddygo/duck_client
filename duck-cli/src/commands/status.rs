@@ -143,7 +143,7 @@ async fn check_docker_services_status(compose_file_path: &std::path::Path) -> Re
                                         "      {} {} - {} ({})",
                                         status_icon,
                                         service.name,
-                                        format!("{:?}", service.status).to_lowercase(),
+                                        service.status.display_name(),
                                         service.image
                                     );
 

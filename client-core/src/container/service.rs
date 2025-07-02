@@ -99,13 +99,14 @@ impl DockerManager {
             }
         }
 
-        // 4. 为未找到的compose服务创建"未知"状态的条目
+        // 4. 为未找到的compose服务创建"已停止"状态的条目
+        // 如果在compose文件中定义但没有找到对应容器，说明服务已停止
         for service_name in &compose_services {
             if !compose_services_found.contains(service_name) {
                 matched_services.push(ServiceInfo {
                     name: service_name.clone(),
-                    status: crate::container::ServiceStatus::Unknown,
-                    image: "未知".to_string(),
+                    status: crate::container::ServiceStatus::Stopped, // 改为Stopped而不是Unknown
+                    image: "未启动".to_string(), // 更准确的描述
                     ports: Vec::new(),
                 });
             }

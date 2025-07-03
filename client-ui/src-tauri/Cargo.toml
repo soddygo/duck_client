@@ -25,10 +25,26 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
 
-# 添加client-core依赖
+# 添加duck-cli依赖（包含所有UI支持函数）
+duck-cli = { path = "../../duck-cli" }
 client-core = { path = "../../client-core" }
+
+# Tauri插件
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-process = "2"
+
+# 实用工具
 dirs = "6.0"
 toml = "0.8"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# 异步和并发
+tokio-stream = "0.1"
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = "0.3"
 

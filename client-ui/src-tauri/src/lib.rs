@@ -4,6 +4,10 @@ use std::path::PathBuf;
 use std::env;
 use std::fs;
 
+// 导入新的命令模块
+mod commands;
+use commands::*;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ServiceStatus {
     pub status: String,
@@ -528,7 +532,28 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
+        .manage(AppGlobalState::default()) // 注册全局状态
         .invoke_handler(tauri::generate_handler![
+            // 新的UI优化命令
+            get_app_state,
+            set_working_directory,
+            check_system_requirements,
+            init_client_with_progress,
+            download_package_with_progress,
+            get_services_status,
+            start_services_monitoring,
+            get_ui_configuration,
+            update_ui_configuration,
+            get_current_tasks,
+            cancel_task,
+            // 新增的平台和系统检查命令
+            get_platform,
+            check_storage_space,
+            open_file_manager,
+            
+            // 保留原有命令（兼容性）
             greet,
             get_service_status,
             start_service,

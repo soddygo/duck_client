@@ -1,128 +1,341 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { ServiceStatus, VersionInfo, BackupInfo, DataDirectoryInfo } from '../types/index';
+import { listen } from '@tauri-apps/api/event';
+import type {
+  AppStateInfo,
+  SystemRequirements,
+  ServiceStatus,
+  TaskHandle,
+  UIConfiguration,
+  InitProgressEvent,
+  InitCompletedEvent,
+  DownloadProgressEvent,
+  DownloadCompletedEvent,
+  ServiceStatusUpdateEvent,
+  Platform,
+} from '../types/index.ts';
 
-// 服务状态相关API
-export const serviceAPI = {
-  // 获取服务状态
-  async getStatus(): Promise<ServiceStatus> {
-    return await invoke('get_service_status');
-  },
+// ==================== 应用状态管理 API ====================
 
-  // 启动服务
-  async start(): Promise<void> {
-    return await invoke('start_service');
-  },
-
-  // 停止服务
-  async stop(): Promise<void> {
-    return await invoke('stop_service');
-  },
-
-  // 重启服务
-  async restart(): Promise<void> {
-    return await invoke('restart_service');
-  },
-};
-
-// 更新相关API
-export const updateAPI = {
-  // 检查更新
-  async checkUpdates(): Promise<VersionInfo> {
-    return await invoke('check_updates');
-  },
-
-  // 执行升级
-  async performUpgrade(full = false, force = false): Promise<void> {
-    return await invoke('perform_upgrade', { full, force });
-  },
-};
-
-// 备份相关API
-export const backupAPI = {
-  // 创建备份
-  async create(): Promise<BackupInfo> {
-    return await invoke('create_backup');
-  },
-
-  // 列出备份
-  async list(): Promise<BackupInfo[]> {
-    return await invoke('list_backups');
-  },
-
-  // 从备份恢复
-  async restore(backupId: number, force = false): Promise<void> {
-    return await invoke('restore_backup', { backupId, force });
-  },
-};
-
-// 数据目录相关API
-export const dataDirectoryAPI = {
-  // 获取数据目录信息
-  async getInfo(): Promise<DataDirectoryInfo> {
-    return await invoke('get_data_directory');
-  },
-
-  // 打开数据目录（工作目录）
-  async openData(): Promise<void> {
-    return await invoke('open_data_directory');
-  },
-
-  // 打开备份目录
-  async openBackup(): Promise<void> {
-    return await invoke('open_backup_directory');
-  },
-
-  // 打开缓存目录
-  async openCache(): Promise<void> {
-    return await invoke('open_cache_directory');
-  },
-};
-
-// 数据目录管理
-export async function getDataDirectory() {
-  return await invoke('get_data_directory');
+export async function getAppState(): Promise<AppStateInfo> {
+  return await invoke('get_app_state');
 }
 
-export async function setWorkDirectory(path: string) {
-  return await invoke('set_work_directory', { path });
+export async function setWorkingDirectory(directory: string): Promise<void> {
+  return await invoke('set_working_directory', { directory });
 }
 
-export async function selectWorkDirectory() {
-  return await invoke('select_work_directory');
+// ==================== 系统检查 API ====================
+
+export async function checkSystemRequirements(
+  directory?: string
+): Promise<SystemRequirements> {
+  return await invoke('check_system_requirements', { directory });
 }
 
-export async function openDataDirectory() {
-  return await invoke('open_data_directory');
+// ==================== 初始化和下载 API ====================
+
+export async function initClientWithProgress(workingDir: string): Promise<string> {
+  return await invoke('init_client_with_progress', { workingDir });
 }
 
-export async function openBackupDirectory() {
-  return await invoke('open_backup_directory');
+export async function downloadPackageWithProgress(
+  url: string,
+  targetDir: string
+): Promise<string> {
+  return await invoke('download_package_with_progress', { url, targetDir });
 }
 
-export async function openCacheDirectory() {
-  return await invoke('open_cache_directory');
+// ==================== 服务管理 API ====================
+
+export async function getServicesStatus(): Promise<ServiceStatus[]> {
+  return await invoke('get_services_status');
 }
 
-export async function clearCache() {
-  return await invoke('clear_cache');
+export async function startServicesMonitoring(): Promise<void> {
+  return await invoke('start_services_monitoring');
 }
 
-export async function initClient() {
-  return await invoke('init_client');
+// ==================== 配置管理 API ====================
+
+export async function getUIConfiguration(): Promise<UIConfiguration> {
+  return await invoke('get_ui_configuration');
 }
 
-export async function autoDeployService(port?: number) {
-  return await invoke('auto_deploy_service', { port });
+export async function updateUIConfiguration(config: UIConfiguration): Promise<void> {
+  return await invoke('update_ui_configuration', { config });
 }
 
-export async function initAndDeploy(port?: number) {
-  return await invoke('init_and_deploy', { port });
+// ==================== 任务管理 API ====================
+
+export async function getCurrentTasks(): Promise<TaskHandle[]> {
+  return await invoke('get_current_tasks');
 }
 
-// 统一的API对象
-export const tauriAPI = {
-  service: serviceAPI,
-  update: updateAPI,
-  backup: backupAPI,
-  dataDirectory: dataDirectoryAPI,
-}; 
+export async function cancelTask(taskId: string): Promise<void> {
+  return await invoke('cancel_task', { taskId });
+}
+
+// ==================== 事件监听器管理 ====================
+
+export class EventManager {
+  private listeners: Map<string, () => void> = new Map();
+
+  // 监听初始化进度
+  async onInitProgress(callback: (event: InitProgressEvent) => void): Promise<void> {
+    const unlisten = await listen('init-progress', (event) => {
+      callback(event.payload as InitProgressEvent);
+    });
+    this.listeners.set('init-progress', unlisten);
+  }
+
+  // 监听初始化完成
+  async onInitCompleted(callback: (event: InitCompletedEvent) => void): Promise<void> {
+    const unlisten = await listen('init-completed', (event) => {
+      callback(event.payload as InitCompletedEvent);
+    });
+    this.listeners.set('init-completed', unlisten);
+  }
+
+  // 监听下载进度
+  async onDownloadProgress(callback: (event: DownloadProgressEvent) => void): Promise<void> {
+    const unlisten = await listen('download-progress', (event) => {
+      callback(event.payload as DownloadProgressEvent);
+    });
+    this.listeners.set('download-progress', unlisten);
+  }
+
+  // 监听下载完成
+  async onDownloadCompleted(callback: (event: DownloadCompletedEvent) => void): Promise<void> {
+    const unlisten = await listen('download-completed', (event) => {
+      callback(event.payload as DownloadCompletedEvent);
+    });
+    this.listeners.set('download-completed', unlisten);
+  }
+
+  // 监听服务状态更新
+  async onServiceStatusUpdate(callback: (event: ServiceStatusUpdateEvent) => void): Promise<void> {
+    const unlisten = await listen('service-status-update', (event) => {
+      callback(event.payload as ServiceStatusUpdateEvent);
+    });
+    this.listeners.set('service-status-update', unlisten);
+  }
+
+  // 清理所有监听器
+  cleanup(): void {
+    for (const [eventName, unlisten] of this.listeners) {
+      unlisten();
+      console.log(`已清理事件监听器: ${eventName}`);
+    }
+    this.listeners.clear();
+  }
+
+  // 清理特定监听器
+  cleanupEvent(eventName: string): void {
+    const unlisten = this.listeners.get(eventName);
+    if (unlisten) {
+      unlisten();
+      this.listeners.delete(eventName);
+      console.log(`已清理事件监听器: ${eventName}`);
+    }
+  }
+}
+
+// ==================== 工具函数 ====================
+
+// 格式化文件大小
+export function formatFileSize(bytes: number, precision = 2): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+// 格式化下载速度
+export function formatDownloadSpeed(bytesPerSecond: number): string {
+  return `${formatFileSize(bytesPerSecond)}/s`;
+}
+
+// 格式化剩余时间
+export function formatETA(seconds: number): string {
+  if (seconds < 60) {
+    return `${Math.round(seconds)} 秒`;
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.round(seconds % 60);
+    return `${minutes} 分 ${remainingSeconds} 秒`;
+  } else {
+    const hours = Math.floor(seconds / 3600);
+    const remainingMinutes = Math.floor((seconds % 3600) / 60);
+    return `${hours} 小时 ${remainingMinutes} 分钟`;
+  }
+}
+
+// 获取平台特定的路径建议
+export function getPlatformDefaultPath(platform: string): string {
+  switch (platform.toLowerCase()) {
+    case 'windows':
+      return 'C:\\Users\\%USERNAME%\\Documents\\DuckClient';
+    case 'macos':
+      return '~/Documents/DuckClient';
+    case 'linux':
+      return '~/DuckClient';
+    default:
+      return './DuckClient';
+  }
+}
+
+// 获取平台特定的Docker安装指南链接
+export function getDockerInstallGuide(platform: string): string {
+  switch (platform.toLowerCase()) {
+    case 'windows':
+      return 'https://docs.docker.com/desktop/install/windows-install/';
+    case 'macos':
+      return 'https://docs.docker.com/desktop/install/mac-install/';
+    case 'linux':
+      return 'https://docs.docker.com/engine/install/';
+    default:
+      return 'https://docs.docker.com/get-docker/';
+  }
+}
+
+// 获取平台特定的提示信息
+export function getPlatformTips(platform: string): string[] {
+  switch (platform.toLowerCase()) {
+    case 'windows':
+      return [
+        '建议选择非系统盘(如D盘)以获得更好性能',
+        '确保 Windows Defender 已将工作目录添加到排除列表',
+        '如使用 WSL，请确保 WSL2 已启用',
+      ];
+    case 'macos':
+      return [
+        '避免选择 iCloud Drive 同步的目录',
+        '建议使用 Documents 或专门的开发目录',
+        '确保 Docker Desktop 已安装并运行',
+      ];
+    case 'linux':
+      return [
+        '确保有足够的磁盘空间和 inodes',
+        '检查目录权限，避免需要 sudo 的路径',
+        '确保当前用户在 docker 组中',
+      ];
+    default:
+      return ['请确保 Docker 已安装并运行'];
+  }
+}
+
+// ==================== 错误处理工具 ====================
+
+export class TauriAPIError extends Error {
+  public code: string;
+  public details?: string;
+
+  constructor(message: string, code: string = 'UNKNOWN_ERROR', details?: string) {
+    super(message);
+    this.name = 'TauriAPIError';
+    this.code = code;
+    this.details = details;
+  }
+}
+
+// 错误处理包装器
+export async function withErrorHandling<T>(
+  apiCall: () => Promise<T>,
+  errorContext?: string
+): Promise<T> {
+  try {
+    return await apiCall();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '未知错误';
+    const context = errorContext ? `${errorContext}: ` : '';
+    
+    console.error(`${context}${message}`, error);
+    
+    throw new TauriAPIError(
+      `${context}${message}`,
+      'API_CALL_FAILED',
+      error instanceof Error ? error.stack : undefined
+    );
+  }
+}
+
+// ==================== 状态验证工具 ====================
+
+export function validateAppState(state: string): state is AppStateInfo['state'] {
+  const validStates = [
+    'UNINITIALIZED',
+    'INITIALIZING',
+    'DOWNLOADING',
+    'DEPLOYING',
+    'READY',
+    'UPGRADING',
+    'ERROR'
+  ];
+  return validStates.includes(state);
+}
+
+export function validateDownloadStatus(status: string): boolean {
+  const validStatuses = [
+    'Starting',
+    'Downloading',
+    'Paused',
+    'Completed',
+    'Failed',
+    'Cancelled'
+  ];
+  return validStatuses.includes(status);
+}
+
+// ==================== 单例事件管理器 ====================
+
+// 全局事件管理器实例
+export const globalEventManager = new EventManager();
+
+// 在应用卸载时清理
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    globalEventManager.cleanup();
+  });
+}
+
+// ==================== 平台相关工具 ====================
+
+// 获取当前平台信息
+export async function getCurrentPlatform(): Promise<Platform> {
+  try {
+    const platformName = await invoke('get_platform');
+    switch (platformName) {
+      case 'windows':
+        return 'windows';
+      case 'macos':
+        return 'macos';
+      case 'linux':
+        return 'linux';
+      default:
+        return 'linux';
+    }
+  } catch (error) {
+    console.error('获取平台信息失败:', error);
+    return 'linux';
+  }
+}
+
+// 获取存储路径建议（别名函数）
+export function getStoragePathSuggestion(platform: Platform): string {
+  return getPlatformDefaultPath(platform);
+}
+
+// 打开文件管理器
+export async function openFileManager(path: string): Promise<void> {
+  try {
+    await invoke('open_file_manager', { path });
+  } catch (error) {
+    console.error('打开文件管理器失败:', error);
+  }
+} 

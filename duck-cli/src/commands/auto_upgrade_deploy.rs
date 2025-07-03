@@ -245,26 +245,25 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
 
     // 创建升级任务记录
     let task = client_core::config_manager::AutoUpgradeTask {
-        id: None,
-        task_type: "delayed".to_string(),
+        task_id: uuid::Uuid::new_v4().to_string(),
+        task_name: format!("delayed_upgrade_{}", time),
+        schedule_time: scheduled_at,
+        upgrade_type: "delayed".to_string(),
         target_version: None, // 最新版本
-        scheduled_at,
-        delay_amount: Some(time as i32),
-        delay_unit: Some(unit.to_string()),
         status: "pending".to_string(),
-        progress: 0,
+        progress: Some(0),
         error_message: None,
-        backup_created: false,
-        backup_id: None,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     };
 
-    let task_id = {
-        let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+    let _task_id = {
+        let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
         config_manager.create_auto_upgrade_task(&task).await?
     };
 
     info!("⏰ 已安排延迟执行自动升级部署");
-    info!("   任务ID: {}", task_id);
+    info!("   任务ID: {}", task.task_id);
     info!("   延迟时间: {} {}", time, unit);
     println!("   预计执行时间: {} 后", format_duration(delay_duration));
     info!(
@@ -274,14 +273,14 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
 
     info!(
         "安排延迟执行自动升级部署: {} {}，任务ID: {}",
-        time, unit, task_id
+        time, unit, task.task_id
     );
 
     // 更新任务状态为进行中
     {
-        let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+        let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
         config_manager
-            .update_upgrade_task_status(&task_id, "in_progress", Some(0), None)
+            .update_upgrade_task_status(&task.task_id, "in_progress", Some(0), None)
             .await?;
     }
 
@@ -292,21 +291,21 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
     sleep(delay_duration).await;
 
     info!("🔔 延迟时间到，开始执行自动升级部署");
-    info!("延迟时间到，开始执行自动升级部署，任务ID: {}", task_id);
+    info!("延迟时间到，开始执行自动升级部署，任务ID: {}", task.task_id);
 
     // 执行自动升级部署
     match run_auto_upgrade_deploy(app, None).await {
         Ok(_) => {
-            let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+            let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
             config_manager
-                .update_upgrade_task_status(&task_id, "completed", Some(100), None)
+                .update_upgrade_task_status(&task.task_id, "completed", Some(100), None)
                 .await?;
             info!("✅ 延迟升级部署任务完成");
         }
         Err(e) => {
-            let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+            let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
             config_manager
-                .update_upgrade_task_status(&task_id, "failed", None, Some(&e.to_string()))
+                .update_upgrade_task_status(&task.task_id, "failed", None, Some(&e.to_string()))
                 .await?;
             error!("延迟升级部署任务失败: {}", e);
             return Err(e);
@@ -318,7 +317,7 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
 
 /// 显示自动升级部署状态
 pub async fn show_status(app: &mut CliApp) -> Result<()> {
-    let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+    let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
 
     info!("📊 自动升级部署状态信息:");
     info!("   功能状态: 已实现");
@@ -331,20 +330,21 @@ pub async fn show_status(app: &mut CliApp) -> Result<()> {
                 info!("📋 升级任务: 当前没有待执行的升级任务");
             } else {
                 info!("📋 待执行的升级任务:");
-                for (task_id, task) in tasks {
-                    info!("   - 任务ID: {}", task_id);
-                    info!("     类型: {}", task.task_type);
+                for task in tasks {
+                    info!("   - 任务ID: {}", task.task_id);
+                    info!("     名称: {}", task.task_name);
+                    info!("     类型: {}", task.upgrade_type);
                     info!("     状态: {}", task.status);
                     info!(
                         "     计划执行时间: {}",
-                        task.scheduled_at.format("%Y-%m-%d %H:%M:%S UTC")
+                        task.schedule_time.format("%Y-%m-%d %H:%M:%S UTC")
                     );
-                    if let Some(delay_amount) = task.delay_amount {
-                        if let Some(delay_unit) = &task.delay_unit {
-                            info!("     延迟设置: {} {}", delay_amount, delay_unit);
-                        }
+                    if let Some(target_version) = &task.target_version {
+                        info!("     目标版本: {}", target_version);
                     }
-                    info!("     进度: {}%", task.progress);
+                    if let Some(progress) = task.progress {
+                        info!("     进度: {}%", progress);
+                    }
                     if let Some(error) = &task.error_message {
                         warn!("     错误信息: {}", error);
                     }

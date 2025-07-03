@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { WelcomeSetup } from './pages/WelcomeSetup.tsx';
 import { InitializationProgress } from './pages/InitializationProgress.tsx';
+import Dashboard from './pages/Dashboard.tsx';
 import type { AppStateInfo } from './types/index.ts';
 import './App.css';
 
@@ -89,11 +90,7 @@ function App() {
       )}
       
       {currentPage === 'dashboard' && (
-        <div className="dashboard">
-          <h1>🦆 Duck Client Dashboard</h1>
-          <p>欢迎使用 Duck Client！</p>
-          <p>这里将是主控制面板...</p>
-        </div>
+        <Dashboard />
       )}
     </div>
   );

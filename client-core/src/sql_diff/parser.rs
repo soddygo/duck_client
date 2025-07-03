@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use tracing::{info, warn, debug};
-use crate::error::AppError;
+use crate::error::DuckError;
 use super::types::{TableColumn, TableIndex, TableDefinition};
 use sqlparser::ast::{Statement, ColumnDef, TableConstraint, DataType};
 use sqlparser::dialect::MySqlDialect;
@@ -8,7 +8,7 @@ use sqlparser::parser::Parser;
 use regex::Regex;
 
 /// 解析SQL文件中的表结构
-pub fn parse_sql_tables(sql_content: &str) -> Result<HashMap<String, TableDefinition>, AppError> {
+pub fn parse_sql_tables(sql_content: &str) -> Result<HashMap<String, TableDefinition>, DuckError> {
     let mut tables = HashMap::new();
     
     // 使用正则表达式找到 USE 语句的位置，然后从该位置开始解析后续的 CREATE TABLE 语句
@@ -83,10 +83,10 @@ pub fn parse_sql_tables(sql_content: &str) -> Result<HashMap<String, TableDefini
 }
 
 /// 使用正则表达式找到 USE 语句位置，然后提取后续的 CREATE TABLE 语句
-fn extract_create_table_statements_with_regex(sql_content: &str) -> Result<Vec<String>, AppError> {
+fn extract_create_table_statements_with_regex(sql_content: &str) -> Result<Vec<String>, DuckError> {
     // 创建正则表达式来匹配 USE 语句
     let use_regex = Regex::new(r"(?i)^\s*USE\s+[^;]+;\s*$")
-        .map_err(|e| AppError::BadRequest(format!("正则表达式编译失败: {e}")))?;
+        .map_err(|e| DuckError::custom(format!("正则表达式编译失败: {e}")))?;
     
     let lines: Vec<&str> = sql_content.lines().collect();
     let mut start_parsing_from_line = 0;
@@ -116,12 +116,12 @@ fn extract_create_table_statements_with_regex(sql_content: &str) -> Result<Vec<S
 }
 
 /// 从指定内容中提取 CREATE TABLE 语句
-fn extract_create_table_statements_from_content(content: &str) -> Result<Vec<String>, AppError> {
+fn extract_create_table_statements_from_content(content: &str) -> Result<Vec<String>, DuckError> {
     let mut statements = Vec::new();
     
     // 创建正则表达式来匹配 CREATE TABLE 语句的开始
     let create_table_regex = Regex::new(r"(?i)^\s*CREATE\s+TABLE")
-        .map_err(|e| AppError::BadRequest(format!("正则表达式编译失败: {e}")))?;
+        .map_err(|e| DuckError::custom(format!("正则表达式编译失败: {e}")))?;
     
     let lines: Vec<&str> = content.lines().collect();
     let mut current_statement = String::new();
@@ -195,7 +195,7 @@ fn extract_create_table_statements_from_content(content: &str) -> Result<Vec<Str
 }
 
 /// 解析列定义
-fn parse_column_definition(column: &ColumnDef) -> Result<TableColumn, AppError> {
+fn parse_column_definition(column: &ColumnDef) -> Result<TableColumn, DuckError> {
     let column_name = column.name.to_string();
     let data_type = format_data_type(&column.data_type);
     
@@ -247,7 +247,7 @@ fn parse_column_definition(column: &ColumnDef) -> Result<TableColumn, AppError> 
 }
 
 /// 解析表约束
-fn parse_table_constraint(constraint: &TableConstraint) -> Result<Option<TableIndex>, AppError> {
+fn parse_table_constraint(constraint: &TableConstraint) -> Result<Option<TableIndex>, DuckError> {
     match constraint {
         TableConstraint::PrimaryKey { columns, .. } => {
             let column_names: Vec<String> = columns.iter()

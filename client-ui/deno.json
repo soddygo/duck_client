@@ -14,8 +14,11 @@
     "@tauri-apps/plugin-fs": "npm:@tauri-apps/plugin-fs@^2",
     "@tauri-apps/plugin-dialog": "npm:@tauri-apps/plugin-dialog@^2",
     "@tauri-apps/plugin-shell": "npm:@tauri-apps/plugin-shell@^2",
-    "@tauri-apps/plugin-process": "npm:@tauri-apps/plugin-process@^2"
+    "@tauri-apps/plugin-process": "npm:@tauri-apps/plugin-process@^2",
+    "antd": "npm:antd@^5.22.2",
+    "@ant-design/icons": "npm:@ant-design/icons@^5.5.1"
   },
+  "nodeModulesDir": "auto",
   "compilerOptions": {
     "allowJs": true,
     "lib": ["dom", "dom.iterable", "es2020"],

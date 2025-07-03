@@ -11,6 +11,7 @@ pub mod database_manager;
 pub mod db;
 pub mod error;
 pub mod upgrade;
+pub mod sql_diff;
 
 pub use error::*;
 pub use database_manager::DatabaseManager;

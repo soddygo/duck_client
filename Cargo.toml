@@ -111,3 +111,7 @@ indicatif = "0.17"
 # 消息传递 (用于DuckDB Actor模式)
 tokio-stream = "0.1"
 
+# SQL解析 依赖的库
+sqlparser = "0.57"
+regex = "1.11"
+

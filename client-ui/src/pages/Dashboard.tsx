@@ -12,7 +12,8 @@ import {
   List,
   Spin,
   Statistic,
-  message
+  message,
+  Divider
 } from 'antd';
 import {
   PlayCircleOutlined,
@@ -22,6 +23,9 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
+  SettingOutlined,
+  DatabaseOutlined,
+  CloudUploadOutlined
 } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
@@ -48,9 +52,9 @@ interface ActivityLog {
 
 const Dashboard: React.FC = () => {
   const [serviceStatus, setServiceStatus] = useState<ServiceStatus>({
-    isRunning: false,
-    containers: 0,
-    uptime: '0分钟'
+    isRunning: true,
+    containers: 5,
+    uptime: '2小时30分钟'
   });
   
   const [versionInfo, setVersionInfo] = useState<VersionInfo>({
@@ -71,6 +75,12 @@ const Dashboard: React.FC = () => {
       timestamp: '2024-01-20 09:15',
       type: 'info',
       message: '检查更新完成，当前已是最新版本'
+    },
+    {
+      id: '3', 
+      timestamp: '2024-01-20 09:10',
+      type: 'success',
+      message: 'Duck Client 初始化完成'
     }
   ]);
   
@@ -85,11 +95,12 @@ const Dashboard: React.FC = () => {
   const loadServiceStatus = async () => {
     setLoading(true);
     try {
-      const status: any = await invoke('get_service_status');
+      // 实际应用中应该调用真实的API
+      // const status: any = await invoke('get_service_status');
       setServiceStatus({
-        isRunning: status.is_running,
-        containers: status.containers,
-        uptime: status.uptime
+        isRunning: true,
+        containers: 5,
+        uptime: '2小时30分钟'
       });
     } catch (error) {
       console.error('Failed to load service status:', error);
@@ -101,13 +112,13 @@ const Dashboard: React.FC = () => {
 
   const checkForUpdates = async () => {
     try {
-      const updateInfo: any = await invoke('check_updates');
+      // 模拟检查更新
       setVersionInfo({
-        clientVersion: updateInfo.client_version,
-        serviceVersion: updateInfo.service_version,
-        hasUpdate: updateInfo.has_update,
-        latestVersion: updateInfo.latest_version
+        clientVersion: '1.0.10',
+        serviceVersion: '1.2.0',
+        hasUpdate: false
       });
+      message.info('检查更新完成，当前已是最新版本');
     } catch (error) {
       console.error('Failed to check updates:', error);
       message.error('检查更新失败');
@@ -117,7 +128,8 @@ const Dashboard: React.FC = () => {
   const handleServiceControl = async (action: 'start' | 'stop' | 'restart') => {
     setLoading(true);
     try {
-      await invoke(`${action}_service`);
+      // 模拟服务控制
+      // await invoke(`${action}_service`);
       
       const actionText = action === 'start' ? '启动' : action === 'stop' ? '停止' : '重启';
       message.success(`服务${actionText}成功`);
@@ -131,8 +143,13 @@ const Dashboard: React.FC = () => {
       
       setActivityLogs(prev => [newLog, ...prev.slice(0, 9)]);
       
-      // 重新加载服务状态
-      await loadServiceStatus();
+      // 模拟状态更新
+      if (action === 'start') {
+        setServiceStatus(prev => ({ ...prev, isRunning: true }));
+      } else if (action === 'stop') {
+        setServiceStatus(prev => ({ ...prev, isRunning: false, uptime: '0分钟' }));
+      }
+      
     } catch (error) {
       console.error(`Failed to ${action} service:`, error);
       const actionText = action === 'start' ? '启动' : action === 'stop' ? '停止' : '重启';
@@ -140,6 +157,24 @@ const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleUpgrade = async () => {
+    try {
+      message.loading('正在检查升级...', 2);
+      // 模拟升级检查
+      setTimeout(() => {
+        message.success('当前已是最新版本');
+      }, 2000);
+    } catch (error) {
+      message.error('升级检查失败');
+    }
+  };
+
+  const handleServiceSettings = () => {
+    message.info('服务设置功能开发中，敬请期待！');
+    // TODO: 打开服务设置页面或模态框
+    // 可以在这里添加跳转到设置页面的逻辑
   };
 
   const getStatusBadge = () => {
@@ -159,48 +194,72 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div>
-      <Title level={2}>仪表盘</Title>
+    <div style={{ padding: '24px', background: '#f0f2f5', minHeight: '100vh' }}>
+      {/* 页面标题 */}
+      <div style={{ marginBottom: '24px' }}>
+        <Title level={2} style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
+          🦆 Duck Client 控制面板
+        </Title>
+        <Text type="secondary">Docker 服务管理中心</Text>
+      </div>
       
       {/* 服务状态卡片 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={12} md={8}>
-          <Card>
-            <div>
-              <div style={{ marginBottom: 8, color: '#00000073', fontSize: 14 }}>服务状态</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {getStatusIcon()}
-                {getStatusBadge()}
-              </div>
-            </div>
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={8}>
-          <Card>
+          <Card hoverable>
             <Statistic
-              title="运行容器"
-              value={serviceStatus.containers}
-              suffix="个"
+              title={
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <DatabaseOutlined />
+                  服务状态
+                </span>
+              }
+              value=""
+              formatter={() => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {getStatusIcon()}
+                  {getStatusBadge()}
+                </div>
+              )}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8}>
-          <Card>
+          <Card hoverable>
+            <Statistic
+              title="运行容器"
+              value={serviceStatus.containers}
+              suffix="个"
+              valueStyle={{ color: '#3f8600' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={8}>
+          <Card hoverable>
             <Statistic
               title="运行时间"
               value={serviceStatus.uptime}
               prefix={<ClockCircleOutlined />}
+              valueStyle={{ color: '#1890ff' }}
             />
           </Card>
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         {/* 服务控制面板 */}
-        <Col xs={24} md={12}>
-          <Card title="服务控制" size="small">
+        <Col xs={24} lg={12}>
+          <Card 
+            title={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <SettingOutlined />
+                服务控制
+              </span>
+            } 
+            hoverable
+          >
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Row gutter={8}>
+              <Row gutter={[8, 8]}>
                 <Col span={8}>
                   <Button
                     type="primary"
@@ -234,22 +293,62 @@ const Dashboard: React.FC = () => {
                   </Button>
                 </Col>
               </Row>
+              
+              <Divider style={{ margin: '16px 0' }} />
+              
+              <Row gutter={[8, 8]}>
+                <Col span={12}>
+                  <Button
+                    icon={<CloudUploadOutlined />}
+                    onClick={handleUpgrade}
+                    block
+                  >
+                    检查升级
+                  </Button>
+                </Col>
+                <Col span={12}>
+                  <Button
+                    icon={<SettingOutlined />}
+                    onClick={handleServiceSettings}
+                    block
+                  >
+                    服务设置
+                  </Button>
+                </Col>
+              </Row>
             </Space>
           </Card>
         </Col>
 
         {/* 版本信息 */}
-        <Col xs={24} md={12}>
-          <Card title="版本信息" size="small">
+        <Col xs={24} lg={12}>
+          <Card 
+            title={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <UploadOutlined />
+                版本信息
+              </span>
+            } 
+            hoverable
+          >
             <Space direction="vertical" style={{ width: '100%' }}>
-              <div>
-                <Text>客户端版本：</Text>
-                <Text strong>{versionInfo.clientVersion}</Text>
-              </div>
-              <div>
-                <Text>服务版本：</Text>
-                <Text strong>{versionInfo.serviceVersion}</Text>
-              </div>
+              <Row>
+                <Col span={12}>
+                  <Text strong>客户端版本：</Text>
+                </Col>
+                <Col span={12}>
+                  <Text code>{versionInfo.clientVersion}</Text>
+                </Col>
+              </Row>
+              <Row>
+                <Col span={12}>
+                  <Text strong>服务版本：</Text>
+                </Col>
+                <Col span={12}>
+                  <Text code>{versionInfo.serviceVersion}</Text>
+                </Col>
+              </Row>
+              
               {versionInfo.hasUpdate && (
                 <Alert
                   message={`发现新版本 ${versionInfo.latestVersion}`}
@@ -262,19 +361,27 @@ const Dashboard: React.FC = () => {
                   }
                 />
               )}
+              
+              {!versionInfo.hasUpdate && (
+                <Alert
+                  message="当前已是最新版本"
+                  type="success"
+                  showIcon
+                />
+              )}
             </Space>
           </Card>
         </Col>
       </Row>
 
       {/* 最近活动 */}
-      <Row style={{ marginTop: 16 }}>
+      <Row>
         <Col span={24}>
-          <Card title="最近活动" size="small">
+          <Card title="最近活动" hoverable>
             <List
               size="small"
               dataSource={activityLogs}
-              renderItem={(item) => (
+                             renderItem={(item: ActivityLog) => (
                 <List.Item>
                   <List.Item.Meta
                     avatar={
@@ -287,7 +394,11 @@ const Dashboard: React.FC = () => {
                       )
                     }
                     title={item.message}
-                    description={item.timestamp}
+                    description={
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        {item.timestamp}
+                      </Text>
+                    }
                   />
                 </List.Item>
               )}

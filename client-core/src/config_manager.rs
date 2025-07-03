@@ -2,7 +2,7 @@ use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::{Value, json};
+use serde_json::Value;
 use serde::{Serialize, Deserialize};
 use tracing::{debug, warn};
 use crate::DatabaseManager;

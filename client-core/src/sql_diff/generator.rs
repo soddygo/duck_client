@@ -1,6 +1,6 @@
 
 use tracing::info;
-use crate::error::AppError;
+use crate::error::DuckError;
 use super::types::{TableColumn, TableIndex, TableDefinition};
 use super::parser::parse_sql_tables;
 use super::differ::generate_mysql_diff;
@@ -12,7 +12,7 @@ pub fn generate_schema_diff(
     to_sql: &str,
     from_version: Option<&str>,
     to_version: &str,
-) -> Result<(String, String), AppError> {
+) -> Result<(String, String), DuckError> {
     match from_sql {
         None => {
             // 初始版本，返回完整的创建脚本

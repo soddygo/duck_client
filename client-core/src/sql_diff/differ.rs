@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use tracing::info;
-use crate::error::AppError;
+use crate::error::DuckError;
 use super::types::{TableDefinition, TableColumn, TableIndex};
 use super::generator::{generate_create_table_sql, generate_column_sql};
 
@@ -8,7 +8,7 @@ use super::generator::{generate_create_table_sql, generate_column_sql};
 pub fn generate_mysql_diff(
     from_tables: &HashMap<String, TableDefinition>,
     to_tables: &HashMap<String, TableDefinition>,
-) -> Result<String, AppError> {
+) -> Result<String, DuckError> {
     let mut diff_sql = Vec::new();
     
     // 添加注释头

@@ -1,6 +1,7 @@
 use crate::Result;
 use chrono::{DateTime, Utc};
 use duckdb::{Connection, params};
+use serde_json;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tracing::{debug, info};
@@ -150,12 +151,20 @@ impl DuckDbActor {
     fn get_config(&mut self, key: &str) -> Result<Option<String>> {
         let mut stmt = self
             .connection
-            .prepare("SELECT value FROM config WHERE key = ?")?;
+            .prepare("SELECT config_value FROM app_config WHERE config_key = ?")?;
         let mut rows = stmt.query(params![key])?;
 
         if let Some(row) = rows.next()? {
-            let value: String = row.get(0)?;
-            Ok(Some(value))
+            let json_value: String = row.get(0)?;
+            // 尝试解析JSON，如果是字符串则去掉引号
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_value) {
+                match parsed {
+                    serde_json::Value::String(s) => Ok(Some(s)),
+                    _ => Ok(Some(json_value)), // 非字符串类型直接返回JSON
+                }
+            } else {
+                Ok(Some(json_value)) // JSON解析失败，返回原始值
+            }
         } else {
             Ok(None)
         }
@@ -163,10 +172,19 @@ impl DuckDbActor {
 
     /// 设置配置值
     fn set_config(&mut self, key: &str, value: &str) -> Result<()> {
-        self.connection.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
-            params![key, value],
+        // 首先尝试更新现有配置
+        let updated = self.connection.execute(
+            "UPDATE app_config SET config_value = ?, updated_at = CURRENT_TIMESTAMP WHERE config_key = ?",
+            params![format!("\"{}\"", value), key],
         )?;
+        
+        // 如果没有更新任何行，则插入新配置
+        if updated == 0 {
+            self.connection.execute(
+                "INSERT INTO app_config (config_key, config_value, config_type, category, is_system_config, is_user_editable) VALUES (?, ?, 'STRING', 'system', TRUE, TRUE)",
+                params![key, format!("\"{}\"", value)],
+            )?;
+        }
         Ok(())
     }
 

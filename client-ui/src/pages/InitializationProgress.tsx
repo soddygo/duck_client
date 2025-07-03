@@ -388,7 +388,7 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
             </div>
             
             <div className="completion-actions">
-              <button className="btn-primary large">
+              <button onClick={onComplete} className="btn-primary large">
                 🚀 进入控制台
               </button>
             </div>

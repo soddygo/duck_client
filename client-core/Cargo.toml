@@ -70,5 +70,9 @@ indicatif = { workspace = true, optional = true }
 # 系统信息
 num_cpus = "1.16"
 
+# SQL解析 依赖的库
+sqlparser = { workspace = true }
+regex = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }

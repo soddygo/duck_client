@@ -1,11 +1,14 @@
-use duck_cli::ui_support::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Emitter};
 use tokio::sync::RwLock;
 use uuid::Uuid;
+use tokio_stream::StreamExt;
+use duck_cli::{
+    init_with_progress, download_with_progress, get_system_info, 
+    get_ui_config, update_ui_config, monitor_services
+};
 
 // 状态数据结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +43,7 @@ pub struct AppGlobalState {
     pub working_directory: RwLock<Option<PathBuf>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskHandle {
     pub task_id: String,
     pub task_type: String,
@@ -107,7 +111,7 @@ pub async fn check_system_requirements(
     
     // 检查存储空间
     let available_space_gb = if let Some(dir) = directory {
-        let path = PathBuf::from(dir);
+        let _path = PathBuf::from(dir);
         system_info.disk_space.available as f64 / (1024.0 * 1024.0 * 1024.0)
     } else {
         system_info.disk_space.available as f64 / (1024.0 * 1024.0 * 1024.0)
@@ -159,13 +163,21 @@ pub async fn init_client_with_progress(
     let task_id_clone = task_id.clone();
     
     // 启动初始化任务
+    let cleanup_handle = app_handle_clone.clone();
+    let cleanup_task_id = task_id_clone.clone();
+    
     tokio::spawn(async move {
+        let app_handle_for_progress = app_handle_clone.clone();
+        let task_id_for_progress = task_id_clone.clone();
+        let app_handle_for_completion = app_handle_clone.clone();
+        let task_id_for_completion = task_id_clone.clone();
+        
         let result = init_with_progress(&path, move |progress| {
-            let task_id = task_id_clone.clone();
-            let app_handle = app_handle_clone.clone();
+            let task_id = task_id_for_progress.clone();
+            let app_handle = app_handle_for_progress.clone();
             
             // 发送进度事件到前端
-            let _ = app_handle.emit_all("init-progress", InitProgressEvent {
+            let _ = app_handle.emit("init-progress", InitProgressEvent {
                 task_id: task_id.clone(),
                 stage: progress.stage,
                 message: progress.message,
@@ -176,7 +188,7 @@ pub async fn init_client_with_progress(
             
             // 更新任务状态
             tokio::spawn(async move {
-                if let Ok(state) = app_handle.try_state::<AppGlobalState>() {
+                if let Some(state) = app_handle.try_state::<AppGlobalState>() {
                     let mut tasks = state.current_tasks.write().await;
                     if let Some(task) = tasks.get_mut(&task_id) {
                         task.progress = progress.percentage;
@@ -190,28 +202,29 @@ pub async fn init_client_with_progress(
             });
         }).await;
         
+        // 立即处理结果并发送完成事件，避免在await之后使用result
+        let (success, error_message) = match result {
+            Ok(_) => (true, None),
+            Err(e) => (false, Some(e.to_string())),
+        };
+        
         // 发送完成事件
-        match result {
-            Ok(_) => {
-                let _ = app_handle_clone.emit_all("init-completed", InitCompletedEvent {
-                    task_id: task_id_clone.clone(),
-                    success: true,
-                    error: None,
-                });
-            }
-            Err(e) => {
-                let _ = app_handle_clone.emit_all("init-completed", InitCompletedEvent {
-                    task_id: task_id_clone.clone(),
-                    success: false,
-                    error: Some(e.to_string()),
-                });
-            }
-        }
+        let _ = app_handle_for_completion.emit("init-completed", InitCompletedEvent {
+            task_id: task_id_for_completion,
+            success,
+            error: error_message,
+        });
+    });
+    
+    // 单独的清理任务
+    tokio::spawn(async move {
+        // 等待一小段时间让主任务完成
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         
         // 清理任务
-        if let Ok(state) = app_handle_clone.try_state::<AppGlobalState>() {
+        if let Some(state) = cleanup_handle.try_state::<AppGlobalState>() {
             let mut tasks = state.current_tasks.write().await;
-            tasks.remove(&task_id_clone);
+            tasks.remove(&cleanup_task_id);
         }
     });
     
@@ -232,9 +245,14 @@ pub async fn download_package_with_progress(
     
     // 启动下载任务
     tokio::spawn(async move {
+        let app_handle_for_progress = app_handle_clone.clone();
+        let task_id_for_progress = task_id_clone.clone();
+        let app_handle_for_completion = app_handle_clone.clone();
+        let task_id_for_completion = task_id_clone.clone();
+        
         let result = download_with_progress(&url, &target_path, move |progress| {
-            let _ = app_handle_clone.emit_all("download-progress", DownloadProgressEvent {
-                task_id: task_id_clone.clone(),
+            let _ = app_handle_for_progress.emit("download-progress", DownloadProgressEvent {
+                task_id: task_id_for_progress.clone(),
                 file_name: progress.file_name,
                 downloaded_bytes: progress.downloaded_bytes,
                 total_bytes: progress.total_bytes,
@@ -245,23 +263,18 @@ pub async fn download_package_with_progress(
             });
         }).await;
         
+        // 立即处理结果并发送完成事件，避免在await之后使用result
+        let (success, error_message) = match result {
+            Ok(_) => (true, None),
+            Err(e) => (false, Some(e.to_string())),
+        };
+        
         // 发送完成事件
-        match result {
-            Ok(_) => {
-                let _ = app_handle_clone.emit_all("download-completed", DownloadCompletedEvent {
-                    task_id: task_id_clone.clone(),
-                    success: true,
-                    error: None,
-                });
-            }
-            Err(e) => {
-                let _ = app_handle_clone.emit_all("download-completed", DownloadCompletedEvent {
-                    task_id: task_id_clone.clone(),
-                    success: false,
-                    error: Some(e.to_string()),
-                });
-            }
-        }
+        let _ = app_handle_for_completion.emit("download-completed", DownloadCompletedEvent {
+            task_id: task_id_for_completion,
+            success,
+            error: error_message,
+        });
     });
     
     Ok(task_id)
@@ -279,7 +292,6 @@ pub async fn get_services_status() -> Result<Vec<ServiceStatusInfo>, String> {
         if let Ok(service) = tokio::time::timeout(
             std::time::Duration::from_millis(100),
             async { 
-                use tokio_stream::StreamExt;
                 services_stream.next().await 
             }
         ).await {
@@ -322,7 +334,6 @@ pub async fn start_services_monitoring(app_handle: AppHandle) -> Result<(), Stri
     tokio::spawn(async move {
         let mut services_stream = monitor_services().await;
         
-        use tokio_stream::StreamExt;
         while let Some(service_status) = services_stream.next().await {
             let service_info = ServiceStatusInfo {
                 name: service_status.name,
@@ -334,7 +345,7 @@ pub async fn start_services_monitoring(app_handle: AppHandle) -> Result<(), Stri
                 ports: service_status.ports,
             };
             
-            let _ = app_handle_clone.emit_all("service-status-update", service_info);
+            let _ = app_handle_clone.emit("service-status-update", service_info);
         }
     });
     
@@ -512,26 +523,142 @@ pub struct StorageInfo {
 pub async fn check_storage_space(path: String) -> Result<StorageInfo, String> {
     let path_buf = PathBuf::from(&path);
     
-    // 简化的存储空间检查
+    // 确保路径存在，如果不存在则创建父目录用于检测
+    let check_path = if path_buf.exists() {
+        path_buf
+    } else {
+        // 如果路径不存在，使用父目录或根目录进行检测
+        path_buf.parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| {
+                #[cfg(target_os = "windows")]
+                { PathBuf::from("C:\\") }
+                #[cfg(not(target_os = "windows"))]
+                { PathBuf::from("/") }
+            })
+    };
+    
     let required_bytes = 60u64 * 1024 * 1024 * 1024; // 60GB
     
-    // 这里返回模拟数据，实际实现需要系统调用
-    let total_bytes = 500u64 * 1024 * 1024 * 1024; // 500GB
-    let available_bytes = 200u64 * 1024 * 1024 * 1024; // 200GB
-    let used_bytes = total_bytes - available_bytes;
-    let available_space_gb = available_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
-    let required_space_gb = required_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
-    let sufficient = available_bytes >= required_bytes;
+    // 使用跨平台的方法获取磁盘空间
+    #[cfg(target_os = "windows")]
+    {
+        use std::ffi::CString;
+        use std::os::windows::ffi::OsStrExt;
+        use winapi::um::fileapi::GetDiskFreeSpaceExW;
+        use winapi::shared::minwindef::BOOL;
+        
+        let path_wide: Vec<u16> = check_path.as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        
+        let mut free_bytes_available = 0u64;
+        let mut total_number_of_bytes = 0u64;
+        let mut total_number_of_free_bytes = 0u64;
+        
+        let result = unsafe {
+            GetDiskFreeSpaceExW(
+                path_wide.as_ptr(),
+                &mut free_bytes_available,
+                &mut total_number_of_bytes,
+                &mut total_number_of_free_bytes,
+            )
+        };
+        
+        if result == 0 {
+            return Err("无法获取磁盘空间信息".to_string());
+        }
+        
+        let total_bytes = total_number_of_bytes;
+        let available_bytes = free_bytes_available;
+        let used_bytes = total_bytes - available_bytes;
+        let available_space_gb = available_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        let required_space_gb = required_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        let sufficient = available_bytes >= required_bytes;
+        
+        Ok(StorageInfo {
+            path,
+            total_bytes,
+            available_bytes,
+            used_bytes,
+            available_space_gb,
+            required_space_gb,
+            sufficient,
+        })
+    }
     
-    Ok(StorageInfo {
-        path,
-        total_bytes,
-        available_bytes,
-        used_bytes,
-        available_space_gb,
-        required_space_gb,
-        sufficient,
-    })
+    #[cfg(target_os = "macos")]
+    {
+        use std::ffi::CString;
+        use libc::{statvfs, c_char};
+        
+        let path_c = CString::new(check_path.to_string_lossy().as_bytes())
+            .map_err(|e| format!("路径转换失败: {}", e))?;
+        
+        let mut stat: statvfs = unsafe { std::mem::zeroed() };
+        let result = unsafe { statvfs(path_c.as_ptr(), &mut stat) };
+        
+        if result != 0 {
+            return Err("无法获取磁盘空间信息".to_string());
+        }
+        
+        let total_bytes = (stat.f_blocks as u64) * (stat.f_frsize as u64);
+        let available_bytes = (stat.f_bavail as u64) * (stat.f_frsize as u64);
+        let used_bytes = total_bytes - available_bytes;
+        let available_space_gb = available_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        let required_space_gb = required_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        let sufficient = available_bytes >= required_bytes;
+        
+        Ok(StorageInfo {
+            path,
+            total_bytes,
+            available_bytes,
+            used_bytes,
+            available_space_gb,
+            required_space_gb,
+            sufficient,
+        })
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        use std::ffi::CString;
+        use libc::{statvfs, c_char};
+        
+        let path_c = CString::new(check_path.to_string_lossy().as_bytes())
+            .map_err(|e| format!("路径转换失败: {}", e))?;
+        
+        let mut stat: statvfs = unsafe { std::mem::zeroed() };
+        let result = unsafe { statvfs(path_c.as_ptr(), &mut stat) };
+        
+        if result != 0 {
+            return Err("无法获取磁盘空间信息".to_string());
+        }
+        
+        let total_bytes = (stat.f_blocks as u64) * (stat.f_frsize as u64);
+        let available_bytes = (stat.f_bavail as u64) * (stat.f_frsize as u64);
+        let used_bytes = total_bytes - available_bytes;
+        let available_space_gb = available_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        let required_space_gb = required_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+        let sufficient = available_bytes >= required_bytes;
+        
+        Ok(StorageInfo {
+            path,
+            total_bytes,
+            available_bytes,
+            used_bytes,
+            available_space_gb,
+            required_space_gb,
+            sufficient,
+        })
+    }
+    
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        // 对于其他平台，返回错误
+        Err("当前平台不支持磁盘空间检测".to_string())
+    }
 }
 
 #[tauri::command]

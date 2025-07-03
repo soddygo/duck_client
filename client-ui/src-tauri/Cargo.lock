@@ -1047,6 +1047,7 @@ dependencies = [
  "client-core",
  "dirs",
  "duck-cli",
+ "libc",
  "serde",
  "serde_json",
  "tauri",
@@ -1062,6 +1063,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "winapi",
 ]
 
 [[package]]

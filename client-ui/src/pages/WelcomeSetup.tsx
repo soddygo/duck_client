@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Platform, SystemRequirements, StorageInfo } from '../types/index.ts';
-import { getCurrentPlatform, getStoragePathSuggestion, openFileManager } from '../utils/tauri.ts';
+import { getCurrentPlatform, getStoragePathSuggestion } from '../utils/tauri.ts';
 
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -49,15 +49,14 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
       if (workingDir) {
         const storage: StorageInfo = await invoke('check_storage_space', { path: workingDir });
         setStorageInfo(storage);
-        
-        // 判断是否可以继续
-        const canContinue = requirements.os_supported && 
-                           requirements.docker_available && 
-                           storage.available_bytes >= 60 * 1024 * 1024 * 1024; // 60GB
-        setCanProceed(canContinue);
       }
+      
+      // 只要有工作目录就可以继续，所有检查都是警告性质
+      setCanProceed(!!workingDir);
     } catch (error) {
       console.error('系统检查失败:', error);
+      // 即使检查失败，也允许用户继续
+      setCanProceed(!!workingDir);
     } finally {
       setIsChecking(false);
     }
@@ -100,6 +99,12 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  // 获取检查项状态
+  const getCheckStatus = (condition: boolean, isWarning: boolean = false): 'success' | 'warning' | 'error' => {
+    if (condition) return 'success';
+    return isWarning ? 'warning' : 'error';
+  };
+
   // 平台特定提示
   const getPlatformTips = (): string[] => {
     const tips: Record<Platform, string[]> = {
@@ -119,130 +124,216 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
         '• 确保当前用户在 docker 组中'
       ]
     };
-    return tips[platform] || [];
+    return tips[platform as Platform] || [];
+  };
+
+  // 获取警告信息
+  const getWarnings = (): string[] => {
+    const warnings: string[] = [];
+    
+    if (systemChecks && !systemChecks.os_supported) {
+      warnings.push('操作系统可能不完全支持，建议升级系统');
+    }
+    
+    if (systemChecks && !systemChecks.docker_available) {
+      warnings.push('Docker 不可用，需要先安装并启动 Docker');
+    }
+    
+    if (storageInfo && storageInfo.available_bytes < 60 * 1024 * 1024 * 1024) {
+      warnings.push(`存储空间不足60GB，当前可用${formatBytes(storageInfo.available_bytes)}，可能影响服务运行`);
+    }
+    
+    return warnings;
   };
 
   return (
-    <div className="welcome-setup">
-      <div className="container">
-        {/* 标题部分 */}
-        <div className="header">
-          <h1>🦆 Duck Client</h1>
-          <h2>Docker 服务管理平台</h2>
-          <p>欢迎使用 Duck Client！让我们开始配置您的第一个服务吧</p>
+    <div className="h-screen w-screen bg-gradient-to-br from-blue-400 via-purple-500 to-purple-600 flex flex-col">
+      {/* 固定标题栏 */}
+      <div className="flex-shrink-0 pt-8 pb-6 px-4">
+        <div className="text-center text-white space-y-3">
+          <h1 className="text-4xl md:text-5xl font-bold">🦆 Duck Client</h1>
+          <h2 className="text-xl md:text-2xl font-semibold opacity-90">Docker 服务管理平台</h2>
+          <p className="text-base md:text-lg opacity-80 max-w-2xl mx-auto">
+            欢迎使用 Duck Client！让我们开始配置您的第一个服务吧
+          </p>
         </div>
+      </div>
 
-        {/* 工作目录选择 */}
-        <div className="section">
-          <h3>📁 选择工作目录</h3>
-          <div className="directory-selector">
-            <input
-              type="text"
-              value={workingDir}
-              onChange={(e) => setWorkingDir(e.target.value)}
-              placeholder={`推荐路径: ${suggestedPath}`}
-              className="directory-input"
-            />
-            <button onClick={selectWorkingDirectory} className="browse-button">
-              浏览...
-            </button>
-          </div>
-        </div>
-
-        {/* 存储空间要求 */}
-        {storageInfo && (
-          <div className="section">
-            <h3>💾 存储空间要求</h3>
-            <div className="storage-info">
-              <div className="storage-item">
-                <span>可用空间:</span>
-                <span className={(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? 'sufficient' : 'insufficient'}>
-                  {formatBytes(storageInfo?.available_bytes ?? 0)} {(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? '✅' : '❌'}
-                </span>
-              </div>
-              <div className="storage-item">
-                <span>所需空间:</span>
-                <span>至少 60 GB</span>
-              </div>
-              <div className="requirements">
-                <div>• Docker 服务包: ~14 GB</div>
-                <div>• 解压后文件: ~25 GB</div>
-                <div>• 数据和日志: ~10 GB</div>
-                <div>• 备份预留: ~15 GB</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 时间预估 */}
-        <div className="section">
-          <h3>⏰ 时间预估</h3>
-          <div className="time-estimates">
-            <div>• 首次部署需要 30-60 分钟</div>
-            <div>• 包含下载、解压、镜像加载等步骤</div>
-            <div>• 支持断点续传，网络中断不会丢失进度</div>
-            <div>• 可随时暂停和恢复下载</div>
-          </div>
-        </div>
-
-        {/* 网络要求 */}
-        <div className="section">
-          <h3>📶 网络要求</h3>
-          <div className="network-requirements">
-            <div>• 建议稳定的网络连接（10 Mbps 以上）</div>
-            <div>• 支持断点续传，网络不稳定时会自动重试</div>
-            <div>• 可在网络条件好的时候分批下载</div>
-          </div>
-        </div>
-
-        {/* 平台特定提示 */}
-        <div className="section">
-          <h3>{platform.charAt(0).toUpperCase() + platform.slice(1)} 平台提示</h3>
-          <div className="platform-tips">
-            {getPlatformTips().map((tip, index) => (
-              <div key={index}>{tip}</div>
-            ))}
-          </div>
-        </div>
-
-        {/* 系统检查结果 */}
-        {systemChecks && (
-          <div className="section">
-            <h3>🔍 系统检查</h3>
-            <div className="system-checks">
-              <div className={`check-item ${systemChecks.os_supported ? 'pass' : 'fail'}`}>
-                操作系统支持: {systemChecks.os_supported ? '✅' : '❌'}
-              </div>
-              <div className={`check-item ${systemChecks.docker_available ? 'pass' : 'fail'}`}>
-                Docker 可用: {systemChecks.docker_available ? '✅' : '❌'}
-              </div>
-              <div className={`check-item ${(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? 'pass' : 'fail'}`}>
-                存储空间充足: {(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? '✅' : '❌'}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 操作按钮 */}
-        <div className="actions">
-          {isChecking ? (
-            <button disabled className="button-primary">
-              🔍 检查系统中...
-            </button>
-          ) : canProceed ? (
-            <button onClick={startInitialization} className="button-primary">
-              🚀 开始初始化
-            </button>
-          ) : (
-            <div>
-              <button onClick={performSystemChecks} className="button-secondary">
-                🔄 重新检查
+      {/* 可滚动内容区域 */}
+      <div className="flex-1 overflow-y-auto px-4 pb-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* 工作目录选择 */}
+          <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              📁 选择工作目录
+            </h3>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={workingDir}
+                onChange={(e) => setWorkingDir(e.target.value)}
+                placeholder={`推荐路径: ${suggestedPath}`}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              />
+              <button 
+                onClick={selectWorkingDirectory}
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 whitespace-nowrap"
+              >
+                浏览...
               </button>
-              <p className="warning">
-                ⚠️ 请解决上述问题后再继续
-              </p>
+            </div>
+          </div>
+
+          {/* 存储空间信息 */}
+          {storageInfo && (
+            <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                💾 存储空间信息
+              </h3>
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">可用空间:</span>
+                  <span className={`font-semibold ${(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? 'text-green-600' : 'text-amber-600'}`}>
+                    {formatBytes(storageInfo?.available_bytes ?? 0)} {(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? '✅' : '⚠️'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">建议空间:</span>
+                  <span className="text-gray-800">至少 60 GB</span>
+                </div>
+                <div className="pt-2 border-t border-gray-200 text-sm text-gray-600 space-y-1">
+                  <div>• Docker 服务包: ~14 GB</div>
+                  <div>• 解压后文件: ~25 GB</div>
+                  <div>• 数据和日志: ~10 GB</div>
+                  <div>• 备份预留: ~15 GB</div>
+                </div>
+              </div>
             </div>
           )}
+
+          {/* 时间预估 */}
+          <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              ⏰ 时间预估
+            </h3>
+            <div className="bg-blue-50 rounded-lg p-4 space-y-2 text-blue-800">
+              <div>• 首次部署需要 30-60 分钟</div>
+              <div>• 包含下载、解压、镜像加载等步骤</div>
+              <div>• 支持断点续传，网络中断不会丢失进度</div>
+              <div>• 可随时暂停和恢复下载</div>
+            </div>
+          </div>
+
+          {/* 网络要求 */}
+          <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              📶 网络要求
+            </h3>
+            <div className="bg-blue-50 rounded-lg p-4 space-y-2 text-blue-800">
+              <div>• 建议稳定的网络连接（10 Mbps 以上）</div>
+              <div>• 支持断点续传，网络不稳定时会自动重试</div>
+              <div>• 可在网络条件好的时候分批下载</div>
+            </div>
+          </div>
+
+          {/* 平台特定提示 */}
+          <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">
+              {platform.charAt(0).toUpperCase() + platform.slice(1)} 平台提示
+            </h3>
+            <div className="bg-purple-50 rounded-lg p-4 space-y-2 text-purple-800">
+              {getPlatformTips().map((tip, index) => (
+                <div key={index}>{tip}</div>
+              ))}
+            </div>
+          </div>
+
+          {/* 系统检查结果 */}
+          {systemChecks && (
+            <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                🔍 系统检查
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50">
+                  <span className="font-medium text-gray-700">操作系统支持</span>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    systemChecks.os_supported 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {systemChecks.os_supported ? '✅ 支持' : '⚠️ 不支持'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50">
+                  <span className="font-medium text-gray-700">Docker 可用</span>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    systemChecks.docker_available 
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {systemChecks.docker_available ? '✅ 可用' : '⚠️ 不可用'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50">
+                  <span className="font-medium text-gray-700">存储空间充足</span>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    (storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024
+                      ? 'bg-green-100 text-green-800' 
+                      : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? '✅ 充足' : '⚠️ 不足'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 警告信息 */}
+          {getWarnings().length > 0 && (
+            <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                ⚠️ 注意事项
+              </h3>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="space-y-2 text-amber-800">
+                  {getWarnings().map((warning, index) => (
+                    <div key={index}>• {warning}</div>
+                  ))}
+                </div>
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                  <div className="text-blue-800 text-sm">
+                    💡 您可以继续初始化，但建议在使用前解决这些问题
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 操作按钮 */}
+          <div className="flex gap-4 justify-center pt-6 pb-8">
+            {isChecking ? (
+              <button disabled className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold px-6 py-3 rounded-lg shadow-lg opacity-50 cursor-not-allowed">
+                🔍 检查系统中...
+              </button>
+            ) : (
+              <>
+                <button 
+                  onClick={startInitialization} 
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                  disabled={!workingDir}
+                >
+                  🚀 开始初始化
+                </button>
+                <button 
+                  onClick={performSystemChecks} 
+                  className="bg-transparent border-2 border-blue-500 text-blue-500 font-semibold px-6 py-3 rounded-lg hover:bg-blue-500 hover:text-white transition-all duration-200"
+                >
+                  🔄 重新检查
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

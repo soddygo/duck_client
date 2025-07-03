@@ -1,3 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 基础重置和全局样式 */
+@layer base {
+  html, body, #root {
+    @apply h-full m-0 p-0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    @apply box-border;
+  }
+}
+
+/* 自定义组件样式 */
+@layer components {
+  .gradient-bg {
+    @apply bg-gradient-to-br from-blue-400 via-purple-500 to-purple-600;
+  }
+  
+  .glass-card {
+    @apply bg-white/95 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
+  }
+  
+  .btn-secondary {
+    @apply bg-transparent border-2 border-blue-500 text-blue-500 font-semibold px-6 py-3 rounded-lg hover:bg-blue-500 hover:text-white transition-all duration-200;
+  }
+}
+
+/* 滚动条样式 */
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+}
+
 .logo.vite:hover {
   filter: drop-shadow(0 0 2em #747bff);
 }
@@ -5,6 +62,7 @@
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafb);
 }
+
 :root {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 16px;
@@ -115,40 +173,425 @@ button {
   }
 }
 
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ============== 应用容器 ============== */
+.app {
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: auto;
 }
 
-* {
+/* ============== 加载页面样式 ============== */
+.app-loading {
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.loading-content {
+  text-align: center;
+  color: white;
+}
+
+.loading-content h2 {
+  font-size: 2rem;
+  margin: 20px 0 10px 0;
+  color: white;
+}
+
+.loading-content p {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s ease-in-out infinite;
+  margin: 0 auto 20px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============== 欢迎设置页面样式 ============== */
+.welcome-setup {
+  width: 100%;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 40px 20px;
+  overflow-y: auto;
   box-sizing: border-box;
 }
 
-/* 确保布局占满屏幕高度 */
-.ant-layout {
-  min-height: 100vh;
+.welcome-setup .container {
+  max-width: 900px;
+  margin: 20px auto;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  min-height: auto;
 }
 
-/* 滚动条样式优化 */
-::-webkit-scrollbar {
-  width: 6px;
+.welcome-setup .header {
+  text-align: center;
+  margin-bottom: 30px;
+  padding-top: 0;
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
+.welcome-setup .header h1 {
+  font-size: 3rem;
+  margin: 0 0 10px 0;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 700;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 3px;
+.welcome-setup .header h2 {
+  font-size: 1.5rem;
+  color: #666;
+  margin: 0 0 10px 0;
+  font-weight: 500;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+.welcome-setup .header p {
+  color: #888;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+/* ============== 章节样式 ============== */
+.welcome-setup .section {
+  margin-bottom: 30px;
+  padding: 25px;
+  background: white;
+  border-radius: 15px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  border: 1px solid #f0f0f0;
+}
+
+.welcome-setup .section h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 1.3rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ============== 目录选择器样式 ============== */
+.directory-selector {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.directory-input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s ease;
+  background: white;
+}
+
+.directory-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.browse-button {
+  padding: 12px 20px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.browse-button:hover {
+  background: #5a6fd8;
+  transform: translateY(-1px);
+}
+
+.storage-info {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.storage-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.storage-item:last-child {
+  border-bottom: none;
+}
+
+.storage-item span:first-child {
+  color: #666;
+  font-weight: 500;
+}
+
+.storage-item span:last-child {
+  font-weight: 600;
+}
+
+.storage-item .sufficient {
+  color: #28a745;
+}
+
+.storage-item .insufficient {
+  color: #dc3545;
+}
+
+.requirements {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 10px;
+  padding: 15px;
+}
+
+.requirements div {
+  margin-bottom: 8px;
+  color: #856404;
+  font-weight: 500;
+}
+
+.requirements div:last-child {
+  margin-bottom: 0;
+}
+
+.time-estimates, .network-requirements {
+  background: #e3f2fd;
+  border: 1px solid #bbdefb;
+  border-radius: 10px;
+  padding: 15px;
+}
+
+.time-estimates div, .network-requirements div {
+  margin-bottom: 8px;
+  color: #1565c0;
+  font-weight: 500;
+}
+
+.time-estimates div:last-child, .network-requirements div:last-child {
+  margin-bottom: 0;
+}
+
+.platform-tips {
+  background: #f3e5f5;
+  border: 1px solid #e1bee7;
+  border-radius: 10px;
+  padding: 15px;
+}
+
+.platform-tips div {
+  margin-bottom: 8px;
+  color: #6a1b9a;
+  font-weight: 500;
+}
+
+.platform-tips div:last-child {
+  margin-bottom: 0;
+}
+
+.system-checks {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.check-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.check-item:last-child {
+  border-bottom: none;
+}
+
+.check-item.success {
+  color: #28a745;
+}
+
+.check-item.warning {
+  color: #ffc107;
+}
+
+.check-item.error {
+  color: #dc3545;
+}
+
+.check-item-label {
+  font-weight: 500;
+  color: #333;
+}
+
+.check-item-status {
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+}
+
+.check-item-status.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.check-item-status.warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.check-item-status.error {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* ============== 操作按钮样式 ============== */
+.action-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-top: 40px;
+  padding-top: 30px;
+  border-top: 1px solid #e9ecef;
+}
+
+.start-button {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  padding: 15px 40px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.start-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.start-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.secondary-button {
+  background: transparent;
+  color: #667eea;
+  border: 2px solid #667eea;
+  padding: 13px 30px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondary-button:hover {
+  background: #667eea;
+  color: white;
+  transform: translateY(-1px);
+}
+
+/* ============== 控制台页面样式 ============== */
+.dashboard {
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dashboard-content {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  padding: 40px;
+  text-align: center;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  max-width: 600px;
+}
+
+.dashboard h1 {
+  font-size: 2.5rem;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.dashboard p {
+  font-size: 1.1rem;
+  color: #666;
+  margin-bottom: 15px;
+}
+
+/* ============== 响应式设计 ============== */
+@media (max-width: 768px) {
+  .welcome-setup .container {
+    margin: 0 10px;
+    padding: 20px;
+  }
+
+  .welcome-setup .header h1 {
+    font-size: 2rem;
+  }
+
+  .directory-selector {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .directory-input {
+    margin-bottom: 10px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .start-button, .secondary-button {
+    width: 100%;
+  }
 }

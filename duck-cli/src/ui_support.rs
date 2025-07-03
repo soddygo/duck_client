@@ -1,4 +1,3 @@
-use client_core::database_manager;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -107,58 +106,86 @@ where
     
     // 初始化步骤
     let steps = vec![
-        ("检查系统环境", "正在检查Docker和系统环境..."),
-        ("创建工作目录", "正在创建必要的目录结构..."),
-        ("初始化数据库", "正在初始化DuckDB数据库..."),
-        ("加载配置", "正在加载默认配置..."),
-        ("验证设置", "正在验证初始化设置..."),
+        ("downloading", "正在准备初始化环境..."),
+        ("extracting", "正在创建配置文件和目录结构..."),
+        ("loading", "正在初始化DuckDB数据库..."),
+        ("starting", "正在注册客户端..."),
+        ("configuring", "正在完成初始化设置..."),
     ];
     
     let total_steps = steps.len();
     
-    for (i, (stage, message)) in steps.iter().enumerate() {
-        let progress = InitProgress {
-            stage: stage.to_string(),
-            message: message.to_string(),
-            percentage: (i as f64 / total_steps as f64) * 100.0,
-            current_step: i + 1,
-            total_steps,
-        };
-        
-        callback(progress);
-        
-        // 执行实际的初始化步骤
-        match i {
-            0 => {
-                // 检查系统环境
-                std::thread::sleep(std::time::Duration::from_millis(500));
-            }
-            1 => {
-                // 创建工作目录
-                tokio::fs::create_dir_all(working_dir).await?;
-                std::thread::sleep(std::time::Duration::from_millis(300));
-            }
-            2 => {
-                // 初始化数据库
-                let db_path = working_dir.join("app.db");
-                let _db = database_manager::DatabaseManager::new(&db_path).await?;
-                std::thread::sleep(std::time::Duration::from_millis(800));
-            }
-            3 => {
-                // 加载配置
-                std::thread::sleep(std::time::Duration::from_millis(400));
-            }
-            4 => {
-                // 验证设置
-                std::thread::sleep(std::time::Duration::from_millis(200));
-            }
-            _ => {}
-        }
+    // 步骤1：准备环境
+    let progress = InitProgress {
+        stage: steps[0].0.to_string(),
+        message: steps[0].1.to_string(),
+        percentage: 0.0,
+        current_step: 1,
+        total_steps,
+    };
+    callback(progress);
+    
+    // 确保工作目录存在
+    tokio::fs::create_dir_all(working_dir).await?;
+    
+    // 切换到工作目录以执行真正的初始化
+    let current_dir = std::env::current_dir()?;
+    std::env::set_current_dir(working_dir)?;
+    
+    // 步骤2：创建配置和目录
+    let progress = InitProgress {
+        stage: steps[1].0.to_string(),
+        message: steps[1].1.to_string(),
+        percentage: 20.0,
+        current_step: 2,
+        total_steps,
+    };
+    callback(progress);
+    
+    // 调用真正的duck-cli init逻辑
+    use crate::init::run_init;
+    if let Err(e) = run_init(true).await {
+        // 恢复原始目录
+        std::env::set_current_dir(current_dir)?;
+        return Err(e.into());
     }
+    
+    // 步骤3：数据库初始化完成提示
+    let progress = InitProgress {
+        stage: steps[2].0.to_string(),
+        message: steps[2].1.to_string(),
+        percentage: 60.0,
+        current_step: 3,
+        total_steps,
+    };
+    callback(progress);
+    
+    // 步骤4：客户端注册完成提示
+    let progress = InitProgress {
+        stage: steps[3].0.to_string(),
+        message: steps[3].1.to_string(),
+        percentage: 80.0,
+        current_step: 4,
+        total_steps,
+    };
+    callback(progress);
+    
+    // 步骤5：完成
+    let progress = InitProgress {
+        stage: steps[4].0.to_string(),
+        message: steps[4].1.to_string(),
+        percentage: 90.0,
+        current_step: 5,
+        total_steps,
+    };
+    callback(progress);
+    
+    // 恢复原始目录
+    std::env::set_current_dir(current_dir)?;
     
     // 完成回调
     let final_progress = InitProgress {
-        stage: "完成".to_string(),
+        stage: "configuring".to_string(),
         message: "初始化完成！".to_string(),
         percentage: 100.0,
         current_step: total_steps,

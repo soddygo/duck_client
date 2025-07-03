@@ -69,16 +69,23 @@ pub async fn get_app_state(
     let state = app_handle.state::<AppGlobalState>();
     let working_dir = state.working_directory.read().await;
     
-    let initialized = if let Some(dir) = working_dir.as_ref() {
-        dir.join("config.toml").exists() && dir.join("history.db").exists()
+    let (current_work_dir, has_user_set_dir) = if let Some(dir) = working_dir.as_ref() {
+        (dir.clone(), true)
     } else {
-        false
+        (get_default_work_directory(), false)
     };
+    
+    let initialized = current_work_dir.join("config.toml").exists() && 
+                     current_work_dir.join("history.db").exists();
     
     Ok(AppStateInfo {
         state: if initialized { "READY".to_string() } else { "UNINITIALIZED".to_string() },
         initialized,
-        working_directory: working_dir.as_ref().map(|p| p.to_string_lossy().to_string()),
+        working_directory: if has_user_set_dir || initialized { 
+            Some(current_work_dir.to_string_lossy().to_string()) 
+        } else { 
+            None 
+        },
         last_error: None,
     })
 }
@@ -90,8 +97,15 @@ pub async fn set_working_directory(
 ) -> Result<(), String> {
     let path = PathBuf::from(directory);
     
+    // 如果目录不存在，尝试创建它
     if !path.exists() {
-        return Err("指定的目录不存在".to_string());
+        std::fs::create_dir_all(&path)
+            .map_err(|e| format!("无法创建工作目录: {}", e))?;
+    }
+    
+    // 检查是否为有效目录
+    if !path.is_dir() {
+        return Err("指定的路径不是有效的目录".to_string());
     }
     
     let state = app_handle.state::<AppGlobalState>();
@@ -99,6 +113,16 @@ pub async fn set_working_directory(
     *working_dir = Some(path);
     
     Ok(())
+}
+
+// 获取默认工作目录
+fn get_default_work_directory() -> PathBuf {
+    if let Some(home_dir) = dirs::home_dir() {
+        home_dir.join("Documents").join("DuckClient")
+    } else {
+        // 如果无法获取home目录，使用当前目录
+        PathBuf::from("./DuckClient")
+    }
 }
 
 // ================== 系统检查命令 ==================
@@ -147,8 +171,20 @@ pub async fn init_client_with_progress(
     let task_id = Uuid::new_v4().to_string();
     let path = PathBuf::from(working_dir);
     
-    // 保存任务信息
+    // 确保工作目录存在，如果不存在则创建
+    if !path.exists() {
+        std::fs::create_dir_all(&path)
+            .map_err(|e| format!("无法创建工作目录 {}: {}", path.display(), e))?;
+    }
+    
+    // 更新全局状态中的工作目录
     let state = app_handle.state::<AppGlobalState>();
+    {
+        let mut working_directory = state.working_directory.write().await;
+        *working_directory = Some(path.clone());
+    }
+    
+    // 保存任务信息
     {
         let mut tasks = state.current_tasks.write().await;
         tasks.insert(task_id.clone(), TaskHandle {
@@ -517,6 +553,27 @@ pub struct StorageInfo {
     pub available_space_gb: f64,
     pub required_space_gb: f64,
     pub sufficient: bool,
+}
+
+#[tauri::command]
+pub async fn check_system_storage() -> Result<StorageInfo, String> {
+    let system_info = get_system_info();
+    
+    let total_bytes = system_info.disk_space.total;
+    let available_bytes = system_info.disk_space.available;
+    let used_bytes = total_bytes - available_bytes;
+    let available_space_gb = available_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+    let required_space_gb = 60.0;
+    
+    Ok(StorageInfo {
+        path: "系统磁盘".to_string(),
+        total_bytes,
+        available_bytes,
+        used_bytes,
+        available_space_gb,
+        required_space_gb,
+        sufficient: available_space_gb >= required_space_gb,
+    })
 }
 
 #[tauri::command]

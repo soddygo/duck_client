@@ -12,15 +12,17 @@ import { formatFileSize, formatDownloadSpeed, formatETA, globalEventManager } fr
 
 interface InitializationProgressProps {
   onComplete: () => void;
+  onBack: () => void;
 }
 
-export function InitializationProgress({ onComplete }: InitializationProgressProps) {
+export function InitializationProgress({ onComplete, onBack }: InitializationProgressProps) {
   const [currentStage, setCurrentStage] = useState<InitStage>('downloading');
   const [stageProgress, setStageProgress] = useState<number>(0);
   const [overallProgress, setOverallProgress] = useState<number>(0);
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [totalSteps, setTotalSteps] = useState<number>(5);
   const [message, setMessage] = useState<string>('正在准备初始化...');
+  const [taskId, setTaskId] = useState<string>('');
   
   // 下载相关状态
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
@@ -40,14 +42,49 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
   const [showDetails, setShowDetails] = useState<boolean>(false);
   const [logMessages, setLogMessages] = useState<string[]>([]);
 
-  // 监听初始化进度事件
+  // 启动初始化和监听进度事件
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
+
+    const startInitialization = async () => {
+      try {
+        // 获取当前工作目录
+        const appState = await invoke<any>('get_app_state');
+        const workingDir = appState.working_directory;
+        
+        if (!workingDir) {
+          setError('工作目录未设置');
+          return;
+        }
+
+        addLogMessage('🚀 开始初始化服务...');
+        addLogMessage(`📁 工作目录: ${workingDir}`);
+        
+        // 启动初始化任务
+        const initTaskId = await invoke<string>('init_client_with_progress', { 
+          workingDir: workingDir 
+        });
+        setTaskId(initTaskId);
+        
+        addLogMessage(`✅ 初始化任务已启动 (ID: ${initTaskId})`);
+        
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        setError(`启动初始化失败: ${errorMessage}`);
+        addLogMessage(`❌ 启动初始化失败: ${errorMessage}`);
+      }
+    };
 
     const setupEventListeners = async () => {
       // 监听初始化进度
       await globalEventManager.onInitProgress((event: InitProgressEvent) => {
-        setCurrentStage(event.stage as InitStage);
+        // 安全的类型转换，确保stage是有效的InitStage
+        const validStages: InitStage[] = ['downloading', 'extracting', 'loading', 'starting', 'configuring'];
+        const stage = validStages.includes(event.stage as InitStage) 
+          ? (event.stage as InitStage) 
+          : 'downloading';
+          
+        setCurrentStage(stage);
         setStageProgress(event.percentage);
         setMessage(event.message);
         setCurrentStep(event.current_step);
@@ -69,6 +106,7 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
           setOverallProgress(100);
           setMessage('初始化完成！');
           addLogMessage('✅ 初始化完成');
+          // 可以在这里调用 onComplete() 来跳转到下一页
         } else {
           setError(event.error || '初始化失败');
           addLogMessage(`❌ 初始化失败: ${event.error || '未知错误'}`);
@@ -87,7 +125,10 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
       });
     };
 
-    setupEventListeners();
+    // 先设置事件监听器，然后启动初始化
+    setupEventListeners().then(() => {
+      startInitialization();
+    });
 
     return () => {
       globalEventManager.cleanup();
@@ -125,10 +166,13 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
   // 取消初始化
   const cancelInitialization = async () => {
     try {
-      await invoke('cancel_task', { taskId: 'init' });
-      addLogMessage('❌ 初始化已取消');
+      if (taskId) {
+        await invoke('cancel_task', { taskId: taskId });
+        addLogMessage('❌ 初始化已取消');
+      }
     } catch (error) {
       console.error('取消初始化失败:', error);
+      addLogMessage('⚠️ 取消初始化失败');
     }
   };
 
@@ -140,7 +184,7 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
 
   // 获取阶段信息
   const getStageInfo = (stage: InitStage) => {
-    const stageInfoMap = {
+    const stageInfoMap: Record<InitStage, { title: string; description: string; icon: string }> = {
       downloading: {
         title: '第 1 步 / 共 5 步：下载 Docker 服务包',
         description: '正在下载 Docker 服务包，包含所需的镜像和配置文件',
@@ -168,7 +212,11 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
       }
     };
     
-    return stageInfoMap[stage];
+    return stageInfoMap[stage] || {
+      title: '正在初始化...',
+      description: '正在准备初始化系统',
+      icon: '⏳'
+    };
   };
 
   // 后台模式最小化显示
@@ -231,8 +279,10 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
             <div className="completed-state">
               <h2>🎉 恭喜！Duck Client 初始化完成</h2>
             </div>
-          ) : (
+          ) : stageInfo ? (
             <h2>{stageInfo.title}</h2>
+          ) : (
+            <h2>正在准备初始化...</h2>
           )}
         </div>
 
@@ -248,7 +298,7 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
                 key={stage}
                 className={`stage-indicator ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
               >
-                <div className="stage-icon">{stageInfo.icon}</div>
+                <div className="stage-icon">{stageInfo ? stageInfo.icon : '⏳'}</div>
                 <div className="stage-label">{stage}</div>
               </div>
             );
@@ -258,7 +308,7 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
         {/* 当前阶段详情 */}
         {!error && !isCompleted && (
           <div className="current-stage">
-            <h3>{stageInfo.description}</h3>
+            <h3>{stageInfo ? stageInfo.description : '正在准备初始化...'}</h3>
             <p className="stage-message">{message}</p>
             
             {/* 进度条 */}
@@ -348,6 +398,10 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
         {/* 操作按钮 */}
         {!error && !isCompleted && (
           <div className="actions">
+            <button onClick={onBack} className="btn-secondary">
+              ← 返回上一步
+            </button>
+            
             <button onClick={toggleBackgroundMode} className="btn-secondary">
               💾 后台下载
             </button>
@@ -366,6 +420,18 @@ export function InitializationProgress({ onComplete }: InitializationProgressPro
             
             <button onClick={cancelInitialization} className="btn-danger">
               ❌ 取消安装
+            </button>
+          </div>
+        )}
+
+        {/* 错误状态的操作按钮 */}
+        {error && (
+          <div className="actions">
+            <button onClick={onBack} className="btn-secondary">
+              ← 返回上一步
+            </button>
+            <button onClick={() => window.location.reload()} className="btn-primary">
+              🔄 重试
             </button>
           </div>
         )}

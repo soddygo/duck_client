@@ -440,7 +440,7 @@ impl ConfigManager {
         debug!("配置项 {} 更新成功", key);
         Ok(())
     }
-    
+
     /// 批量更新配置
     pub async fn update_configs(&self, updates: Vec<ConfigUpdateRequest>) -> Result<()> {
         self.ensure_cache_initialized().await?;
@@ -494,7 +494,7 @@ impl ConfigManager {
         debug!("批量配置更新成功");
         Ok(())
     }
-    
+
     /// 重置配置为默认值
     pub async fn reset_config_to_default(&self, key: &str) -> Result<()> {
         self.ensure_cache_initialized().await?;
@@ -553,7 +553,7 @@ impl ConfigManager {
     pub async fn update_last_backup_time(&self, backup_time: chrono::DateTime<chrono::Utc>, success: bool) -> Result<()> {
         let time_value = Value::String(backup_time.to_rfc3339());
         self.update_config("auto_backup_last_time", time_value).await?;
-        
+
         if success {
             let status_value = Value::String("success".to_string());
             self.update_config("auto_backup_last_status", status_value).await?;
@@ -561,10 +561,10 @@ impl ConfigManager {
             let status_value = Value::String("failed".to_string());
             self.update_config("auto_backup_last_status", status_value).await?;
         }
-        
+
         Ok(())
     }
-    
+
     /// 设置自动备份cron表达式
     pub async fn set_auto_backup_cron(&self, cron_expr: &str) -> Result<()> {
         let value = Value::String(cron_expr.to_string());
@@ -600,7 +600,7 @@ impl ConfigManager {
             backup_directory: backup_dir,
         })
     }
-    
+
     /// 创建自动升级任务
     pub async fn create_auto_upgrade_task(&self, task: &AutoUpgradeTask) -> Result<()> {
         let _task_json = serde_json::to_value(task)?;
@@ -630,7 +630,7 @@ task.target_version.as_deref().unwrap_or(""),
         debug!("自动升级任务 {} 创建成功", task.task_id);
         Ok(())
     }
-    
+
     /// 更新升级任务状态
     pub async fn update_upgrade_task_status(
         &self,

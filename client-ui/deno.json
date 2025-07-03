@@ -1,0 +1,32 @@
+{
+  "tasks": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "imports": {
+    "react": "npm:react@^18.3.1",
+    "react-dom": "npm:react-dom@^18.3.1",
+    "react-router-dom": "npm:react-router-dom@^6.28.0",
+    "@tauri-apps/api": "npm:@tauri-apps/api@^2",
+    "@tauri-apps/plugin-opener": "npm:@tauri-apps/plugin-opener@^2",
+    "@tauri-apps/plugin-fs": "npm:@tauri-apps/plugin-fs@^2",
+    "@tauri-apps/plugin-dialog": "npm:@tauri-apps/plugin-dialog@^2",
+    "@tauri-apps/plugin-shell": "npm:@tauri-apps/plugin-shell@^2",
+    "@tauri-apps/plugin-process": "npm:@tauri-apps/plugin-process@^2"
+  },
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["dom", "dom.iterable", "es2020"],
+    "strict": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "skipLibCheck": true
+  },
+  "exclude": [
+    "node_modules/",
+    "dist/",
+    "src-tauri/"
+  ]
+} 

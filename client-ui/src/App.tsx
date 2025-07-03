@@ -18,14 +18,18 @@ function App() {
     const checkAppState = async () => {
       try {
         const state = await invoke<AppStateInfo>('get_app_state');
+        console.log('应用状态:', state);
         setAppState(state);
         
         // 根据状态决定显示哪个页面
         if (state.initialized) {
+          console.log('已初始化，进入dashboard');
           setCurrentPage('dashboard');
         } else if (state.working_directory) {
+          console.log('有工作目录，进入initialization:', state.working_directory);
           setCurrentPage('initialization');
         } else {
+          console.log('无工作目录，进入welcome');
           setCurrentPage('welcome');
         }
       } catch (error) {
@@ -51,6 +55,12 @@ function App() {
     setAppState(prev => prev ? { ...prev, initialized: true } : null);
   };
 
+  // 处理从初始化页面返回
+  const handleInitializationBack = () => {
+    setCurrentPage('welcome');
+    setAppState(prev => prev ? { ...prev, working_directory: undefined } : null);
+  };
+
   // 加载状态
   if (isLoading) {
     return (
@@ -72,7 +82,10 @@ function App() {
       )}
       
       {currentPage === 'initialization' && (
-        <InitializationProgress onComplete={handleInitializationComplete} />
+        <InitializationProgress 
+          onComplete={handleInitializationComplete} 
+          onBack={handleInitializationBack}
+        />
       )}
       
       {currentPage === 'dashboard' && (

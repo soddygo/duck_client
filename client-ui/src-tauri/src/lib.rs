@@ -551,6 +551,7 @@ pub fn run() {
             // 新增的平台和系统检查命令
             get_platform,
             check_storage_space,
+            check_system_storage,
             open_file_manager,
             
             // 保留原有命令（兼容性）

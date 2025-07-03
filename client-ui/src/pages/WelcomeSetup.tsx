@@ -17,6 +17,8 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [canProceed, setCanProceed] = useState(false);
+  const [initError, setInitError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
 
   // 初始化平台检测和路径建议
   useEffect(() => {
@@ -42,14 +44,22 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
   const performSystemChecks = async () => {
     setIsChecking(true);
     try {
+      console.log('开始系统检查, workingDir:', workingDir);
       const requirements: SystemRequirements = await invoke('check_system_requirements');
       setSystemChecks(requirements);
+      console.log('系统要求检查完成:', requirements);
       
-      // 检查存储空间
-      if (workingDir) {
-        const storage: StorageInfo = await invoke('check_storage_space', { path: workingDir });
-        setStorageInfo(storage);
-      }
+      // 设置存储空间推荐信息（不实际检测）
+      console.log('设置存储空间推荐信息');
+      setStorageInfo({
+        path: '系统磁盘',
+        total_bytes: 0,
+        available_bytes: 0,
+        used_bytes: 0,
+        available_space_gb: 0,
+        required_space_gb: 60,
+        sufficient: true, // 设为true避免警告
+      });
       
       // 只要有工作目录就可以继续，所有检查都是警告性质
       setCanProceed(!!workingDir);
@@ -82,11 +92,18 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
 
   // 开始初始化
   const startInitialization = async () => {
+    setInitError(null);
+    setIsInitializing(true);
+    
     try {
       await invoke('set_working_directory', { directory: workingDir });
       onComplete(workingDir);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setInitError(errorMessage);
       console.error('设置工作目录失败:', error);
+    } finally {
+      setIsInitializing(false);
     }
   };
 
@@ -139,9 +156,7 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
       warnings.push('Docker 不可用，需要先安装并启动 Docker');
     }
     
-    if (storageInfo && storageInfo.available_bytes < 60 * 1024 * 1024 * 1024) {
-      warnings.push(`存储空间不足60GB，当前可用${formatBytes(storageInfo.available_bytes)}，可能影响服务运行`);
-    }
+    // 存储空间检查已移除，只显示推荐信息
     
     return warnings;
   };
@@ -185,31 +200,28 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
           </div>
 
           {/* 存储空间信息 */}
-          {storageInfo && (
-            <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                💾 存储空间信息
-              </h3>
-              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">可用空间:</span>
-                  <span className={`font-semibold ${(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? 'text-green-600' : 'text-amber-600'}`}>
-                    {formatBytes(storageInfo?.available_bytes ?? 0)} {(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? '✅' : '⚠️'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">建议空间:</span>
-                  <span className="text-gray-800">至少 60 GB</span>
-                </div>
-                <div className="pt-2 border-t border-gray-200 text-sm text-gray-600 space-y-1">
-                  <div>• Docker 服务包: ~14 GB</div>
-                  <div>• 解压后文件: ~25 GB</div>
-                  <div>• 数据和日志: ~10 GB</div>
-                  <div>• 备份预留: ~15 GB</div>
-                </div>
+          <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+              💾 存储空间要求
+            </h3>
+            <div className="bg-blue-50 rounded-lg p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">推荐可用空间:</span>
+                <span className="font-semibold text-blue-600">
+                  至少 60 GB
+                </span>
+              </div>
+              <div className="pt-2 border-t border-blue-200 text-sm text-blue-800 space-y-1">
+                <div>• Docker 服务包: ~14 GB</div>
+                <div>• 解压后文件: ~25 GB</div>
+                <div>• 数据和日志: ~10 GB</div>
+                <div>• 备份预留: ~15 GB</div>
+              </div>
+              <div className="pt-2 border-t border-blue-200 text-sm text-blue-800">
+                ✅ 请确保您的磁盘有足够的可用空间
               </div>
             </div>
-          )}
+          </div>
 
           {/* 时间预估 */}
           <div className="bg-white/95 backdrop-blur-md border border-white/20 shadow-xl rounded-2xl p-6">
@@ -276,13 +288,9 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
                   </span>
                 </div>
                 <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50">
-                  <span className="font-medium text-gray-700">存储空间充足</span>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    (storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {(storageInfo?.available_bytes ?? 0) >= 60 * 1024 * 1024 * 1024 ? '✅ 充足' : '⚠️ 不足'}
+                  <span className="font-medium text-gray-700">存储空间要求</span>
+                  <span className="px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                    💡 至少 60 GB
                   </span>
                 </div>
               </div>
@@ -310,11 +318,27 @@ export function WelcomeSetup({ onComplete }: WelcomeSetupProps) {
             </div>
           )}
 
+          {/* 错误信息 */}
+          {initError && (
+            <div className="bg-white/95 backdrop-blur-md border border-red-200 shadow-xl rounded-2xl p-6">
+              <h3 className="text-xl font-semibold text-red-800 mb-4 flex items-center gap-2">
+                ❌ 初始化失败
+              </h3>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-red-700">{initError}</p>
+              </div>
+            </div>
+          )}
+
           {/* 操作按钮 */}
           <div className="flex gap-4 justify-center pt-6 pb-8">
             {isChecking ? (
               <button disabled className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold px-6 py-3 rounded-lg shadow-lg opacity-50 cursor-not-allowed">
                 🔍 检查系统中...
+              </button>
+            ) : isInitializing ? (
+              <button disabled className="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold px-6 py-3 rounded-lg shadow-lg opacity-50 cursor-not-allowed">
+                🚀 初始化中...
               </button>
             ) : (
               <>

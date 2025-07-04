@@ -11,3 +11,5 @@ history.db
 history.db.wal
 config.toml
 test_deploy
+
+cli-ui/src-tauri/binaries

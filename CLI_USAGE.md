@@ -83,14 +83,47 @@ duck-cli docker-service restart
 # 检查服务状态
 duck-cli docker-service status
 
-# 部署服务（包含镜像加载等完整流程）
-duck-cli docker-service deploy
+# 重启指定容器
+duck-cli docker-service restart-container <容器名称>
+
+# 解压Docker服务包
+duck-cli docker-service extract
+
+# 解压指定的docker.zip文件
+duck-cli docker-service extract --file /path/to/docker.zip
+
+# 解压指定版本的服务包
+duck-cli docker-service extract --version 1.2.0
+
+# 加载Docker镜像
+duck-cli docker-service load-images
+
+# 设置镜像标签
+duck-cli docker-service setup-tags
+
+# 显示架构信息
+duck-cli docker-service arch-info
+
+# 列出Docker镜像（使用ducker）
+duck-cli docker-service list-images
 ```
 
 ### 更新和升级
 ```bash
-# 检查客户端自身更新（预留功能）
-duck-cli check-update
+# 检查客户端自身更新
+duck-cli check-update check
+
+# 安装最新版本客户端
+duck-cli check-update install
+
+# 安装指定版本客户端
+duck-cli check-update install --version 1.2.0
+
+# 强制重新安装客户端（即使当前已是最新版本）
+duck-cli check-update install --force
+
+# 检查是否有可用的服务升级版本（不执行下载）
+duck-cli upgrade --check
 
 # 下载Docker服务包（首次部署也使用此命令）
 duck-cli upgrade
@@ -143,6 +176,49 @@ duck-cli rollback <backup_id> --force
 - 显示文件大小和存储统计
 - 提供清晰的操作建议
 
+### 缓存管理
+
+Duck CLI 提供了完整的缓存管理功能，可以帮助您清理磁盘空间并优化性能。
+
+```bash
+# 显示缓存使用情况
+duck-cli cache status
+
+# 清理所有缓存文件
+duck-cli cache clear
+
+# 清理下载缓存，保留最新3个版本
+duck-cli cache clean-downloads
+
+# 清理下载缓存，保留最新5个版本
+duck-cli cache clean-downloads --keep 5
+```
+
+**缓存类型说明**：
+- **下载缓存**: `cacheDuckData/download/` - 存储不同版本的Docker服务包
+- **临时缓存**: 构建和解压过程中产生的临时文件
+- **历史缓存**: 旧版本的备份和日志文件
+
+**缓存清理策略**：
+- `cache status`: 显示各类缓存的大小和占用情况
+- `cache clear`: 清理所有可安全删除的缓存文件
+- `cache clean-downloads --keep N`: 保留最新N个版本的下载文件，删除其余版本
+
+### 🐋 Ducker 集成
+
+Duck CLI 集成了强大的 Docker 容器管理工具 Ducker，提供终端界面的容器管理功能。
+
+```bash
+# 启动ducker终端界面
+duck-cli ducker
+
+# 传递参数给ducker
+duck-cli ducker --help
+
+# 使用ducker的特定功能
+duck-cli ducker [ducker参数...]
+```
+
 ### 其他命令
 ```bash
 # 显示API配置信息
@@ -151,8 +227,17 @@ duck-cli api-info
 # 显示帮助信息
 duck-cli --help
 
+# 查看特定命令的帮助
+duck-cli [command] --help
+
 # 详细输出模式
 duck-cli --verbose [command]
+
+# 使用自定义配置文件
+duck-cli --config /path/to/config.toml [command]
+
+# 组合参数使用示例
+duck-cli --verbose --config ./my-config.toml status
 ```
 
 ## 📁 文件结构
@@ -258,6 +343,9 @@ duck-cli auto-backup status
 # 立即执行自动升级部署
 duck-cli auto-upgrade-deploy run
 
+# 指定前端服务端口执行升级部署
+duck-cli auto-upgrade-deploy run --port 8080
+
 # 延迟2小时后执行升级部署
 duck-cli auto-upgrade-deploy delay-time-deploy 2
 
@@ -279,9 +367,10 @@ duck-cli auto-upgrade-deploy status
    - 如果服务未运行：检查是否有重要文件需要备份
    - 如果没有重要文件：跳过备份步骤
 4. 🚀 执行Docker服务部署（解压、加载镜像、设置标签）
-5. ▶️  启动Docker服务
-6. ⏳ 等待服务启动完成（15秒）
-7. ✅ 验证部署结果并报告状态
+5. ⚙️  应用端口配置（如果指定了 --port 参数）
+6. ▶️  启动Docker服务
+7. ⏳ 等待服务启动完成（15秒）
+8. ✅ 验证部署结果并报告状态
 
 **智能备份逻辑**：
 - **服务运行中**：必须先停止服务，然后执行备份
@@ -307,6 +396,12 @@ duck-cli auto-upgrade-deploy status
 
 ### 日常运维
 ```bash
+# 检查系统状态（推荐每日执行）
+duck-cli status
+
+# 查看缓存使用情况
+duck-cli cache status
+
 # 每日自动备份（建议配置系统cron）
 0 2 * * * /path/to/duck-cli auto-backup run
 
@@ -315,6 +410,9 @@ duck-cli auto-upgrade-deploy run
 
 # 计划内的升级部署（如晚上11点后2小时执行）
 duck-cli auto-upgrade-deploy delay-time-deploy 2
+
+# 定期清理缓存（保留最新3个版本）
+duck-cli cache clean-downloads --keep 3
 ```
 
 ### 应急场景
@@ -325,6 +423,30 @@ duck-cli auto-backup run
 # 快速恢复到稳定版本
 duck-cli list-backups
 duck-cli rollback <backup_id>
+
+# 重启单个有问题的容器
+duck-cli docker-service restart-container <容器名称>
+
+# 检查架构信息（用于故障诊断）
+duck-cli docker-service arch-info
+
+# 查看所有Docker镜像
+duck-cli docker-service list-images
+```
+
+### 维护操作
+```bash
+# 手动解压服务包（用于调试）
+duck-cli docker-service extract
+
+# 重新加载Docker镜像
+duck-cli docker-service load-images
+
+# 重新设置镜像标签
+duck-cli docker-service setup-tags
+
+# 清理所有缓存（释放磁盘空间）
+duck-cli cache clear
 ```
 
 ## 📞 获取帮助

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "client-core", "duck-cli", "client-ui/src-tauri" ]
+members = [ "client-core", "duck-cli", "cli-ui/src-tauri" ]
 
 
 

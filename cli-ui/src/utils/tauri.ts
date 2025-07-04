@@ -93,12 +93,7 @@ export class DialogManager {
    */
   static async selectDirectory(title = '选择工作目录'): Promise<string | null> {
     try {
-      const selected = await openDialog({
-        title,
-        directory: true,
-        multiple: false
-      });
-      return selected;
+      return await invoke('select_directory');
     } catch (error) {
       console.error('Directory selection failed:', error);
       return null;
@@ -255,22 +250,9 @@ export class FileSystemManager {
    */
   static async validateDirectory(path: string): Promise<{ valid: boolean; error?: string }> {
     try {
-      const pathExists = await this.pathExists(path);
-      if (!pathExists) {
-        return { valid: false, error: '目录不存在' };
-      }
-
-      const info = await this.getFileInfo(path);
-      if (!info?.isDirectory) {
-        return { valid: false, error: '路径不是目录' };
-      }
-
-      // 尝试读取目录内容来测试权限
-      await this.listDirectory(path);
-      
-      return { valid: true };
+      return await invoke('validate_working_directory', { path });
     } catch (error) {
-      return { valid: false, error: `目录访问失败: ${error}` };
+      return { valid: false, error: `目录验证失败: ${error}` };
     }
   }
 }
@@ -391,32 +373,130 @@ export class ConfigManager {
    * 获取工作目录
    */
   static async getWorkingDirectory(): Promise<string | null> {
-    const config = await this.loadConfig();
-    return config.workingDirectory || null;
+    try {
+      return await invoke('get_working_directory');
+    } catch (error) {
+      console.error('Get working directory failed:', error);
+      return null;
+    }
   }
 
   /**
    * 设置工作目录
    */
   static async setWorkingDirectory(path: string): Promise<boolean> {
-    const config = await this.loadConfig();
-    config.workingDirectory = path;
-    return await this.saveConfig(config);
+    try {
+      await invoke('set_working_directory', { path });
+      return true;
+    } catch (error) {
+      console.error('Set working directory failed:', error);
+      return false;
+    }
   }
 }
 
 // ============ Duck CLI Manager ============
 export class DuckCliManager {
   /**
+   * 检查CLI是否可用
+   */
+  static async checkAvailable(): Promise<boolean> {
+    try {
+      return await invoke('check_cli_available');
+    } catch (error) {
+      console.error('Check CLI availability failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 获取CLI版本信息
+   */
+  static async getVersion(): Promise<{ version: string; available: boolean }> {
+    try {
+      return await invoke('get_cli_version');
+    } catch (error) {
+      console.error('Get CLI version failed:', error);
+      return { version: 'error', available: false };
+    }
+  }
+
+  /**
+   * 执行CLI命令 - Sidecar方式
+   */
+  static async executeSidecar(
+    args: string[], 
+    workingDir?: string
+  ): Promise<{ success: boolean; exit_code: number; stdout: string; stderr: string }> {
+    try {
+      return await invoke('execute_duck_cli_sidecar', { 
+        args, 
+        workingDir: workingDir || null 
+      });
+    } catch (error) {
+      return {
+        success: false,
+        exit_code: -1,
+        stdout: '',
+        stderr: `Sidecar执行失败: ${error}`
+      };
+    }
+  }
+
+  /**
+   * 执行CLI命令 - 系统方式
+   */
+  static async executeSystem(
+    args: string[], 
+    workingDir?: string
+  ): Promise<{ success: boolean; exit_code: number; stdout: string; stderr: string }> {
+    try {
+      return await invoke('execute_duck_cli_system', { 
+        args, 
+        workingDir: workingDir || null 
+      });
+    } catch (error) {
+      return {
+        success: false,
+        exit_code: -1,
+        stdout: '',
+        stderr: `系统执行失败: ${error}`
+      };
+    }
+  }
+
+  /**
+   * 智能执行CLI命令（推荐方式）
+   */
+  static async executeSmart(
+    args: string[], 
+    workingDir?: string
+  ): Promise<{ success: boolean; exit_code: number; stdout: string; stderr: string }> {
+    try {
+      return await invoke('execute_duck_cli_smart', { 
+        args, 
+        workingDir: workingDir || null 
+      });
+    } catch (error) {
+      return {
+        success: false,
+        exit_code: -1,
+        stdout: '',
+        stderr: `智能执行失败: ${error}`
+      };
+    }
+  }
+
+  /**
    * 初始化项目
    */
   static async initialize(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['init'], workingDir);
+      const result = await this.executeSmart(['init'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -432,11 +512,11 @@ export class DuckCliManager {
    */
   static async checkStatus(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['status'], workingDir);
+      const result = await this.executeSmart(['status'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -452,11 +532,11 @@ export class DuckCliManager {
    */
   static async startService(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['docker-service', 'start'], workingDir);
+      const result = await this.executeSmart(['docker-service', 'start'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -472,11 +552,11 @@ export class DuckCliManager {
    */
   static async stopService(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['docker-service', 'stop'], workingDir);
+      const result = await this.executeSmart(['docker-service', 'stop'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -492,11 +572,11 @@ export class DuckCliManager {
    */
   static async restartService(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['docker-service', 'restart'], workingDir);
+      const result = await this.executeSmart(['docker-service', 'restart'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -512,11 +592,11 @@ export class DuckCliManager {
    */
   static async autoUpgradeDeploy(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['auto-upgrade-deploy', 'run'], workingDir);
+      const result = await this.executeSmart(['auto-upgrade-deploy', 'run'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -532,11 +612,11 @@ export class DuckCliManager {
    */
   static async checkCliUpdate(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['check-update', 'check'], workingDir);
+      const result = await this.executeSmart(['check-update', 'check'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -553,11 +633,11 @@ export class DuckCliManager {
   static async upgradeService(workingDir: string, full = false): Promise<{ success: boolean; output: string; error?: string }> {
     try {
       const args = full ? ['upgrade', '--full'] : ['upgrade'];
-      const result = await ShellManager.executeDuckCliSmart(args, workingDir);
+      const result = await this.executeSmart(args, workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -573,11 +653,11 @@ export class DuckCliManager {
    */
   static async createBackup(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['backup', 'create'], workingDir);
+      const result = await this.executeSmart(['backup', 'create'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
@@ -593,17 +673,77 @@ export class DuckCliManager {
    */
   static async rollbackService(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
     try {
-      const result = await ShellManager.executeDuckCliSmart(['backup', 'restore', '--latest'], workingDir);
+      const result = await this.executeSmart(['backup', 'restore', '--latest'], workingDir);
       return {
-        success: result.code === 0,
+        success: result.success,
         output: result.stdout,
-        error: result.stderr
+        error: result.success ? undefined : result.stderr
       };
     } catch (error) {
       return {
         success: false,
         output: '',
         error: `回滚服务失败: ${error}`
+      };
+    }
+  }
+
+  /**
+   * 清理缓存
+   */
+  static async clearCache(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
+    try {
+      const result = await this.executeSmart(['cache', 'clear'], workingDir);
+      return {
+        success: result.success,
+        output: result.stdout,
+        error: result.success ? undefined : result.stderr
+      };
+    } catch (error) {
+      return {
+        success: false,
+        output: '',
+        error: `清理缓存失败: ${error}`
+      };
+    }
+  }
+
+  /**
+   * 清理下载文件
+   */
+  static async clearDownloads(workingDir: string): Promise<{ success: boolean; output: string; error?: string }> {
+    try {
+      const result = await this.executeSmart(['cache', 'clean-downloads'], workingDir);
+      return {
+        success: result.success,
+        output: result.stdout,
+        error: result.success ? undefined : result.stderr
+      };
+    } catch (error) {
+      return {
+        success: false,
+        output: '',
+        error: `清理下载失败: ${error}`
+      };
+    }
+  }
+
+  /**
+   * 获取帮助信息
+   */
+  static async getHelp(workingDir?: string): Promise<{ success: boolean; output: string; error?: string }> {
+    try {
+      const result = await this.executeSmart(['--help'], workingDir);
+      return {
+        success: result.success,
+        output: result.stdout,
+        error: result.success ? undefined : result.stderr
+      };
+    } catch (error) {
+      return {
+        success: false,
+        output: '',
+        error: `获取帮助失败: ${error}`
       };
     }
   }

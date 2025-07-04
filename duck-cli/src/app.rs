@@ -82,7 +82,7 @@ impl CliApp {
                         client_core::error::DuckError::custom(format!("检查更新失败: {e}"))
                     })
             }
-            Commands::Upgrade { full, force } => commands::run_upgrade(self, full, force).await,
+            Commands::Upgrade { full, force, check } => commands::run_upgrade(self, full, force, check).await,
             Commands::Backup => commands::run_backup(self).await,
             Commands::ListBackups => commands::run_list_backups(self).await,
             Commands::Rollback { backup_id, force } => {

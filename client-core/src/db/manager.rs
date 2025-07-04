@@ -5,7 +5,7 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use super::actor::DuckDbActor;
-use super::messages::DbMessage;
+use super::messages::{DbMessage, DownloadTaskRecord, AppStateRecord, UserActionRecord};
 use super::models::{BackupRecord, ScheduledTask};
 
 /// DuckDB数据库管理器
@@ -121,6 +121,224 @@ impl DuckDbManager {
 
         Ok(new_uuid)
     }
+
+    // ========== 下载任务管理 ==========
+
+    /// 创建下载任务
+    pub async fn create_download_task(
+        &self,
+        task_name: String,
+        download_url: String,
+        total_size: i64,
+        target_path: String,
+        file_hash: Option<String>,
+    ) -> Result<i64> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::CreateDownloadTask {
+                task_name,
+                download_url,
+                total_size,
+                target_path,
+                file_hash,
+                respond_to,
+            })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    /// 更新下载任务状态
+    pub async fn update_download_task_status(
+        &self,
+        task_id: i64,
+        status: &str,
+        downloaded_size: Option<i64>,
+        error_message: Option<String>,
+    ) -> Result<()> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::UpdateDownloadTaskStatus {
+                task_id,
+                status: status.to_string(),
+                downloaded_size,
+                error_message,
+                respond_to,
+            })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    /// 完成下载任务
+    pub async fn complete_download_task(
+        &self,
+        task_id: i64,
+        average_speed: Option<i64>,
+        total_duration: Option<i32>,
+    ) -> Result<()> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::CompleteDownloadTask {
+                task_id,
+                average_speed,
+                total_duration,
+                respond_to,
+            })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    /// 获取下载任务
+    pub async fn get_download_task(&self, task_id: i64) -> Result<Option<DownloadTaskRecord>> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::GetDownloadTask { task_id, respond_to })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    /// 获取活跃的下载任务
+    pub async fn get_active_download_tasks(&self) -> Result<Vec<DownloadTaskRecord>> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::GetActiveDownloadTasks { respond_to })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    // ========== 应用状态管理 ==========
+
+    /// 更新应用状态
+    pub async fn update_app_state(
+        &self,
+        state: &str,
+        state_data: Option<String>,
+        progress_percentage: Option<i32>,
+        error_message: Option<String>,
+    ) -> Result<()> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::UpdateAppState {
+                state: state.to_string(),
+                state_data,
+                progress_percentage,
+                error_message,
+                respond_to,
+            })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    /// 获取当前应用状态
+    pub async fn get_app_state(&self) -> Result<Option<AppStateRecord>> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::GetAppState { respond_to })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    // ========== 用户操作历史 ==========
+
+    /// 记录用户操作
+    pub async fn record_user_action(
+        &self,
+        action_type: &str,
+        action_description: &str,
+        action_params: Option<String>,
+    ) -> Result<i64> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::RecordUserAction {
+                action_type: action_type.to_string(),
+                action_description: action_description.to_string(),
+                action_params,
+                respond_to,
+            })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    /// 完成用户操作
+    pub async fn complete_user_action(
+        &self,
+        action_id: i64,
+        status: &str,
+        result_message: Option<String>,
+        duration_seconds: Option<i32>,
+    ) -> Result<()> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::CompleteUserAction {
+                action_id,
+                status: status.to_string(),
+                result_message,
+                duration_seconds,
+                respond_to,
+            })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    /// 获取用户操作历史
+    pub async fn get_user_actions(&self, limit: Option<i32>) -> Result<Vec<UserActionRecord>> {
+        let (respond_to, receiver) = oneshot::channel();
+
+        self.sender
+            .send(DbMessage::GetUserActions { limit, respond_to })
+            .await
+            .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
+
+        receiver
+            .await
+            .map_err(|_| DuckError::Custom("等待数据库响应超时".to_string()))?
+    }
+
+    // ========== 现有的备份和任务管理 ==========
 
     /// 创建备份记录
     pub async fn create_backup_record(

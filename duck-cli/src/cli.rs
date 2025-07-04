@@ -160,6 +160,9 @@ pub enum Commands {
         /// 强制重新下载（用于文件损坏时）
         #[arg(long)]
         force: bool,
+        /// 只检查是否有可用的升级版本，不执行下载
+        #[arg(long)]
+        check: bool,
     },
     /// 手动创建备份
     Backup,

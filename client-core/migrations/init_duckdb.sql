@@ -50,9 +50,12 @@ INSERT OR REPLACE INTO app_state (id, current_state) VALUES (1, 'UNINITIALIZED')
 -- 下载任务管理表（支持断点续传）
 -- ========================================
 
+-- 创建下载任务ID序列
+CREATE SEQUENCE IF NOT EXISTS download_tasks_seq;
+
 -- 下载任务表（移除实时更新字段，避免写冲突）
 CREATE TABLE IF NOT EXISTS download_tasks (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('download_tasks_seq'),
     task_name VARCHAR NOT NULL, -- 任务名称（如：docker-service-v1.2.0）
     download_url VARCHAR NOT NULL, -- 下载地址
     total_size BIGINT NOT NULL, -- 总文件大小（字节）
@@ -74,8 +77,11 @@ CREATE TABLE IF NOT EXISTS download_tasks (
 );
 
 -- 分片下载表（支持多线程下载和断点续传）
+-- 创建下载分片ID序列
+CREATE SEQUENCE IF NOT EXISTS download_chunks_seq;
+
 CREATE TABLE IF NOT EXISTS download_chunks (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('download_chunks_seq'),
     task_id INTEGER NOT NULL,
     chunk_index INTEGER NOT NULL, -- 分片索引
     start_byte BIGINT NOT NULL, -- 起始字节位置
@@ -96,8 +102,11 @@ CREATE INDEX IF NOT EXISTS idx_download_tasks_status ON download_tasks(status);
 -- 系统检查表（平台兼容性检查）
 -- ========================================
 
+-- 创建系统检查ID序列
+CREATE SEQUENCE IF NOT EXISTS system_checks_seq;
+
 CREATE TABLE IF NOT EXISTS system_checks (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('system_checks_seq'),
     check_type VARCHAR NOT NULL, -- STORAGE_SPACE/DOCKER_STATUS/NETWORK/PERMISSIONS等
     check_name VARCHAR NOT NULL, -- 检查项名称
     platform VARCHAR NOT NULL, -- windows/macos/linux
@@ -115,8 +124,11 @@ CREATE INDEX IF NOT EXISTS idx_system_checks_type_platform ON system_checks(chec
 -- ========================================
 
 -- 服务状态历史表（时序数据，适合批量插入）
+-- 创建服务状态历史ID序列
+CREATE SEQUENCE IF NOT EXISTS service_status_history_seq;
+
 CREATE TABLE IF NOT EXISTS service_status_history (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('service_status_history_seq'),
     service_name VARCHAR NOT NULL,
     container_id VARCHAR,
     status VARCHAR NOT NULL, -- running/stopped/error/starting/stopping
@@ -146,8 +158,11 @@ CREATE TABLE IF NOT EXISTS current_service_status (
 -- 备份管理表
 -- ========================================
 
+-- 创建备份记录ID序列
+CREATE SEQUENCE IF NOT EXISTS backup_records_seq;
+
 CREATE TABLE IF NOT EXISTS backup_records (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('backup_records_seq'),
     backup_name VARCHAR NOT NULL UNIQUE,
     backup_type VARCHAR NOT NULL, -- FULL/INCREMENTAL/DATA_ONLY
     source_version VARCHAR, -- 备份时的服务版本
@@ -172,8 +187,11 @@ CREATE INDEX IF NOT EXISTS idx_backup_records_type ON backup_records(backup_type
 -- 升级管理表
 -- ========================================
 
+-- 创建升级历史ID序列
+CREATE SEQUENCE IF NOT EXISTS upgrade_history_seq;
+
 CREATE TABLE IF NOT EXISTS upgrade_history (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('upgrade_history_seq'),
     upgrade_id VARCHAR NOT NULL UNIQUE, -- UUID
     from_version VARCHAR NOT NULL,
     to_version VARCHAR NOT NULL,
@@ -208,8 +226,11 @@ CREATE INDEX IF NOT EXISTS idx_upgrade_history_status ON upgrade_history(status)
 CREATE INDEX IF NOT EXISTS idx_upgrade_history_versions ON upgrade_history(from_version, to_version);
 
 -- 自动升级任务表
+-- 创建自动升级任务ID序列
+CREATE SEQUENCE IF NOT EXISTS auto_upgrade_tasks_seq;
+
 CREATE TABLE IF NOT EXISTS auto_upgrade_tasks (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('auto_upgrade_tasks_seq'),
     task_id VARCHAR NOT NULL UNIQUE,
     task_name VARCHAR NOT NULL,
     schedule_time TIMESTAMP NOT NULL,
@@ -296,8 +317,11 @@ INSERT OR REPLACE INTO app_config (config_key, config_value, config_type, catego
 -- 用户操作历史表（审计日志）
 -- ========================================
 
+-- 创建用户操作ID序列
+CREATE SEQUENCE IF NOT EXISTS user_actions_seq;
+
 CREATE TABLE IF NOT EXISTS user_actions (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('user_actions_seq'),
     action_type VARCHAR NOT NULL, -- UPGRADE/BACKUP/RESTORE/CONFIG_CHANGE等
     action_description TEXT NOT NULL,
     action_params JSON, -- 操作参数
@@ -325,8 +349,11 @@ CREATE INDEX IF NOT EXISTS idx_user_actions_status ON user_actions(status);
 -- 性能监控表（可选，用于性能调优）
 -- ========================================
 
+-- 创建性能监控ID序列
+CREATE SEQUENCE IF NOT EXISTS performance_metrics_seq;
+
 CREATE TABLE IF NOT EXISTS performance_metrics (
-    id INTEGER PRIMARY KEY,
+    id INTEGER PRIMARY KEY DEFAULT nextval('performance_metrics_seq'),
     metric_name VARCHAR NOT NULL,
     metric_value DOUBLE NOT NULL,
     metric_unit VARCHAR, -- ms/MB/count等

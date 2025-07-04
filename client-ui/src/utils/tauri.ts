@@ -24,6 +24,14 @@ export async function setWorkingDirectory(directory: string): Promise<void> {
   return await invoke('set_working_directory', { directory });
 }
 
+export async function getWorkingDirectory(): Promise<string> {
+  return await invoke('get_working_directory');
+}
+
+export async function resetWorkingDirectory(): Promise<void> {
+  return await invoke('reset_working_directory');
+}
+
 // ==================== 系统检查 API ====================
 
 export async function checkSystemRequirements(
@@ -34,8 +42,12 @@ export async function checkSystemRequirements(
 
 // ==================== 初始化和下载 API ====================
 
-export async function initClientWithProgress(workingDir: string): Promise<string> {
-  return await invoke('init_client_with_progress', { workingDir });
+export async function initClientWithProgress(): Promise<string> {
+  return await invoke('init_client_with_progress');
+}
+
+export async function downloadAndDeployServices(): Promise<string> {
+  return await invoke('download_and_deploy_services');
 }
 
 export async function downloadPackageWithProgress(
@@ -118,7 +130,7 @@ export class EventManager {
       callback(event.payload as ServiceStatusUpdateEvent);
     });
     this.listeners.set('service-status-update', unlisten);
-  }
+}
 
   // 清理所有监听器
   cleanup(): void {
@@ -136,7 +148,7 @@ export class EventManager {
       unlisten();
       this.listeners.delete(eventName);
       console.log(`已清理事件监听器: ${eventName}`);
-    }
+}
   }
 }
 
@@ -173,7 +185,7 @@ export function formatETA(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
     const remainingMinutes = Math.floor((seconds % 3600) / 60);
     return `${hours} 小时 ${remainingMinutes} 分钟`;
-  }
+}
 }
 
 // 获取平台特定的路径建议
@@ -187,7 +199,7 @@ export function getPlatformDefaultPath(platform: string): string {
       return '~/DuckClient';
     default:
       return './DuckClient';
-  }
+}
 }
 
 // 获取平台特定的Docker安装指南链接
@@ -201,7 +213,7 @@ export function getDockerInstallGuide(platform: string): string {
       return 'https://docs.docker.com/engine/install/';
     default:
       return 'https://docs.docker.com/get-docker/';
-  }
+}
 }
 
 // 获取平台特定的提示信息
@@ -227,7 +239,7 @@ export function getPlatformTips(platform: string): string[] {
       ];
     default:
       return ['请确保 Docker 已安装并运行'];
-  }
+}
 }
 
 // ==================== 错误处理工具 ====================
@@ -241,7 +253,7 @@ export class TauriAPIError extends Error {
     this.name = 'TauriAPIError';
     this.code = code;
     this.details = details;
-  }
+}
 }
 
 // 错误处理包装器
@@ -262,7 +274,7 @@ export async function withErrorHandling<T>(
       'API_CALL_FAILED',
       error instanceof Error ? error.stack : undefined
     );
-  }
+}
 }
 
 // ==================== 状态验证工具 ====================

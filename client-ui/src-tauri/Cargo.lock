@@ -1050,6 +1050,7 @@ dependencies = [
  "dirs",
  "duck-cli",
  "libc",
+ "regex",
  "serde",
  "serde_json",
  "tauri",

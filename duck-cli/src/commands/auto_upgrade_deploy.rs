@@ -60,7 +60,7 @@ pub async fn run_auto_upgrade_deploy(app: &mut CliApp, frontend_port: Option<u16
         }
     };
 
-    update::run_upgrade(app, true, false).await?; // 全量下载
+    update::run_upgrade(app, true, false, false).await?; // 全量下载
 
     // 1.5. 解压下载的docker.zip文件
     info!("📦 正在解压Docker服务包...");

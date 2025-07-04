@@ -122,6 +122,9 @@ export interface InitProgress {
 }
 
 export type InitStage = 
+  | 'init'
+  | 'download'
+  | 'deploy'
   | 'downloading'
   | 'extracting'
   | 'loading'

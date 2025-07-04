@@ -3,9 +3,14 @@ use client_core::error::Result;
 use tracing::{error, info, warn};
 
 /// 下载Docker服务升级文件
-pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()> {
+pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool, check: bool) -> Result<()> {
+    if check {
+        info!("🔍 检查Docker服务升级版本");
+        info!("========================");
+    } else {
     info!("📦 下载Docker服务文件");
     info!("=====================");
+    }
 
     // 检查是否是首次使用（docker目录为空或不存在docker-compose.yml）
     let docker_compose_path = std::path::Path::new(&app.config.docker.compose_file);
@@ -31,6 +36,23 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
             info!("=== Docker服务版本信息 ===");
             info!("当前版本: {}", version_info.current_version);
             info!("最新版本: {}", version_info.latest_version);
+
+            // 如果只是检查版本，不需要下载
+            if check {
+                if version_info.has_update {
+                    info!("🎉 发现新版本可用！");
+                    if let Some(notes) = version_info.release_notes {
+                        info!("📋 更新说明:");
+                        for line in notes.lines() {
+                            info!("   {}", line);
+                        }
+                    }
+                    info!("💡 运行 'duck-cli upgrade --full' 开始下载新版本");
+                } else {
+                    info!("✅ 当前已是最新版本");
+                }
+                return Ok(());
+            }
 
             // 构建基于版本的下载路径
             let target_version = &version_info.latest_version;
@@ -144,6 +166,18 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool) -> Result<()
         }
         Err(e) => {
             warn!("⚠️  检查版本失败: {}", e);
+
+            // 如果只是检查版本但失败了，直接返回错误
+            if check {
+                error!("❌ 无法检查升级版本");
+                info!("💡 可能的原因:");
+                info!("   - 网络连接问题");
+                info!("   - 服务器暂时不可用");
+                info!("   - 服务器尚未配置版本信息");
+                return Err(client_core::DuckError::Custom(format!(
+                    "检查升级版本失败: {e}"
+                )));
+            }
 
             // 无法获取版本信息时，使用当前配置的版本构建路径
             let fallback_version = &current_version;

@@ -240,7 +240,7 @@ impl ConfigManager {
         }
         Ok(())
     }
-    
+
     /// 获取字符串类型配置
     pub async fn get_string(&self, key: &str) -> Result<Option<String>> {
         self.ensure_cache_initialized().await?;

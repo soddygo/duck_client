@@ -3,12 +3,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { 
   InitStage, 
-  DownloadProgress, 
   InitProgress,
   InitProgressEvent,
   InitCompletedEvent 
 } from '../types/index.ts';
-import { formatFileSize, formatDownloadSpeed, formatETA, globalEventManager } from '../utils/tauri.ts';
+import { globalEventManager } from '../utils/tauri.ts';
 
 interface InitializationProgressProps {
   onComplete: () => void;
@@ -16,151 +15,158 @@ interface InitializationProgressProps {
 }
 
 export function InitializationProgress({ onComplete, onBack }: InitializationProgressProps) {
-  const [currentStage, setCurrentStage] = useState<InitStage>('downloading');
+  const [currentStage, setCurrentStage] = useState<InitStage>('init');
   const [stageProgress, setStageProgress] = useState<number>(0);
   const [overallProgress, setOverallProgress] = useState<number>(0);
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [totalSteps, setTotalSteps] = useState<number>(5);
+  const [totalSteps, setTotalSteps] = useState<number>(2);
   const [message, setMessage] = useState<string>('正在准备初始化...');
   const [taskId, setTaskId] = useState<string>('');
   
-  // 下载相关状态
-  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
-  const [downloadSpeed, setDownloadSpeed] = useState<number>(0);
-  const [eta, setEta] = useState<number>(0);
-  const [downloadedBytes, setDownloadedBytes] = useState<number>(0);
-  const [totalBytes, setTotalBytes] = useState<number>(0);
-  
   // 控制状态
-  const [canPause, setCanPause] = useState<boolean>(true);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isBackground, setIsBackground] = useState<boolean>(false);
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState<boolean>(false);
   
   // 详细信息状态
   const [showDetails, setShowDetails] = useState<boolean>(false);
   const [logMessages, setLogMessages] = useState<string[]>([]);
 
-  // 启动初始化和监听进度事件
+  // 启动初始化流程
   useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-
-    const startInitialization = async () => {
-      try {
-        // 获取当前工作目录
-        const appState = await invoke<any>('get_app_state');
-        const workingDir = appState.working_directory;
-        
-        if (!workingDir) {
-          setError('工作目录未设置');
-          return;
-        }
-
-        addLogMessage('🚀 开始初始化服务...');
-        addLogMessage(`📁 工作目录: ${workingDir}`);
-        
-        // 启动初始化任务
-        const initTaskId = await invoke<string>('init_client_with_progress', { 
-          workingDir: workingDir 
-        });
-        setTaskId(initTaskId);
-        
-        addLogMessage(`✅ 初始化任务已启动 (ID: ${initTaskId})`);
-        
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        setError(`启动初始化失败: ${errorMessage}`);
-        addLogMessage(`❌ 启动初始化失败: ${errorMessage}`);
-      }
-    };
-
-    const setupEventListeners = async () => {
-      // 监听初始化进度
-      await globalEventManager.onInitProgress((event: InitProgressEvent) => {
-        // 安全的类型转换，确保stage是有效的InitStage
-        const validStages: InitStage[] = ['downloading', 'extracting', 'loading', 'starting', 'configuring'];
-        const stage = validStages.includes(event.stage as InitStage) 
-          ? (event.stage as InitStage) 
-          : 'downloading';
-          
-        setCurrentStage(stage);
-        setStageProgress(event.percentage);
-        setMessage(event.message);
-        setCurrentStep(event.current_step);
-        setTotalSteps(event.total_steps);
-        
-        // 计算总体进度
-        const stageWeight = 100 / event.total_steps;
-        const totalProgress = ((event.current_step - 1) * stageWeight) + (event.percentage * stageWeight / 100);
-        setOverallProgress(Math.min(100, Math.max(0, totalProgress)));
-        
-        // 添加日志信息
-        addLogMessage(`[${event.stage}] ${event.message}`);
-      });
-
-      // 监听初始化完成
-      await globalEventManager.onInitCompleted((event: InitCompletedEvent) => {
-        if (event.success) {
-          setIsCompleted(true);
-          setOverallProgress(100);
-          setMessage('初始化完成！');
-          addLogMessage('✅ 初始化完成');
-          // 可以在这里调用 onComplete() 来跳转到下一页
-        } else {
-          setError(event.error || '初始化失败');
-          addLogMessage(`❌ 初始化失败: ${event.error || '未知错误'}`);
-        }
-      });
-
-      // 监听下载进度
-      await globalEventManager.onDownloadProgress((event) => {
-        setDownloadedBytes(event.downloaded_bytes);
-        setTotalBytes(event.total_bytes);
-        setDownloadSpeed(event.download_speed);
-        setEta(event.eta_seconds);
-        setStageProgress(event.percentage);
-        
-        addLogMessage(`下载进度: ${event.percentage.toFixed(1)}% (${formatFileSize(event.downloaded_bytes)}/${formatFileSize(event.total_bytes)})`);
-      });
-    };
-
-    // 先设置事件监听器，然后启动初始化
-    setupEventListeners().then(() => {
-      startInitialization();
-    });
-
+    startInitializationFlow();
+    
+    // 清理函数
     return () => {
       globalEventManager.cleanup();
     };
   }, []);
 
+  // 启动初始化流程
+  const startInitializationFlow = async () => {
+    try {
+      // 获取当前工作目录
+      const appState = await invoke<any>('get_app_state');
+      const workingDir = appState.working_directory;
+      
+      if (!workingDir) {
+        setError('工作目录未设置');
+        return;
+      }
+
+      addLogMessage('🚀 开始初始化 Duck Client...');
+      addLogMessage(`📁 工作目录: ${workingDir}`);
+      
+      // 第一步：快速本地初始化
+      await performLocalInitialization();
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setError(`启动初始化失败: ${errorMessage}`);
+      addLogMessage(`❌ 启动初始化失败: ${errorMessage}`);
+    }
+  };
+
+  // 第一步：快速本地初始化
+  const performLocalInitialization = async () => {
+    setIsInitializing(true);
+    setCurrentStage('init');
+    setCurrentStep(1);
+    setMessage('正在创建配置文件和数据库...');
+    addLogMessage('⚙️ 开始本地初始化...');
+    
+    try {
+      // 模拟进度更新
+      for (let i = 0; i <= 100; i += 20) {
+        setStageProgress(i);
+        setOverallProgress(i / 2); // 第一步占总进度的50%
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // 调用快速本地初始化
+      const result = await invoke<string>('init_client_with_progress');
+      
+      setStageProgress(100);
+      setOverallProgress(50);
+      addLogMessage('✅ 本地初始化完成');
+      addLogMessage('📦 准备下载和部署服务...');
+      
+      // 等待一下让用户看到第一步完成
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 继续第二步
+      await performServiceDeployment();
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setError(`本地初始化失败: ${errorMessage}`);
+      addLogMessage(`❌ 本地初始化失败: ${errorMessage}`);
+      setIsInitializing(false);
+    }
+  };
+
+  // 第二步：下载和部署服务
+  const performServiceDeployment = async () => {
+    setCurrentStage('deploy');
+    setCurrentStep(2);
+    setMessage('正在下载和部署 Docker 服务...');
+    setStageProgress(0);
+    addLogMessage('🚀 开始下载和部署服务...');
+    
+    try {
+      // 设置事件监听器
+      const setupEventListeners = async () => {
+        // 监听初始化进度
+        await globalEventManager.onInitProgress((event: InitProgressEvent) => {
+          console.log('收到初始化进度事件:', event);
+          
+          // 更新进度
+          setStageProgress(event.percentage);
+          setOverallProgress(50 + (event.percentage / 2)); // 第二步占总进度的50%
+          setMessage(event.message);
+          
+          // 添加日志信息
+          addLogMessage(`[${event.stage}] ${event.message}`);
+        });
+
+        // 监听初始化完成
+        await globalEventManager.onInitCompleted((event: InitCompletedEvent) => {
+          console.log('收到初始化完成事件:', event);
+          
+          if (event.success) {
+            setStageProgress(100);
+            setOverallProgress(100);
+            setIsCompleted(true);
+            setMessage('初始化完成！');
+            addLogMessage('🎉 服务部署完成');
+            addLogMessage('✅ Duck Client 初始化成功');
+          } else {
+            setError(event.error || '服务部署失败');
+            addLogMessage(`❌ 服务部署失败: ${event.error || '未知错误'}`);
+          }
+          setIsInitializing(false);
+        });
+      };
+      
+      // 先设置事件监听器
+      await setupEventListeners();
+      
+      // 调用真实的服务部署函数
+      await invoke<string>('download_and_deploy_services');
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setError(`服务部署失败: ${errorMessage}`);
+      addLogMessage(`❌ 服务部署失败: ${errorMessage}`);
+      setIsInitializing(false);
+    }
+  };
+
   // 添加日志消息
   const addLogMessage = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
-    setLogMessages(prev => [...prev.slice(-50), `[${timestamp}] ${message}`]); // 保留最近50条
-  };
-
-  // 暂停下载
-  const pauseDownload = async () => {
-    try {
-      // await invoke('pause_download');
-      setIsPaused(true);
-      addLogMessage('⏸️ 下载已暂停');
-    } catch (error) {
-      console.error('暂停下载失败:', error);
-    }
-  };
-
-  // 恢复下载
-  const resumeDownload = async () => {
-    try {
-      // await invoke('resume_download');
-      setIsPaused(false);
-      addLogMessage('▶️ 下载已恢复');
-    } catch (error) {
-      console.error('恢复下载失败:', error);
-    }
+    setLogMessages(prev => [...prev.slice(-50), `[${timestamp}] ${message}`]);
   };
 
   // 取消初始化
@@ -179,35 +185,51 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
   // 后台下载模式
   const toggleBackgroundMode = () => {
     setIsBackground(!isBackground);
-    addLogMessage(isBackground ? '🔄 切换到前台模式' : '📱 切换到后台模式');
+    addLogMessage(isBackground ? '🔄 切换到前台模式' : '📱 切换到后台运行');
   };
 
   // 获取阶段信息
   const getStageInfo = (stage: InitStage) => {
     const stageInfoMap: Record<InitStage, { title: string; description: string; icon: string }> = {
-      downloading: {
-        title: '第 1 步 / 共 5 步：下载 Docker 服务包',
-        description: '正在下载 Docker 服务包，包含所需的镜像和配置文件',
-        icon: '📦'
+      init: {
+        title: '第 1 步 / 共 2 步：本地初始化',
+        description: '正在创建配置文件和初始化数据库',
+        icon: '⚙️'
       },
-      extracting: {
-        title: '第 2 步 / 共 5 步：解压服务文件',
-        description: '正在解压下载的服务包，准备镜像文件',
-        icon: '📁'
-      },
-      loading: {
-        title: '第 3 步 / 共 5 步：加载 Docker 镜像',
-        description: '正在将镜像文件加载到本地 Docker 环境',
-        icon: '🐳'
-      },
-      starting: {
-        title: '第 4 步 / 共 5 步：启动 Docker 服务',
-        description: '正在启动和配置 Docker 服务容器',
+      deploy: {
+        title: '第 2 步 / 共 2 步：下载和部署服务',
+        description: '正在下载 Docker 镜像和部署服务容器',
         icon: '🚀'
       },
+      // 保留其他兼容性名称
+      download: {
+        title: '第 2 步 / 共 2 步：下载和部署服务',
+        description: '正在下载 Docker 镜像和部署服务容器',
+        icon: '📦'
+      },
+      downloading: {
+        title: '第 1 步 / 共 2 步：本地初始化',
+        description: '正在创建配置文件和初始化数据库',
+        icon: '⚙️'
+      },
+      extracting: {
+        title: '第 2 步 / 共 2 步：下载和部署服务',
+        description: '正在下载 Docker 镜像和部署服务容器',
+        icon: '📦'
+      },
+      loading: {
+        title: '第 2 步 / 共 2 步：下载和部署服务',
+        description: '正在部署和启动服务容器',
+        icon: '🚀'
+      },
+      starting: {
+        title: '正在完成部署...',
+        description: '正在完成Docker服务的最终配置',
+        icon: '🔧'
+      },
       configuring: {
-        title: '第 5 步 / 共 5 步：完成系统配置',
-        description: '正在进行最终的系统配置和初始化',
+        title: '正在完成初始化...',
+        description: '正在完成最终的系统配置和初始化',
         icon: '🔧'
       }
     };
@@ -234,7 +256,7 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
                 ></div>
               </div>
               <span className="progress-text">
-                {overallProgress.toFixed(0)}% | {formatDownloadSpeed(downloadSpeed)} | {formatETA(eta)}
+                {overallProgress.toFixed(0)}% | 步骤 {currentStep}/{totalSteps}
               </span>
             </div>
           </div>
@@ -242,16 +264,6 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
             <button onClick={toggleBackgroundMode} className="btn-mini">
               📋 查看详情
             </button>
-            {canPause && !isPaused && (
-              <button onClick={pauseDownload} className="btn-mini">
-                ⏸️ 暂停
-              </button>
-            )}
-            {isPaused && (
-              <button onClick={resumeDownload} className="btn-mini">
-                ▶️ 恢复
-              </button>
-            )}
             <button onClick={cancelInitialization} className="btn-mini danger">
               ❌ 取消
             </button>
@@ -288,9 +300,9 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
 
         {/* 阶段进度指示器 */}
         <div className="stage-indicators">
-          {(['downloading', 'extracting', 'loading', 'starting', 'configuring'] as InitStage[]).map((stage, index) => {
+          {(['init', 'deploy'] as InitStage[]).map((stage, index) => {
             const isActive = stage === currentStage;
-            const isCompleted = index < currentStep - 1;
+            const isCompleted = index < currentStep - 1 || (index === currentStep - 1 && stageProgress === 100);
             const stageInfo = getStageInfo(stage);
             
             return (
@@ -299,7 +311,7 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
                 className={`stage-indicator ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
               >
                 <div className="stage-icon">{stageInfo ? stageInfo.icon : '⏳'}</div>
-                <div className="stage-label">{stage}</div>
+                <div className="stage-label">{stage === 'init' ? 'Init' : 'Deploy'}</div>
               </div>
             );
           })}
@@ -320,50 +332,21 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
                 ></div>
               </div>
               <div className="progress-text">
-                {stageProgress.toFixed(1)}%
+                {stageProgress.toFixed(1)}% | 总进度: {overallProgress.toFixed(1)}%
               </div>
             </div>
 
-            {/* 下载阶段特殊信息 */}
-            {currentStage === 'downloading' && (
-              <div className="download-details">
-                <div className="download-stats">
-                  <div className="stat-item">
-                    <span className="label">📊 已下载:</span>
-                    <span className="value">{formatFileSize(downloadedBytes)} / {formatFileSize(totalBytes)}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="label">⏱️ 下载速度:</span>
-                    <span className="value">{formatDownloadSpeed(downloadSpeed)}</span>
-                  </div>
-                  <div className="stat-item">
-                    <span className="label">⏰ 预计剩余:</span>
-                    <span className="value">{formatETA(eta)}</span>
-                  </div>
-                </div>
-                
-                <div className="download-info">
-                  <p>ℹ️ 支持断点续传，网络中断后可自动恢复。您可以最小化窗口或暂停下载</p>
-                </div>
+            {/* 各阶段特殊信息 */}
+            {currentStage === 'init' && (
+              <div className="stage-details">
+                <p>💡 正在本地创建配置文件和数据库，这个过程很快</p>
               </div>
             )}
 
-            {/* 其他阶段的特殊信息 */}
-            {currentStage === 'extracting' && (
-              <div className="extract-details">
-                <p>💡 解压过程中系统可能会比较繁忙，这是正常现象</p>
-              </div>
-            )}
-
-            {currentStage === 'loading' && (
-              <div className="loading-details">
-                <p>💡 首次加载镜像需要较长时间，后续启动会很快</p>
-              </div>
-            )}
-
-            {currentStage === 'starting' && (
-              <div className="starting-details">
-                <p>💡 首次启动需要初始化数据库，请耐心等待</p>
+            {(currentStage === 'deploy' || currentStage === 'download') && (
+              <div className="stage-details">
+                <p>💡 正在下载 Docker 镜像和部署服务，首次下载可能需要较长时间</p>
+                <p>📱 您可以选择后台运行，完成后会自动通知</p>
               </div>
             )}
           </div>
@@ -375,15 +358,15 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
             <div className="completion-stats">
               <div className="stat-item">
                 <span className="label">📊 服务统计:</span>
-                <span className="value">5 个容器</span>
+                <span className="value">Docker 服务已部署</span>
               </div>
               <div className="stat-item">
-                <span className="label">📦 下载大小:</span>
-                <span className="value">{formatFileSize(totalBytes)}</span>
+                <span className="label">📋 完成步骤:</span>
+                <span className="value">{totalSteps} 个步骤</span>
               </div>
               <div className="stat-item">
-                <span className="label">🌐 服务地址:</span>
-                <span className="value">http://localhost</span>
+                <span className="label">🌐 服务状态:</span>
+                <span className="value">已准备就绪</span>
               </div>
             </div>
             
@@ -398,28 +381,16 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
         {/* 操作按钮 */}
         {!error && !isCompleted && (
           <div className="actions">
-            <button onClick={onBack} className="btn-secondary">
+            <button onClick={onBack} className="btn-secondary" disabled={isInitializing}>
               ← 返回上一步
             </button>
             
-            <button onClick={toggleBackgroundMode} className="btn-secondary">
-              💾 后台下载
+            <button onClick={toggleBackgroundMode} className="btn-secondary" disabled={currentStage === 'init'}>
+              📱 后台运行
             </button>
             
-            {canPause && !isPaused && currentStage === 'downloading' && (
-              <button onClick={pauseDownload} className="btn-secondary">
-                ⏸️ 暂停下载
-              </button>
-            )}
-            
-            {isPaused && (
-              <button onClick={resumeDownload} className="btn-primary">
-                🔄 断点续传
-              </button>
-            )}
-            
-            <button onClick={cancelInitialization} className="btn-danger">
-              ❌ 取消安装
+            <button onClick={cancelInitialization} className="btn-danger" disabled={isInitializing}>
+              ❌ 取消初始化
             </button>
           </div>
         )}

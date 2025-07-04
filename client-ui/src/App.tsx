@@ -4,6 +4,8 @@ import { WelcomeSetup } from './pages/WelcomeSetup.tsx';
 import { InitializationProgress } from './pages/InitializationProgress.tsx';
 import Dashboard from './pages/Dashboard.tsx';
 import type { AppStateInfo } from './types/index.ts';
+import { globalEventManager } from './utils/tauri.ts';
+import { message } from 'antd';
 import './App.css';
 
 type AppPage = 'welcome' | 'initialization' | 'dashboard';
@@ -46,6 +48,69 @@ function App() {
     };
 
     checkAppState();
+  }, []);
+
+  // 设置事件监听器
+  useEffect(() => {
+    const setupEventListeners = async () => {
+      // 监听应用状态变化
+      await globalEventManager.onAppStateChanged((newState: AppStateInfo) => {
+        console.log('应用状态已变化:', newState);
+        setAppState(newState);
+        
+        // 根据新状态自动导航
+        if (newState.initialized) {
+          console.log('检测到已初始化状态，跳转到dashboard');
+          setCurrentPage('dashboard');
+          message.success('应用状态已更新，进入主界面');
+        } else if (newState.working_directory) {
+          console.log('检测到有工作目录但未初始化，跳转到initialization');
+          setCurrentPage('initialization');
+          message.info('检测到工作目录变更，需要重新初始化');
+        } else {
+          console.log('检测到无工作目录，跳转到welcome');
+          setCurrentPage('welcome');
+          message.info('请选择工作目录');
+        }
+      });
+
+      // 监听需要初始化事件
+      await globalEventManager.onRequireInitialization((event: any) => {
+        console.log('收到需要初始化事件:', event);
+        
+        const { working_directory, reason } = event;
+        
+        // 显示提示信息
+        if (reason) {
+          message.warning(reason);
+        }
+        
+        // 更新应用状态
+        setAppState(prev => ({
+          ...prev,
+          state: 'UNINITIALIZED',
+          initialized: false,
+          working_directory,
+        }));
+        
+        // 导航到初始化页面
+        if (working_directory) {
+          console.log('需要重新初始化，跳转到initialization页面');
+          setCurrentPage('initialization');
+        } else {
+          console.log('需要选择工作目录，跳转到welcome页面');
+          setCurrentPage('welcome');
+        }
+      });
+    };
+
+    setupEventListeners().catch(console.error);
+
+    // 清理函数
+    return () => {
+      globalEventManager.cleanupEvent('app-state-changed');
+      globalEventManager.cleanupEvent('require-initialization');
+    };
   }, []);
 
   // 处理欢迎页面完成

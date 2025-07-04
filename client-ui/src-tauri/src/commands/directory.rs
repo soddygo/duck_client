@@ -1,7 +1,10 @@
-use tauri::{command, AppHandle, Manager};
+use tauri::{command, AppHandle, Manager, Emitter};
 use std::path::PathBuf;
 use super::types::{AppGlobalState, AppStateInfo};
 use serde::{Deserialize, Serialize};
+use tracing::info;
+use client_core::db::DuckDbManager;
+use client_core::constants::config;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DirectoryInfo {
@@ -78,6 +81,27 @@ pub async fn set_working_directory(
     
     // ✅ 重置数据库管理器，确保使用新目录的数据库
     state.reset_db_manager().await;
+    
+    // ✅ 重新检查应用状态
+    let new_app_state = get_app_state(app_handle.clone()).await
+        .map_err(|e| format!("检查应用状态失败: {}", e))?;
+    
+    // ✅ 发送状态变化事件给前端
+    let _ = app_handle.emit("app-state-changed", &new_app_state);
+    
+    // ✅ 如果检测到未初始化状态，发送特殊事件
+    if new_app_state.state == "UNINITIALIZED" {
+        let _ = app_handle.emit("require-initialization", serde_json::json!({
+            "working_directory": path.to_string_lossy(),
+            "reason": "新的工作目录需要初始化"
+        }));
+        
+        info!("📂 工作目录已更改为: {}", path.display());
+        info!("🔄 检测到未初始化状态，需要重新初始化");
+    } else {
+        info!("📂 工作目录已更改为: {}", path.display());
+        info!("✅ 检测到已初始化状态，可直接使用");
+    }
     
     Ok(())
 }

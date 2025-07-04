@@ -173,11 +173,10 @@ impl DuckDbActor {
             DbMessage::UpdateAppState {
                 state,
                 state_data,
-                progress_percentage,
                 error_message,
                 respond_to,
             } => {
-                let result = self.update_app_state(&state, state_data.as_deref(), progress_percentage, error_message.as_deref());
+                let result = self.update_app_state(&state, state_data.as_deref(), error_message.as_deref());
                 let _ = respond_to.send(result);
             }
             DbMessage::GetAppState { respond_to } => {
@@ -596,14 +595,13 @@ impl DuckDbActor {
         &mut self,
         state: &str,
         state_data: Option<&str>,
-        progress_percentage: Option<i32>,
         error_message: Option<&str>,
     ) -> Result<()> {
         // 使用UPSERT（INSERT OR REPLACE）来更新唯一记录
         self.connection.execute(
-            "INSERT OR REPLACE INTO app_state (id, current_state, state_data, last_error, progress_percentage, updated_at) 
-             VALUES (1, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
-            params![state, state_data, error_message, progress_percentage.unwrap_or(0)],
+            "INSERT OR REPLACE INTO app_state (id, current_state, state_data, last_error, updated_at) 
+             VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP)",
+            params![state, state_data, error_message],
         )?;
         Ok(())
     }
@@ -611,8 +609,8 @@ impl DuckDbActor {
     /// 获取当前应用状态
     fn get_app_state(&mut self) -> Result<Option<AppStateRecord>> {
         let mut stmt = self.connection.prepare(
-            "SELECT current_state, state_data, last_error, progress_percentage, 
-             estimated_completion_time, created_at, updated_at 
+            "SELECT current_state, state_data, last_error, 
+             created_at, updated_at 
              FROM app_state WHERE id = 1"
         )?;
 
@@ -623,10 +621,8 @@ impl DuckDbActor {
                 current_state: row.get(0)?,
                 state_data: row.get(1)?,
                 last_error: row.get(2)?,
-                progress_percentage: row.get(3)?,
-                estimated_completion_time: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
             }))
         } else {
             Ok(None)

@@ -237,7 +237,6 @@ impl DuckDbManager {
         &self,
         state: &str,
         state_data: Option<String>,
-        progress_percentage: Option<i32>,
         error_message: Option<String>,
     ) -> Result<()> {
         let (respond_to, receiver) = oneshot::channel();
@@ -246,7 +245,6 @@ impl DuckDbManager {
             .send(DbMessage::UpdateAppState {
                 state: state.to_string(),
                 state_data,
-                progress_percentage,
                 error_message,
                 respond_to,
             })

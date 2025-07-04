@@ -67,6 +67,18 @@ export async function startServicesMonitoring(): Promise<void> {
   return await invoke('start_services_monitoring');
 }
 
+export async function startServices(): Promise<string> {
+  return await invoke('start_services');
+}
+
+export async function stopServices(): Promise<string> {
+  return await invoke('stop_services');
+}
+
+export async function restartServices(): Promise<string> {
+  return await invoke('restart_services');
+}
+
 // ==================== 配置管理 API ====================
 
 export async function getUIConfiguration(): Promise<UIConfiguration> {
@@ -130,7 +142,23 @@ export class EventManager {
       callback(event.payload as ServiceStatusUpdateEvent);
     });
     this.listeners.set('service-status-update', unlisten);
-}
+  }
+
+  // 监听应用状态变化
+  async onAppStateChanged(callback: (event: any) => void): Promise<void> {
+    const unlisten = await listen('app-state-changed', (event) => {
+      callback(event.payload);
+    });
+    this.listeners.set('app-state-changed', unlisten);
+  }
+
+  // 监听需要初始化事件
+  async onRequireInitialization(callback: (event: any) => void): Promise<void> {
+    const unlisten = await listen('require-initialization', (event) => {
+      callback(event.payload);
+    });
+    this.listeners.set('require-initialization', unlisten);
+  }
 
   // 清理所有监听器
   cleanup(): void {
@@ -148,7 +176,7 @@ export class EventManager {
       unlisten();
       this.listeners.delete(eventName);
       console.log(`已清理事件监听器: ${eventName}`);
-}
+    }
   }
 }
 
@@ -185,7 +213,7 @@ export function formatETA(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
     const remainingMinutes = Math.floor((seconds % 3600) / 60);
     return `${hours} 小时 ${remainingMinutes} 分钟`;
-}
+  }
 }
 
 // 获取平台特定的路径建议
@@ -199,7 +227,7 @@ export function getPlatformDefaultPath(platform: string): string {
       return '~/DuckClient';
     default:
       return './DuckClient';
-}
+  }
 }
 
 // 获取平台特定的Docker安装指南链接
@@ -213,7 +241,7 @@ export function getDockerInstallGuide(platform: string): string {
       return 'https://docs.docker.com/engine/install/';
     default:
       return 'https://docs.docker.com/get-docker/';
-}
+  }
 }
 
 // 获取平台特定的提示信息
@@ -239,7 +267,7 @@ export function getPlatformTips(platform: string): string[] {
       ];
     default:
       return ['请确保 Docker 已安装并运行'];
-}
+  }
 }
 
 // ==================== 错误处理工具 ====================
@@ -253,7 +281,7 @@ export class TauriAPIError extends Error {
     this.name = 'TauriAPIError';
     this.code = code;
     this.details = details;
-}
+  }
 }
 
 // 错误处理包装器
@@ -274,7 +302,7 @@ export async function withErrorHandling<T>(
       'API_CALL_FAILED',
       error instanceof Error ? error.stack : undefined
     );
-}
+  }
 }
 
 // ==================== 状态验证工具 ====================
@@ -350,4 +378,54 @@ export async function openFileManager(path: string): Promise<void> {
   } catch (error) {
     console.error('打开文件管理器失败:', error);
   }
-} 
+}
+
+// ==================== 统一 API 对象 ====================
+
+// 为了兼容前端页面的调用方式，提供统一的 API 对象
+export const tauriAPI = {
+  service: {
+    start: startServices,
+    stop: stopServices,
+    restart: restartServices,
+    getStatus: getServicesStatus,
+    startMonitoring: startServicesMonitoring,
+  },
+  system: {
+    checkRequirements: checkSystemRequirements,
+    getCurrentPlatform,
+    openFileManager,
+  },
+  directory: {
+    getAppState,
+    setWorkingDirectory,
+    getWorkingDirectory,
+    resetWorkingDirectory,
+  },
+  init: {
+    initClientWithProgress,
+    downloadAndDeployServices,
+    downloadPackageWithProgress,
+  },
+  tasks: {
+    getCurrentTasks,
+    cancelTask,
+  },
+  ui: {
+    getConfiguration: getUIConfiguration,
+    updateConfiguration: updateUIConfiguration,
+  },
+  events: globalEventManager,
+  utils: {
+    formatFileSize,
+    formatDownloadSpeed,
+    formatETA,
+    getPlatformDefaultPath,
+    getDockerInstallGuide,
+    getPlatformTips,
+    getStoragePathSuggestion,
+    withErrorHandling,
+    validateAppState,
+    validateDownloadStatus,
+  },
+}; 

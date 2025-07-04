@@ -25,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_app_config_system ON app_config(is_system_config)
 CREATE INDEX IF NOT EXISTS idx_app_config_editable ON app_config(is_user_editable);
 
 -- ========================================
--- UI 应用状态管理表（单例模式，减少写冲突）
+-- UI 应用状态管理表（简化版，只记录状态不更新进度）
 -- ========================================
 
 -- 应用状态表（单例模式，使用UPSERT避免并发冲突）
@@ -34,8 +34,6 @@ CREATE TABLE IF NOT EXISTS app_state (
     current_state VARCHAR NOT NULL DEFAULT 'UNINITIALIZED', -- 状态枚举
     state_data JSON, -- 状态相关数据（JSON格式，灵活存储）
     last_error TEXT, -- 最后一次错误信息
-    progress_percentage INTEGER DEFAULT 0, -- 当前进度百分比
-    estimated_completion_time TIMESTAMP, -- 预计完成时间
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     

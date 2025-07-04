@@ -21,7 +21,7 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
   const [stageProgress, setStageProgress] = useState<number>(0);
   const [overallProgress, setOverallProgress] = useState<number>(0);
   const [currentStep, setCurrentStep] = useState<number>(1);
-  const [totalSteps, setTotalSteps] = useState<number>(2);
+  const [totalSteps, setTotalSteps] = useState<number>(4);
   const [message, setMessage] = useState<string>('正在准备初始化...');
   const [taskId, setTaskId] = useState<string>('');
   
@@ -124,9 +124,14 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
         await globalEventManager.onInitProgress((event: InitProgressEvent) => {
           console.log('收到初始化进度事件:', event);
           
+          // 更新当前阶段和步骤
+          setCurrentStage(event.stage as InitStage);
+          setCurrentStep(event.current_step);
+          setTotalSteps(event.total_steps);
+          
           // 更新进度
           setStageProgress(event.percentage);
-          setOverallProgress(50 + (event.percentage / 2)); // 第二步占总进度的50%
+          setOverallProgress(event.percentage);
           setMessage(event.message);
           
           // 添加日志信息
@@ -223,52 +228,61 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
   // 后台下载模式
   const toggleBackgroundMode = () => {
     setIsBackground(!isBackground);
-    addLogMessage(isBackground ? '🔄 切换到前台模式' : '📱 切换到后台运行');
+    addLogMessage(isBackground ? '🔄 切换到前台模式' : '�� 切换到后台运行');
   };
 
   // 获取阶段信息
   const getStageInfo = (stage: InitStage) => {
     const stageInfoMap: Record<InitStage, { title: string; description: string; icon: string }> = {
       init: {
-        title: '第 1 步 / 共 2 步：本地初始化',
+        title: '第 1 步 / 共 4 步：本地初始化',
         description: '正在创建配置文件和初始化数据库',
         icon: '⚙️'
       },
-      deploy: {
-        title: '第 2 步 / 共 2 步：下载和部署服务',
-        description: '正在下载 Docker 镜像和部署服务容器',
-        icon: '🚀'
+      initializing: {
+        title: '第 1 步 / 共 4 步：版本检查',
+        description: '正在检查最新服务版本',
+        icon: '🔍'
       },
-      // 保留其他兼容性名称
       download: {
-        title: '第 2 步 / 共 2 步：下载和部署服务',
-        description: '正在下载 Docker 镜像和部署服务容器',
-        icon: '📦'
+        title: '第 2 步 / 共 4 步：下载服务包',
+        description: '正在下载 Docker 服务包',
+        icon: '📥'
       },
       downloading: {
-        title: '第 1 步 / 共 2 步：本地初始化',
-        description: '正在创建配置文件和初始化数据库',
-        icon: '⚙️'
+        title: '第 2 步 / 共 4 步：下载服务包',
+        description: '正在下载 Docker 服务包',
+        icon: '📥'
       },
       extracting: {
-        title: '第 2 步 / 共 2 步：下载和部署服务',
-        description: '正在下载 Docker 镜像和部署服务容器',
+        title: '第 3 步 / 共 4 步：解压服务包',
+        description: '正在解压 Docker 服务包',
         icon: '📦'
       },
-      loading: {
-        title: '第 2 步 / 共 2 步：下载和部署服务',
+      deploy: {
+        title: '第 4 步 / 共 4 步：部署服务',
         description: '正在部署和启动服务容器',
         icon: '🚀'
       },
+      deploying: {
+        title: '第 4 步 / 共 4 步：部署服务',
+        description: '正在部署和启动服务容器',
+        icon: '🚀'
+      },
+      loading: {
+        title: '第 4 步 / 共 4 步：启动服务',
+        description: '正在启动服务容器',
+        icon: '🔄'
+      },
       starting: {
-        title: '正在完成部署...',
-        description: '正在完成Docker服务的最终配置',
-        icon: '🔧'
+        title: '第 4 步 / 共 4 步：启动服务',
+        description: '正在启动服务容器',
+        icon: '▶️'
       },
       configuring: {
-        title: '正在完成初始化...',
-        description: '正在完成最终的系统配置和初始化',
-        icon: '🔧'
+        title: '第 4 步 / 共 4 步：配置服务',
+        description: '正在配置服务参数',
+        icon: '⚙️'
       }
     };
     
@@ -365,25 +379,47 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
         {!error && !isCompleted && (
           <div className="flex justify-between mb-8 bg-white/10 p-4 rounded-2xl backdrop-blur-sm">
             <div className={`flex flex-col items-center p-4 rounded-xl transition-all duration-300 ${
-              currentStage === 'init' 
+              currentStage === 'init' || currentStage === 'initializing'
                 ? 'bg-blue-100/80 border-2 border-blue-400 scale-105 shadow-lg' 
                 : currentStep > 1 
                   ? 'bg-green-100/80 border-2 border-green-400' 
                   : 'bg-white/60 border-2 border-gray-300'
             }`}>
-              <div className="text-3xl mb-2">⚙️</div>
-              <div className="text-sm font-semibold uppercase tracking-wide text-gray-600">INIT</div>
+              <div className="text-2xl mb-2">⚙️</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-600">初始化</div>
             </div>
             
             <div className={`flex flex-col items-center p-4 rounded-xl transition-all duration-300 ${
-              currentStage === 'deploy' 
+              currentStage === 'download' || currentStage === 'downloading'
                 ? 'bg-blue-100/80 border-2 border-blue-400 scale-105 shadow-lg' 
                 : currentStep > 2 
                   ? 'bg-green-100/80 border-2 border-green-400' 
                   : 'bg-white/60 border-2 border-gray-300'
             }`}>
-              <div className="text-3xl mb-2">🚀</div>
-              <div className="text-sm font-semibold uppercase tracking-wide text-gray-600">DEPLOY</div>
+              <div className="text-2xl mb-2">📥</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-600">下载</div>
+            </div>
+            
+            <div className={`flex flex-col items-center p-4 rounded-xl transition-all duration-300 ${
+              currentStage === 'extracting'
+                ? 'bg-blue-100/80 border-2 border-blue-400 scale-105 shadow-lg' 
+                : currentStep > 3 
+                  ? 'bg-green-100/80 border-2 border-green-400' 
+                  : 'bg-white/60 border-2 border-gray-300'
+            }`}>
+              <div className="text-2xl mb-2">📦</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-600">解压</div>
+            </div>
+            
+            <div className={`flex flex-col items-center p-4 rounded-xl transition-all duration-300 ${
+              currentStage === 'deploy' || currentStage === 'deploying'
+                ? 'bg-blue-100/80 border-2 border-blue-400 scale-105 shadow-lg' 
+                : currentStep > 4 
+                  ? 'bg-green-100/80 border-2 border-green-400' 
+                  : 'bg-white/60 border-2 border-gray-300'
+            }`}>
+              <div className="text-2xl mb-2">🚀</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-600">部署</div>
             </div>
           </div>
         )}
@@ -408,16 +444,30 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
             </div>
 
             {/* 各阶段特殊信息 */}
-            {currentStage === 'init' && (
+            {(currentStage === 'init' || currentStage === 'initializing') && (
               <div className="stage-details">
-                <p>💡 正在本地创建配置文件和数据库，这个过程很快</p>
+                <p>💡 正在检查服务版本和本地配置，这个过程很快</p>
               </div>
             )}
 
-            {(currentStage === 'deploy' || currentStage === 'download') && (
+            {(currentStage === 'download' || currentStage === 'downloading') && (
               <div className="stage-details">
-                <p>💡 正在下载 Docker 镜像和部署服务，首次下载可能需要较长时间</p>
+                <p>💡 正在下载 Docker 服务包，首次下载可能需要较长时间</p>
                 <p>📱 您可以选择后台运行，完成后会自动通知</p>
+              </div>
+            )}
+            
+            {currentStage === 'extracting' && (
+              <div className="stage-details">
+                <p>💡 正在解压 Docker 服务包，请耐心等待</p>
+                <p>📦 解压过程可能需要1-3分钟</p>
+              </div>
+            )}
+
+            {(currentStage === 'deploy' || currentStage === 'deploying') && (
+              <div className="stage-details">
+                <p>💡 正在部署和启动服务容器</p>
+                <p>🚀 服务部署可能需要5-10分钟，请耐心等待</p>
               </div>
             )}
           </div>

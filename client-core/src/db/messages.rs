@@ -63,7 +63,6 @@ pub enum DbMessage {
     UpdateAppState {
         state: String,
         state_data: Option<String>, // JSON格式
-        progress_percentage: Option<i32>,
         error_message: Option<String>,
         respond_to: oneshot::Sender<Result<()>>,
     },
@@ -174,8 +173,6 @@ pub struct AppStateRecord {
     pub current_state: String,
     pub state_data: Option<String>,
     pub last_error: Option<String>,
-    pub progress_percentage: i32,
-    pub estimated_completion_time: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

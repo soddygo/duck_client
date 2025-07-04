@@ -2029,9 +2029,12 @@
       "npm:@tauri-apps/plugin-process@2",
       "npm:@tauri-apps/plugin-shell@2",
       "npm:antd@^5.22.2",
+      "npm:autoprefixer@^10.4.16",
+      "npm:postcss@^8.4.32",
       "npm:react-dom@^18.3.1",
       "npm:react-router-dom@^6.28.0",
-      "npm:react@^18.3.1"
+      "npm:react@^18.3.1",
+      "npm:tailwindcss@^3.4.0"
     ],
     "packageJson": {
       "dependencies": [

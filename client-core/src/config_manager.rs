@@ -2,7 +2,7 @@ use crate::error::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::Value;
+use serde_json::{Value, json};
 use serde::{Serialize, Deserialize};
 use tracing::{debug, warn};
 use crate::DatabaseManager;
@@ -757,6 +757,7 @@ pub struct AutoBackupConfig {
 mod tests {
     use super::*;
     use crate::DatabaseManager;
+    use serde_json::json;
     
     async fn create_test_config_manager() -> ConfigManager {
         let db = DatabaseManager::new_memory().await.unwrap();
@@ -808,7 +809,7 @@ mod tests {
         let manager = create_test_config_manager().await;
         
         // 更新主题配置
-        let result = manager.update_config("ui.theme", json!("dark")).await;
+        let result = manager.update_config("ui.theme", serde_json::json!("dark")).await;
         assert!(result.is_ok());
         
         // 验证更新
@@ -823,12 +824,12 @@ mod tests {
         let updates = vec![
             ConfigUpdateRequest {
                 key: "ui.theme".to_string(),
-                value: json!("dark"),
+                value: serde_json::json!("dark"),
                 validate: true,
             },
             ConfigUpdateRequest {
                 key: "ui.window_width".to_string(),
-                value: json!(1600),
+                value: serde_json::json!(1600),
                 validate: true,
             },
         ];
@@ -861,7 +862,7 @@ mod tests {
         let manager = create_test_config_manager().await;
         
         // 尝试更新系统配置（应该失败）
-        let result = manager.update_config("app.version", json!("2.0.0")).await;
+        let result = manager.update_config("app.version", serde_json::json!("2.0.0")).await;
         assert!(result.is_err());
     }
     
@@ -870,7 +871,7 @@ mod tests {
         let manager = create_test_config_manager().await;
         
         // 尝试用错误类型更新配置（应该失败）
-        let result = manager.update_config("ui.theme", json!(123)).await;
+        let result = manager.update_config("ui.theme", serde_json::json!(123)).await;
         assert!(result.is_err());
     }
     
@@ -879,7 +880,7 @@ mod tests {
         let manager = create_test_config_manager().await;
         
         // 先更新配置
-        manager.update_config("ui.theme", json!("dark")).await.unwrap();
+        manager.update_config("ui.theme", serde_json::json!("dark")).await.unwrap();
         
         // 重置为默认值
         let result = manager.reset_config_to_default("ui.theme").await;

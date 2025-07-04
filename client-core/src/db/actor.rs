@@ -4,7 +4,7 @@ use duckdb::{Connection, params};
 use serde_json;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::messages::{DbMessage, DownloadTaskRecord, AppStateRecord, UserActionRecord};
 use super::models::{BackupRecord, ScheduledTask};

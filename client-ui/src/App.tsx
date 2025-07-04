@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { WelcomeSetup } from './pages/WelcomeSetup.tsx';
@@ -18,6 +17,11 @@ function App() {
   useEffect(() => {
     const checkAppState = async () => {
       try {
+        // 首先初始化应用状态（加载保存的工作目录等）
+        await invoke('initialize_app_state');
+        console.log('应用状态初始化完成');
+        
+        // 然后获取当前应用状态
         const state = await invoke<AppStateInfo>('get_app_state');
         console.log('应用状态:', state);
         setAppState(state);

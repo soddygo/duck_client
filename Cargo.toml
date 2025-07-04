@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "client-core", "duck-cli" ]
-exclude = [ "client-ui" ]
+members = [ "client-core", "duck-cli", "client-ui/src-tauri" ]
 
 
 

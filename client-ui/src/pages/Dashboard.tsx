@@ -626,7 +626,7 @@ const Dashboard: React.FC = () => {
               </Row>
               <Row>
                 <Col span={12}>
-                  <Text strong>服务版本：</Text>
+                  <Text strong>Docker服务版本：</Text>
                 </Col>
                 <Col span={12}>
                   <Text code>{versionInfo.service_version}</Text>

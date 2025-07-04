@@ -2,11 +2,13 @@ use client_core::{
     api::ApiClient, authenticated_client::AuthenticatedClient, backup::BackupManager,
     config::AppConfig, container::DockerManager, database::Database, error::Result,
     upgrade::UpgradeManager,
+    constants::config,
 };
 use std::path::PathBuf;
 
 use crate::cli::Commands;
 use crate::commands;
+use tracing::debug;
 
 #[derive(Clone)]
 pub struct CliApp {
@@ -28,7 +30,9 @@ impl CliApp {
         config.ensure_cache_dirs()?;
 
         // 初始化数据库
-        let database = Database::connect("history.db").await?;
+        let db_path = config::get_database_path();
+        let database = Database::connect(&db_path).await?;
+        debug!("数据库连接成功: {}", db_path.display());
 
         // 创建认证客户端（自动处理注册和认证）
         let server_base_url = client_core::constants::api::DEFAULT_BASE_URL.to_string();
@@ -103,8 +107,4 @@ impl CliApp {
             }
         }
     }
-
-
-
-
 }

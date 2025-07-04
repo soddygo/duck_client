@@ -5,7 +5,9 @@ import type {
   InitStage, 
   InitProgress,
   InitProgressEvent,
-  InitCompletedEvent 
+  InitCompletedEvent,
+  DownloadProgressEvent,
+  DownloadCompletedEvent
 } from '../types/index.ts';
 import { globalEventManager } from '../utils/tauri.ts';
 
@@ -32,6 +34,7 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
   // 详细信息状态
   const [showDetails, setShowDetails] = useState<boolean>(false);
   const [logMessages, setLogMessages] = useState<string[]>([]);
+  const [showLogs, setShowLogs] = useState<boolean>(false);
 
   // 启动初始化流程
   useEffect(() => {
@@ -128,6 +131,41 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
           
           // 添加日志信息
           addLogMessage(`[${event.stage}] ${event.message}`);
+        });
+
+        // 监听下载进度
+        await globalEventManager.onDownloadProgress((event: DownloadProgressEvent) => {
+          console.log('收到下载进度事件:', event);
+          
+          // 更新下载进度
+          setStageProgress(event.percentage);
+          setOverallProgress(50 + (event.percentage / 2)); // 第二步占总进度的50%
+          
+          // 更新消息显示更详细的下载信息
+          const downloadSpeed = (event.download_speed / 1024 / 1024).toFixed(1); // MB/s
+          const downloadedMB = (event.downloaded_bytes / 1024 / 1024).toFixed(1);
+          const totalMB = (event.total_bytes / 1024 / 1024).toFixed(1);
+          const etaMinutes = Math.floor(event.eta_seconds / 60);
+          const etaSeconds = event.eta_seconds % 60;
+          
+          setMessage(`正在下载 ${event.file_name}... ${downloadedMB}/${totalMB} MB (${downloadSpeed} MB/s, 剩余 ${etaMinutes}:${etaSeconds.toString().padStart(2, '0')})`);
+          
+          // 添加日志信息
+          addLogMessage(`📦 下载进度: ${event.percentage.toFixed(1)}% - ${event.file_name}`);
+        });
+
+        // 监听下载完成
+        await globalEventManager.onDownloadCompleted((event: DownloadCompletedEvent) => {
+          console.log('收到下载完成事件:', event);
+          
+          if (event.success) {
+            addLogMessage('✅ 下载完成，开始部署服务...');
+            setMessage('下载完成，正在部署服务...');
+          } else {
+            setError(event.error || '下载失败');
+            addLogMessage(`❌ 下载失败: ${event.error || '未知错误'}`);
+            setIsInitializing(false);
+          }
         });
 
         // 监听初始化完成
@@ -241,6 +279,29 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
     };
   };
 
+  // 重试初始化
+  const retryInitialization = async () => {
+    // 重置所有状态
+    setError(null);
+    setIsCompleted(false);
+    setIsInitializing(false);
+    setCurrentStage('init');
+    setStageProgress(0);
+    setOverallProgress(0);
+    setCurrentStep(1);
+    setMessage('正在准备重新初始化...');
+    setLogMessages([]);
+    
+    // 添加重试日志
+    addLogMessage('🔄 开始重试初始化...');
+    
+    // 等待一下确保状态更新
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 重新开始初始化流程
+    await startInitializationFlow();
+  };
+
   // 后台模式最小化显示
   if (isBackground) {
     return (
@@ -276,64 +337,74 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
   const stageInfo = getStageInfo(currentStage);
 
   return (
-    <div className="initialization-progress">
-      <div className="container">
+    <div className="w-full h-screen bg-gradient-to-br from-blue-400 via-purple-500 to-purple-600 flex justify-center items-start p-5 overflow-auto">
+      <div className="max-w-4xl w-full bg-white/95 backdrop-blur-md rounded-3xl p-10 shadow-2xl mt-5">
         {/* 标题部分 */}
-        <div className="header">
-          <h1>🦆 Duck Client - 正在初始化服务</h1>
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
+            🦆 Duck Client - 正在初始化服务
+          </h1>
           
           {error ? (
-            <div className="error-state">
-              <h2>❌ 初始化失败</h2>
-              <p className="error-message">{error}</p>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-semibold text-red-600 mb-2">❌ 初始化失败</h2>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+                <p className="text-red-700 font-medium">{error}</p>
+              </div>
             </div>
           ) : isCompleted ? (
-            <div className="completed-state">
-              <h2>🎉 恭喜！Duck Client 初始化完成</h2>
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-semibold text-green-600 mb-2">🎉 初始化完成</h2>
             </div>
-          ) : stageInfo ? (
-            <h2>{stageInfo.title}</h2>
           ) : (
-            <h2>正在准备初始化...</h2>
+            <h2 className="text-xl font-medium text-gray-700">{stageInfo.title}</h2>
           )}
         </div>
 
-        {/* 阶段进度指示器 */}
-        <div className="stage-indicators">
-          {(['init', 'deploy'] as InitStage[]).map((stage, index) => {
-            const isActive = stage === currentStage;
-            const isCompleted = index < currentStep - 1 || (index === currentStep - 1 && stageProgress === 100);
-            const stageInfo = getStageInfo(stage);
+        {/* 阶段指示器 */}
+        {!error && !isCompleted && (
+          <div className="flex justify-between mb-8 bg-white/10 p-4 rounded-2xl backdrop-blur-sm">
+            <div className={`flex flex-col items-center p-4 rounded-xl transition-all duration-300 ${
+              currentStage === 'init' 
+                ? 'bg-blue-100/80 border-2 border-blue-400 scale-105 shadow-lg' 
+                : currentStep > 1 
+                  ? 'bg-green-100/80 border-2 border-green-400' 
+                  : 'bg-white/60 border-2 border-gray-300'
+            }`}>
+              <div className="text-3xl mb-2">⚙️</div>
+              <div className="text-sm font-semibold uppercase tracking-wide text-gray-600">INIT</div>
+            </div>
             
-            return (
-              <div 
-                key={stage}
-                className={`stage-indicator ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
-              >
-                <div className="stage-icon">{stageInfo ? stageInfo.icon : '⏳'}</div>
-                <div className="stage-label">{stage === 'init' ? 'Init' : 'Deploy'}</div>
-              </div>
-            );
-          })}
-        </div>
+            <div className={`flex flex-col items-center p-4 rounded-xl transition-all duration-300 ${
+              currentStage === 'deploy' 
+                ? 'bg-blue-100/80 border-2 border-blue-400 scale-105 shadow-lg' 
+                : currentStep > 2 
+                  ? 'bg-green-100/80 border-2 border-green-400' 
+                  : 'bg-white/60 border-2 border-gray-300'
+            }`}>
+              <div className="text-3xl mb-2">🚀</div>
+              <div className="text-sm font-semibold uppercase tracking-wide text-gray-600">DEPLOY</div>
+            </div>
+          </div>
+        )}
 
         {/* 当前阶段详情 */}
         {!error && !isCompleted && (
-          <div className="current-stage">
-            <h3>{stageInfo ? stageInfo.description : '正在准备初始化...'}</h3>
-            <p className="stage-message">{message}</p>
+          <div className="bg-white/80 rounded-2xl p-6 mb-8 backdrop-blur-sm border border-black/10">
+            <h3 className="text-xl font-semibold mb-2 text-gray-800">{stageInfo.icon} {stageInfo.title}</h3>
+            <p className="text-base mb-4 text-gray-600 font-medium">{message}</p>
             
             {/* 进度条 */}
-            <div className="progress-section">
-              <div className="progress-bar">
+            <div className="mb-6">
+              <div className="w-full h-3 bg-white/20 rounded-full overflow-hidden mb-2">
                 <div 
-                  className="progress-fill" 
+                  className="h-full bg-gradient-to-r from-green-400 to-blue-500 rounded-full transition-all duration-300 shadow-sm"
                   style={{ width: `${stageProgress}%` }}
                 ></div>
               </div>
-              <div className="progress-text">
-                {stageProgress.toFixed(1)}% | 总进度: {overallProgress.toFixed(1)}%
-              </div>
+              <p className="text-center text-sm text-gray-600 font-medium">
+                阶段进度: {stageProgress.toFixed(1)}% | 总进度: {overallProgress.toFixed(1)}%
+              </p>
             </div>
 
             {/* 各阶段特殊信息 */}
@@ -352,76 +423,88 @@ export function InitializationProgress({ onComplete, onBack }: InitializationPro
           </div>
         )}
 
-        {/* 完成状态显示 */}
+        {/* 完成状态的操作按钮 */}
         {isCompleted && (
-          <div className="completion-details">
-            <div className="completion-stats">
-              <div className="stat-item">
-                <span className="label">📊 服务统计:</span>
-                <span className="value">Docker 服务已部署</span>
-              </div>
-              <div className="stat-item">
-                <span className="label">📋 完成步骤:</span>
-                <span className="value">{totalSteps} 个步骤</span>
-              </div>
-              <div className="stat-item">
-                <span className="label">🌐 服务状态:</span>
-                <span className="value">已准备就绪</span>
-              </div>
-            </div>
-            
-            <div className="completion-actions">
-              <button onClick={onComplete} className="btn-primary large">
-                🚀 进入控制台
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 操作按钮 */}
-        {!error && !isCompleted && (
-          <div className="actions">
-            <button onClick={onBack} className="btn-secondary" disabled={isInitializing}>
-              ← 返回上一步
-            </button>
-            
-            <button onClick={toggleBackgroundMode} className="btn-secondary" disabled={currentStage === 'init'}>
-              📱 后台运行
-            </button>
-            
-            <button onClick={cancelInitialization} className="btn-danger" disabled={isInitializing}>
-              ❌ 取消初始化
+          <div className="flex justify-center space-x-4 mb-8">
+            <button 
+              onClick={onComplete} 
+              className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-xl shadow-lg hover:from-green-600 hover:to-emerald-700 transform hover:scale-105 transition-all duration-200 flex items-center space-x-2"
+            >
+              <span>🎉</span>
+              <span>进入管理界面</span>
             </button>
           </div>
         )}
 
         {/* 错误状态的操作按钮 */}
         {error && (
-          <div className="actions">
-            <button onClick={onBack} className="btn-secondary">
-              ← 返回上一步
+          <div className="flex justify-center space-x-4">
+            <button 
+              onClick={onBack} 
+              className="px-6 py-3 bg-gray-500 text-white font-medium rounded-lg hover:bg-gray-600 transform hover:scale-105 transition-all duration-200 flex items-center space-x-2"
+            >
+              <span>←</span>
+              <span>返回上一步</span>
             </button>
-            <button onClick={() => window.location.reload()} className="btn-primary">
-              🔄 重试
+            <button 
+              onClick={retryInitialization} 
+              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-medium rounded-lg hover:from-blue-600 hover:to-blue-700 transform hover:scale-105 transition-all duration-200 flex items-center space-x-2"
+            >
+              <span>🔄</span>
+              <span>重试初始化</span>
             </button>
           </div>
         )}
 
-        {/* 详细日志 */}
-        <div className="log-section">
-          <div className="log-header" onClick={() => setShowDetails(!showDetails)}>
-            <span>详细日志 {showDetails ? '🔼' : '🔽'}</span>
-            <span className="log-count">({logMessages.length} 条)</span>
+        {/* 进行中的操作按钮 */}
+        {!error && !isCompleted && (
+          <div className="flex justify-center space-x-4">
+            <button 
+              onClick={toggleBackgroundMode}
+              className="px-4 py-2 bg-gray-200/80 text-gray-700 font-medium rounded-lg hover:bg-gray-300/80 transition-all duration-200 flex items-center space-x-2"
+            >
+              <span>📱</span>
+              <span>后台运行</span>
+            </button>
+            <button 
+              onClick={cancelInitialization}
+              className="px-4 py-2 bg-red-200/80 text-red-700 font-medium rounded-lg hover:bg-red-300/80 transition-all duration-200 flex items-center space-x-2"
+            >
+              <span>❌</span>
+              <span>取消</span>
+            </button>
           </div>
-          
-          {showDetails && (
-            <div className="log-content">
-              {logMessages.map((log, index) => (
-                <div key={index} className="log-item">{log}</div>
-              ))}
+        )}
+
+        {/* 日志显示区域 */}
+        {logMessages.length > 0 && (
+          <div className="bg-black/5 rounded-2xl p-4 mt-8">
+            <div 
+              className="flex justify-between items-center py-3 cursor-pointer border-b border-black/10 hover:text-gray-800 transition-colors"
+              onClick={() => setShowLogs(!showLogs)}
+            >
+              <span className="font-semibold text-gray-700">📋 详细日志</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                  {logMessages.length} 条记录
+                </span>
+                <span className="text-gray-400">
+                  {showLogs ? '▼' : '▶'}
+                </span>
+              </div>
             </div>
-          )}
-        </div>
+            
+            {showLogs && (
+              <div className="max-h-48 overflow-y-auto pt-4 space-y-1">
+                {logMessages.map((log, index) => (
+                  <div key={index} className="font-mono text-sm text-gray-600 py-1 hover:bg-gray-50 px-2 rounded">
+                    {log}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

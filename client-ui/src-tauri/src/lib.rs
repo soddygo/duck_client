@@ -42,6 +42,7 @@ pub fn run() {
             commands::directory::get_working_directory,
             commands::directory::reset_working_directory,
             commands::directory::open_directory,
+            commands::directory::initialize_app_state,
             
             // UI配置命令
             commands::ui::get_ui_config,

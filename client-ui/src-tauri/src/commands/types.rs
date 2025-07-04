@@ -3,7 +3,14 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 use tokio::sync::{RwLock, Mutex};
 use std::sync::Arc;
-use client_core::db::DuckDbManager;
+use client_core::{
+    config::AppConfig,
+    database::Database,
+    constants::config,
+    container::DockerManager,
+    authenticated_client::AuthenticatedClient,
+    db::DuckDbManager,
+};
 
 // ================== 通用数据结构 ==================
 
@@ -121,30 +128,91 @@ impl Default for AppGlobalState {
 }
 
 impl AppGlobalState {
-    /// 获取或初始化数据库管理器（懒加载单例模式）
-    pub async fn get_or_init_db_manager(&self, working_dir: &std::path::Path) -> Result<DuckDbManager, String> {
-        let mut db_manager_guard = self.db_manager.lock().await;
+    /// 从数据库加载保存的工作目录设置（应用启动时调用）
+    pub async fn load_working_directory_from_db(&self) -> Result<(), String> {
+        // 先尝试从默认位置加载数据库，检查是否有保存的工作目录设置
+        let default_work_dir = get_default_work_directory();
+        let default_db_path = default_work_dir.join("data").join(config::DATABASE_FILE_NAME);
         
-        if let Some(ref manager) = *db_manager_guard {
-            // 如果已经初始化，直接返回克隆（DuckDbManager是Clone的）
-            Ok(manager.clone())
-        } else {
-            // 如果未初始化，创建新的管理器
-            let db_path = working_dir.join("data").join("duck_client.db");
-            let manager = DuckDbManager::new(&db_path)
-                .await
-                .map_err(|e| format!("初始化数据库管理器失败: {}", e))?;
-            
-            // 保存到全局状态
-            *db_manager_guard = Some(manager.clone());
-            Ok(manager)
+        if default_db_path.exists() {
+            // 如果默认位置有数据库，尝试加载工作目录设置
+            match DuckDbManager::new(&default_db_path).await {
+                Ok(manager) => {
+                    if let Ok(Some(saved_dir)) = manager.get_config("app.working_directory").await {
+                        let saved_path = std::path::PathBuf::from(saved_dir);
+                        if saved_path.exists() {
+                            let mut working_dir = self.working_directory.write().await;
+                            *working_dir = Some(saved_path);
+                            return Ok(());
+                        }
+                    }
+                }
+                Err(_) => {
+                    // 如果加载失败，继续使用默认目录
+                }
+            }
         }
+        
+        // 如果没有保存的设置或加载失败，设置为默认目录
+        let mut working_dir = self.working_directory.write().await;
+        *working_dir = Some(default_work_dir);
+        Ok(())
+    }
+    
+    /// 保存工作目录设置到数据库
+    pub async fn save_working_directory_to_db(&self, new_dir: &std::path::Path) -> Result<(), String> {
+        // 使用新的工作目录路径保存设置
+        let db_path = new_dir.join("data").join(config::DATABASE_FILE_NAME);
+        
+        // 确保data目录存在
+        let data_dir = new_dir.join("data");
+        if !data_dir.exists() {
+            std::fs::create_dir_all(&data_dir)
+                .map_err(|e| format!("创建data目录失败: {}", e))?;
+        }
+        
+        let manager = DuckDbManager::new(&db_path).await
+            .map_err(|e| format!("初始化数据库失败: {}", e))?;
+        
+        manager.set_config("app.working_directory", &new_dir.to_string_lossy())
+            .await
+            .map_err(|e| format!("保存工作目录配置失败: {}", e))?;
+        
+        Ok(())
+    }
+    
+    /// 获取或初始化数据库管理器（✅ 全局单例模式）
+    pub async fn get_or_init_db_manager(&self, working_dir: &std::path::Path) -> Result<DuckDbManager, String> {
+        let mut manager_guard = self.db_manager.lock().await;
+        
+        if let Some(ref manager) = *manager_guard {
+            return Ok(manager.clone());
+        }
+        
+        // 使用常量构建数据库路径
+        let db_path = working_dir.join("data").join(config::DATABASE_FILE_NAME); // 使用常量
+        let new_manager = DuckDbManager::new(&db_path)
+            .await
+            .map_err(|e| format!("初始化数据库管理器失败: {}", e))?;
+        
+        *manager_guard = Some(new_manager.clone());
+        Ok(new_manager)
     }
     
     /// 重置数据库管理器（当工作目录改变时使用）
     pub async fn reset_db_manager(&self) {
         let mut db_manager_guard = self.db_manager.lock().await;
         *db_manager_guard = None;
+    }
+}
+
+// 获取默认工作目录
+fn get_default_work_directory() -> std::path::PathBuf {
+    if let Some(home_dir) = dirs::home_dir() {
+        home_dir.join("Documents").join("DuckClient")
+    } else {
+        // 如果无法获取home目录，使用当前目录
+        std::path::PathBuf::from("./DuckClient")
     }
 }
 

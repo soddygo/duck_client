@@ -1,6 +1,16 @@
 use tauri::{command, AppHandle, Manager};
 use std::path::PathBuf;
 use super::types::{AppGlobalState, AppStateInfo};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DirectoryInfo {
+    pub path: String,
+    pub exists: bool,
+    pub is_initialized: bool,
+    pub available_space_gb: f64,
+    pub error: Option<String>,
+}
 
 /// 获取应用状态
 #[command]
@@ -8,25 +18,30 @@ pub async fn get_app_state(
     app_handle: AppHandle,
 ) -> Result<AppStateInfo, String> {
     let state = app_handle.state::<AppGlobalState>();
-    let working_dir = state.working_directory.read().await;
     
-    let (current_work_dir, has_user_set_dir) = if let Some(dir) = working_dir.as_ref() {
-        (dir.clone(), true)
+    // 首先检查是否有设置的工作目录
+    let working_dir = state.working_directory.read().await;
+    let current_work_dir = if let Some(dir) = working_dir.as_ref() {
+        dir.clone()
     } else {
-        (get_default_work_directory(), false)
+        // 如果没有设置工作目录，尝试从数据库加载
+        drop(working_dir); // 释放读锁
+        
+        // 尝试从数据库加载保存的工作目录
+        let _ = state.load_working_directory_from_db().await;
+        
+        // 重新获取工作目录
+        let working_dir = state.working_directory.read().await;
+        working_dir.as_ref().unwrap_or(&get_default_work_directory()).clone()
     };
     
-    let initialized = current_work_dir.join("config.toml").exists() && 
-                     current_work_dir.join("history.db").exists();
+    let initialized = current_work_dir.join("data").join("config.toml").exists() && 
+                     current_work_dir.join("data").join("duck_client.db").exists();
     
     Ok(AppStateInfo {
         state: if initialized { "READY".to_string() } else { "UNINITIALIZED".to_string() },
         initialized,
-        working_directory: if has_user_set_dir || initialized { 
-            Some(current_work_dir.to_string_lossy().to_string()) 
-        } else { 
-            None 
-        },
+        working_directory: Some(current_work_dir.to_string_lossy().to_string()),
         last_error: None,
     })
 }
@@ -54,7 +69,12 @@ pub async fn set_working_directory(
     
     // 设置新的工作目录
     let mut working_dir = state.working_directory.write().await;
-    *working_dir = Some(path);
+    *working_dir = Some(path.clone());
+    drop(working_dir); // 释放写锁
+    
+    // ✅ 保存工作目录设置到数据库中（持久化）
+    state.save_working_directory_to_db(&path).await
+        .map_err(|e| format!("保存工作目录设置失败: {}", e))?;
     
     // ✅ 重置数据库管理器，确保使用新目录的数据库
     state.reset_db_manager().await;
@@ -128,4 +148,18 @@ fn get_default_work_directory() -> PathBuf {
         // 如果无法获取home目录，使用当前目录
         PathBuf::from("./DuckClient")
     }
+}
+
+/// 初始化应用状态（应用启动时调用）
+#[command]
+pub async fn initialize_app_state(
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    let state = app_handle.state::<AppGlobalState>();
+    
+    // 尝试从数据库加载保存的工作目录
+    state.load_working_directory_from_db().await
+        .map_err(|e| format!("加载工作目录设置失败: {}", e))?;
+    
+    Ok(())
 } 

@@ -1,3 +1,4 @@
+/* Tailwind CSS基础样式 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -182,6 +183,7 @@ button {
   justify-content: center;
   align-items: center;
   overflow: auto;
+  padding-top: 30px;
 }
 
 /* ============== 加载页面样式 ============== */
@@ -192,6 +194,7 @@ button {
   display: flex;
   justify-content: center;
   align-items: center;
+  padding-top: 30px;
 }
 
 .loading-content {
@@ -236,14 +239,15 @@ button {
 }
 
 .welcome-setup .container {
-  max-width: 900px;
-  margin: 20px auto;
+  max-width: 800px;
+  width: 90%;
   background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
   border-radius: 20px;
   padding: 40px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(10px);
-  min-height: auto;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  margin-top: 20px;
 }
 
 .welcome-setup .header {
@@ -602,52 +606,60 @@ button {
   height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
-  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 20px;
   overflow: auto;
 }
 
 .initialization-progress .container {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
-  color: white;
+  max-width: 900px;
+  width: 90%;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  margin-top: 20px;
 }
 
 .initialization-progress .header {
   text-align: center;
   margin-bottom: 2rem;
+  color: #2d3748; /* 深色文字 */
 }
 
 .initialization-progress .header h1 {
   font-size: 2.5rem;
   font-weight: 700;
   margin-bottom: 1rem;
-  color: #ffffff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .initialization-progress .header h2 {
   font-size: 1.5rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: #f0f0f0;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  color: #4a5568; /* 中等深色 */
 }
 
 .initialization-progress .error-state,
 .initialization-progress .completed-state {
   text-align: center;
-  padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 1rem;
   margin-bottom: 2rem;
-  backdrop-filter: blur(10px);
+  color: #2d3748; /* 深色文字 */
 }
 
 .initialization-progress .error-message {
-  color: #ffcccb;
-  font-size: 1.1rem;
-  margin-top: 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+  color: #dc2626; /* 红色错误文字 */
 }
 
 /* 阶段指示器 */
@@ -665,18 +677,22 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex: 1;
-  position: relative;
-  color: rgba(255, 255, 255, 0.6);
+  padding: 1rem;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.6);
+  border: 2px solid rgba(156, 163, 175, 0.3);
 }
 
 .stage-indicator.active {
-  color: #ffffff;
-  transform: scale(1.1);
+  background: rgba(59, 130, 246, 0.1);
+  border-color: #3b82f6;
+  transform: scale(1.05);
 }
 
 .stage-indicator.completed {
-  color: #90EE90;
+  background: rgba(34, 197, 94, 0.1);
+  border-color: #22c55e;
 }
 
 .stage-indicator .stage-icon {
@@ -685,34 +701,35 @@ button {
 }
 
 .stage-indicator .stage-label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  text-transform: capitalize;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #4a5568;
 }
 
 /* 当前阶段详情 */
 .current-stage {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 2rem;
+  background: rgba(255, 255, 255, 0.8);
   border-radius: 1rem;
+  padding: 1.5rem;
   margin-bottom: 2rem;
   backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .current-stage h3 {
   font-size: 1.3rem;
   font-weight: 600;
-  margin-bottom: 1rem;
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  margin-bottom: 0.5rem;
+  color: #2d3748; /* 深色文字 */
 }
 
 .current-stage .stage-message {
   font-size: 1rem;
-  color: #f0f0f0;
-  margin-bottom: 1.5rem;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  margin-bottom: 1rem;
+  color: #4a5568; /* 中等深色文字 */
+  font-weight: 500;
 }
 
 /* 进度条 */
@@ -738,11 +755,11 @@ button {
 }
 
 .progress-text {
-  text-align: right;
-  color: #ffffff;
-  font-weight: 600;
+  text-align: center;
+  margin-top: 0.5rem;
   font-size: 0.9rem;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  color: #4a5568; /* 中等深色文字 */
+  font-weight: 500;
 }
 
 /* 阶段详情 */
@@ -764,34 +781,36 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 1rem;
+  border-radius: 8px;
 }
 
 .stat-item .label {
-  color: #d0d0d0;
-  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
 }
 
 .stat-item .value {
-  color: #ffffff;
-  font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  font-weight: 500;
+  color: #059669; /* 绿色，表示成功 */
 }
 
 .stage-details p {
-  color: #e0e0e0;
-  font-size: 0.9rem;
-  margin: 0;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  margin: 0.5rem 0;
+  font-size: 0.95rem;
+  color: #6b7280; /* 浅一点的文字颜色 */
+  line-height: 1.5;
 }
 
 /* 完成状态 */
 .completion-details {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 2rem;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
   border-radius: 1rem;
-  margin-bottom: 2rem;
-  backdrop-filter: blur(10px);
+  padding: 2rem;
   text-align: center;
+  margin-bottom: 2rem;
 }
 
 .completion-stats {
@@ -858,46 +877,44 @@ button {
 
 /* 日志部分 */
 .log-section {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.05);
   border-radius: 1rem;
-  overflow: hidden;
-  backdrop-filter: blur(10px);
+  padding: 1rem;
+  margin-top: 2rem;
 }
 
 .log-header {
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #ffffff;
+  padding: 0.75rem 0;
+  cursor: pointer;
   font-weight: 600;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  color: #374151;
 }
 
 .log-header:hover {
-  background: rgba(255, 255, 255, 0.15);
+  color: #1f2937;
 }
 
 .log-count {
-  color: #d0d0d0;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
+  color: #6b7280;
 }
 
 .log-content {
   max-height: 200px;
   overflow-y: auto;
-  padding: 1rem;
+  padding: 1rem 0;
 }
 
 .log-item {
-  color: #e0e0e0;
+  padding: 0.5rem 0;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 0.8rem;
-  margin-bottom: 0.5rem;
-  padding: 0.25rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.85rem;
+  color: #374151;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .log-item:last-child {

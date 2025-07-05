@@ -186,8 +186,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
     },
     {
       id: 'download',
-      title: '下载服务',
-      description: '下载 Docker 服务镜像',
+      title: '下载Docker应用',
+      description: '下载 Docker 应用文件,支持全量下载和强制重新下载',
       icon: <CloudArrowDownIcon className="h-5 w-5" />,
       variant: 'secondary',
       commandId: 'upgrade',
@@ -212,7 +212,7 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
     {
       id: 'deploy',
       title: '一键部署',
-      description: '自动升级并部署服务',
+      description: '自动升级并部署Docker服务',
       icon: <ArrowUpTrayIcon className="h-5 w-5" />,
       variant: 'primary',
       commandId: 'auto-upgrade-deploy',
@@ -289,8 +289,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
     },
     {
       id: 'check-update',
-      title: '检查更新',
-      description: '检查服务更新',
+      title: 'CLI检查更新',
+      description: '检查命令工具更新,或安装最新版本',
       icon: <CheckBadgeIcon className="h-5 w-5" />,
       variant: 'secondary',
       commandId: 'check-update',
@@ -317,8 +317,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
     },
     {
       id: 'upgrade',
-      title: '升级服务',
-      description: '升级 Docker 服务',
+      title: 'Docker服务升级',
+      description: '下载Docker服务文件，支持全量下载和强制重新下载',
       icon: <WrenchScrewdriverIcon className="h-5 w-5" />,
       variant: 'primary',
       commandId: 'upgrade',
@@ -342,7 +342,7 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
     {
       id: 'backup',
       title: '创建备份',
-      description: '创建服务备份',
+      description: '创建Docker服务备份',
       icon: <DocumentDuplicateIcon className="h-5 w-5" />,
       variant: 'secondary',
       action: async () => {
@@ -360,7 +360,7 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
     {
       id: 'rollback',
       title: '回滚服务',
-      description: '回滚到上一个版本',
+      description: '回滚Docker服务到指定版本',
       icon: <BackwardIcon className="h-5 w-5" />,
       variant: 'warning',
       action: async () => {
@@ -384,12 +384,12 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
     },
     {
       id: 'app-update',
-      title: '应用更新',
-      description: '检查并更新 GUI 应用',
+      title: '客户端更新',
+      description: '检查并更新客户端',
       icon: <Cog6ToothIcon className="h-5 w-5" />,
       variant: 'primary',
       action: async () => {
-        onLogMessage('检查应用更新...', 'info');
+        onLogMessage('检查客户端更新...', 'info');
         
         try {
           const update = await UpdateManager.checkForUpdates();

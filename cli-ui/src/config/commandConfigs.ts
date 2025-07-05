@@ -67,8 +67,8 @@ export const commandConfigs: { [key: string]: CommandConfig } = {
   // 检查更新
   'check-update': {
     id: 'check-update',
-    name: '检查更新',
-    description: '检查客户端更新或安装指定版本',
+    name: '客户端检查更新',
+    description: '检查客户端更新,或安装最新版本',
     parameters: [
       {
         name: 'action',
@@ -87,7 +87,7 @@ export const commandConfigs: { [key: string]: CommandConfig } = {
         label: '版本号',
         type: 'text',
         required: false,
-        placeholder: '1.0.0',
+        placeholder: '0.0.1',
         description: '指定要安装的版本号（留空则安装最新版本）'
       },
       {
@@ -110,7 +110,7 @@ export const commandConfigs: { [key: string]: CommandConfig } = {
   // 升级服务
   'upgrade': {
     id: 'upgrade',
-    name: '升级服务',
+    name: 'Docker服务升级',
     description: '下载Docker服务文件，支持全量下载和强制重新下载',
     parameters: [
       {

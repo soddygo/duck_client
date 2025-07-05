@@ -1,22 +1,22 @@
 //! # API客户端模块
-//! 
+//!
 //! 提供与后端服务通信的统一接口，包括：
 //! - 客户端注册与认证
 //! - 版本检查与更新
 //! - 服务包下载与管理  
 //! - 遥测数据上报
 //! - 文件完整性验证
-//! 
+//!
 //! ## 智能下载系统
-//! 
+//!
 //! 本模块实现了一个智能的文件下载和缓存系统：
-//! 
+//!
 //! ### 缓存路径结构
 //! ```
 //! cacheDuckData/download/{版本号}/full/docker.zip
 //! cacheDuckData/download/{版本号}/full/docker.zip.hash
 //! ```
-//! 
+//!
 //! ### 智能下载流程
 //! 1. **获取服务清单**：从服务器获取最新版本信息和文件哈希
 //! 2. **版本检查**：比较请求版本与服务器最新版本
@@ -37,17 +37,17 @@
 //!    - 下载新文件或替换损坏文件
 //!    - 验证下载文件的完整性
 //!    - 保存哈希值到 .hash 文件
-//! 
+//!
 //! ### 优势
 //! - **避免重复下载**：相同版本且文件完整时跳过下载
 //! - **自动修复**：检测并修复损坏的缓存文件
 //! - **版本管理**：支持多版本并存的缓存管理
 //! - **完整性保证**：SHA-256哈希验证确保文件完整性
-//! 
+//!
 //! ### 使用示例
 //! ```rust
 //! let api_client = ApiClient::new(Some("client_id".to_string()));
-//! 
+//!
 //! // 智能下载（自动处理缓存和版本检查）
 //! api_client.download_service_update_optimized(
 //!     &Path::new("cacheDuckData/download/0.0.2/full/docker.zip"),
@@ -58,16 +58,16 @@
 use crate::api_config::ApiConfig;
 use crate::authenticated_client::AuthenticatedClient;
 use crate::error::{DuckError, Result};
+use chrono;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, warn};
-use std::sync::Arc;
-use chrono;
 
 /// 下载进度状态枚举
 #[derive(Debug, Clone)]
@@ -396,12 +396,22 @@ impl ApiClient {
     }
 
     /// 从指定URL下载Docker服务更新包
-    pub async fn download_service_update_from_url<P: AsRef<Path>>(&self, url: &str, save_path: P) -> Result<()> {
-        self.download_service_update_from_url_with_auth(url, save_path, true).await
+    pub async fn download_service_update_from_url<P: AsRef<Path>>(
+        &self,
+        url: &str,
+        save_path: P,
+    ) -> Result<()> {
+        self.download_service_update_from_url_with_auth(url, save_path, true)
+            .await
     }
 
     /// 从指定URL下载Docker服务更新包（支持认证控制）
-    pub async fn download_service_update_from_url_with_auth<P: AsRef<Path>>(&self, url: &str, save_path: P, use_auth: bool) -> Result<()> {
+    pub async fn download_service_update_from_url_with_auth<P: AsRef<Path>>(
+        &self,
+        url: &str,
+        save_path: P,
+        use_auth: bool,
+    ) -> Result<()> {
         info!("开始下载Docker服务更新包: {}", url);
 
         // 根据是否需要认证决定使用哪种客户端
@@ -717,14 +727,17 @@ impl ApiClient {
         info!("🔍 开始智能下载决策检查...");
         info!("   目标文件: {}", file_path.display());
         info!("   远程哈希: {}", remote_hash);
-        
+
         // 文件不存在，需要下载
         if !file_path.exists() {
             info!("📂 文件不存在，需要下载: {}", file_path.display());
             // 清理可能存在的哈希文件
             let hash_file_path = file_path.with_extension("hash");
             if hash_file_path.exists() {
-                info!("🧹 发现孤立的哈希文件，正在清理: {}", hash_file_path.display());
+                info!(
+                    "🧹 发现孤立的哈希文件，正在清理: {}",
+                    hash_file_path.display()
+                );
                 if let Err(e) = tokio::fs::remove_file(&hash_file_path).await {
                     warn!("⚠️ 清理哈希文件失败: {}", e);
                 }
@@ -733,7 +746,7 @@ impl ApiClient {
         }
 
         info!("🔍 检查本地文件: {}", file_path.display());
-        
+
         // 检查文件大小
         match tokio::fs::metadata(file_path).await {
             Ok(metadata) => {
@@ -754,7 +767,7 @@ impl ApiClient {
         if let Some(saved_hash) = Self::load_file_hash(file_path).await? {
             info!("📜 找到本地哈希记录: {}", saved_hash);
             info!("🌐 远程文件哈希值: {}", remote_hash);
-            
+
             // 比较保存的哈希值与远程哈希值
             if saved_hash.to_lowercase() == remote_hash.to_lowercase() {
                 info!("✅ 哈希值匹配，验证文件完整性...");
@@ -849,7 +862,11 @@ impl ApiClient {
         info!("   包URL: {}", manifest.packages.full.url);
         info!("   包哈希: {}", manifest.packages.full.hash);
         if manifest.packages.full.size > 0 {
-            info!("   包大小: {} bytes ({:.2} MB)", manifest.packages.full.size, manifest.packages.full.size as f64 / 1024.0 / 1024.0);
+            info!(
+                "   包大小: {} bytes ({:.2} MB)",
+                manifest.packages.full.size,
+                manifest.packages.full.size as f64 / 1024.0 / 1024.0
+            );
         } else {
             info!("   包大小: 未提供 (外链文件)");
         }
@@ -857,7 +874,10 @@ impl ApiClient {
         // 2. 检查版本参数
         if let Some(target_version) = version {
             if target_version != manifest.version {
-                warn!("⚠️ 请求版本 {} 与服务器最新版本 {} 不匹配", target_version, manifest.version);
+                warn!(
+                    "⚠️ 请求版本 {} 与服务器最新版本 {} 不匹配",
+                    target_version, manifest.version
+                );
                 info!("   将下载服务器最新版本: {}", manifest.version);
             } else {
                 info!("✅ 请求版本与服务器版本一致: {}", target_version);
@@ -866,13 +886,13 @@ impl ApiClient {
 
         // 3. 检查是否为外链文件（hash为"external"）
         let is_external_file = manifest.packages.full.hash.to_lowercase() == "external";
-        
+
         info!("🔍 下载方式判断:");
         info!("   原始URL: {}", manifest.packages.full.url);
         info!("   Hash值: {}", manifest.packages.full.hash);
         info!("   是否外链: {}", is_external_file);
         info!("   配置的base_url: {}", self.config.base_url);
-        
+
         if is_external_file {
             info!("📦 检测到外链文件，跳过本地文件验证");
             // 外链文件始终需要下载，不进行本地文件检查
@@ -883,16 +903,21 @@ impl ApiClient {
                     let file_size = metadata.len();
                     if manifest.packages.full.size > 0 && file_size == manifest.packages.full.size {
                         info!("📦 文件已存在且大小匹配，开始哈希验证...");
-                        
+
                         // 进行哈希验证
-                        let needs_download = self.needs_file_download(download_path, &manifest.packages.full.hash).await?;
-                        
+                        let needs_download = self
+                            .needs_file_download(download_path, &manifest.packages.full.hash)
+                            .await?;
+
                         if !needs_download {
                             info!("✅ 文件已存在且验证通过，跳过下载");
                             return Ok(());
                         }
                     } else {
-                        info!("📦 文件已存在但大小不匹配: {} != {}, 需要重新下载", file_size, manifest.packages.full.size);
+                        info!(
+                            "📦 文件已存在但大小不匹配: {} != {}, 需要重新下载",
+                            file_size, manifest.packages.full.size
+                        );
                     }
                 }
             }
@@ -908,9 +933,16 @@ impl ApiClient {
             // 外链文件，直接使用URL下载
             info!("📥 使用直接下载方式 (外链文件: hash=external)");
             (manifest.packages.full.url.clone(), false)
-        } else if manifest.packages.full.url.starts_with("http://") || manifest.packages.full.url.starts_with("https://") {
+        } else if manifest.packages.full.url.starts_with("http://")
+            || manifest.packages.full.url.starts_with("https://")
+        {
             // 完整URL，检查是否是本地服务器
-            if manifest.packages.full.url.starts_with(&self.config.base_url) {
+            if manifest
+                .packages
+                .full
+                .url
+                .starts_with(&self.config.base_url)
+            {
                 // 是本地服务器的URL，使用API模式
                 info!("📥 使用API接口下载方式 (本地服务器URL)");
                 let mut url = manifest.packages.full.url.clone();
@@ -940,7 +972,14 @@ impl ApiClient {
         };
 
         info!("📥 开始下载服务更新包...");
-        info!("   下载方式: {}", if use_auth { "API接口" } else { "直接下载" });
+        info!(
+            "   下载方式: {}",
+            if use_auth {
+                "API接口"
+            } else {
+                "直接下载"
+            }
+        );
         info!("   最终下载URL: {}", download_url);
         info!("   目标路径: {}", download_path.display());
         info!("   使用认证: {}", use_auth);
@@ -954,11 +993,13 @@ impl ApiClient {
         if let Some(callback) = progress_callback {
             // 使用带进度回调的下载
             info!("🚀 开始带进度的下载...");
-            self.download_with_progress_internal(&download_url, download_path, callback, use_auth).await?;
+            self.download_with_progress_internal(&download_url, download_path, callback, use_auth)
+                .await?;
         } else {
             // 使用普通下载方法
             info!("🚀 开始普通下载...");
-            self.download_service_update_from_url_with_auth(&download_url, download_path, use_auth).await?;
+            self.download_service_update_from_url_with_auth(&download_url, download_path, use_auth)
+                .await?;
         }
 
         // 7. 下载完成后，对于外链文件跳过哈希验证
@@ -996,7 +1037,8 @@ impl ApiClient {
     where
         F: Fn(DownloadProgress) + Send + Sync + 'static,
     {
-        self.download_with_progress_internal(url, target_path, progress_callback, true).await
+        self.download_with_progress_internal(url, target_path, progress_callback, true)
+            .await
     }
 
     /// 带进度回调的下载函数（内部实现，支持是否使用认证）
@@ -1011,14 +1053,15 @@ impl ApiClient {
         F: Fn(DownloadProgress) + Send + Sync + 'static,
     {
         let callback = Arc::new(progress_callback);
-        
+
         // 解析文件名
-        let file_name = target_path.file_name()
+        let file_name = target_path
+            .file_name()
             .unwrap_or_default()
             .to_string_lossy()
             .to_string();
         let task_id = format!("download_{}", chrono::Utc::now().timestamp());
-        
+
         // 开始下载进度报告
         let mut progress = DownloadProgress {
             task_id: task_id.clone(),
@@ -1030,11 +1073,11 @@ impl ApiClient {
             percentage: 0.0,
             status: DownloadStatus::Starting,
         };
-        
+
         callback(progress.clone());
-        
+
         info!("🔍 开始下载: {}", url);
-        
+
         // 开始下载 - 根据是否需要认证决定使用哪种客户端
         let mut response = if use_auth && self.authenticated_client.is_some() {
             // 使用认证客户端（API下载）
@@ -1043,17 +1086,21 @@ impl ApiClient {
                 Ok(request_builder) => auth_client.send(request_builder, url).await?,
                 Err(e) => {
                     warn!("使用AuthenticatedClient下载失败，回退到普通请求: {}", e);
-                    self.build_request(url).send().await
+                    self.build_request(url)
+                        .send()
+                        .await
                         .map_err(|e| DuckError::Api(format!("开始下载失败: {}", e)))?
                 }
             }
         } else {
             // 使用普通客户端（直接URL下载）
             info!("使用普通HTTP客户端下载");
-            self.build_request(url).send().await
+            self.build_request(url)
+                .send()
+                .await
                 .map_err(|e| DuckError::Api(format!("开始下载失败: {}", e)))?
         };
-        
+
         // 检查GET请求状态
         if !response.status().is_success() {
             let status = response.status();
@@ -1062,50 +1109,64 @@ impl ApiClient {
                 "下载失败: HTTP {status} - {error_text}",
             )));
         }
-        
+
         info!("✅ 下载响应成功，开始接收数据...");
-        
+
         // 从响应中获取文件大小
         let total_size = response.content_length().unwrap_or(0);
-        info!("📊 文件大小: {} bytes ({:.2} MB)", total_size, total_size as f64 / 1024.0 / 1024.0);
-        
+        info!(
+            "📊 文件大小: {} bytes ({:.2} MB)",
+            total_size,
+            total_size as f64 / 1024.0 / 1024.0
+        );
+
         progress.total_bytes = total_size;
         progress.status = DownloadStatus::Downloading;
         callback(progress.clone());
-        
+
         // 确保目标目录存在
         if let Some(parent) = target_path.parent() {
-            tokio::fs::create_dir_all(parent).await
+            tokio::fs::create_dir_all(parent)
+                .await
                 .map_err(|e| DuckError::Custom(format!("创建目录失败: {}", e)))?;
         }
-        
-        let mut file = tokio::fs::File::create(target_path).await
+
+        let mut file = tokio::fs::File::create(target_path)
+            .await
             .map_err(|e| DuckError::Custom(format!("创建文件失败: {}", e)))?;
         let mut downloaded = 0u64;
         let start_time = std::time::Instant::now();
         let mut last_update = start_time;
-        
+
         info!("💾 开始写入文件: {}", target_path.display());
-        
+
         // 流式下载
-        while let Some(chunk) = response.chunk().await
-            .map_err(|e| DuckError::Api(format!("下载数据失败: {}", e)))? {
-            file.write_all(&chunk).await
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|e| DuckError::Api(format!("下载数据失败: {}", e)))?
+        {
+            file.write_all(&chunk)
+                .await
                 .map_err(|e| DuckError::Custom(format!("写入文件失败: {}", e)))?;
             downloaded += chunk.len() as u64;
-            
+
             let now = std::time::Instant::now();
-            
+
             // 每500ms更新一次进度
             if now.duration_since(last_update).as_millis() > 500 {
                 let elapsed = now.duration_since(start_time).as_secs_f64();
-                let speed = if elapsed > 0.0 { downloaded as f64 / elapsed } else { 0.0 };
+                let speed = if elapsed > 0.0 {
+                    downloaded as f64 / elapsed
+                } else {
+                    0.0
+                };
                 let eta = if speed > 0.0 {
                     ((total_size - downloaded) as f64 / speed) as u64
                 } else {
                     0
                 };
-                
+
                 progress.downloaded_bytes = downloaded;
                 progress.download_speed = speed;
                 progress.eta_seconds = eta;
@@ -1114,39 +1175,50 @@ impl ApiClient {
                 } else {
                     0.0
                 };
-                
+
                 callback(progress.clone());
                 last_update = now;
             }
         }
-        
+
         // 确保文件被刷新到磁盘
-        file.flush().await
+        file.flush()
+            .await
             .map_err(|e| DuckError::Custom(format!("刷新文件失败: {}", e)))?;
-        
+
         info!("📊 下载完成统计:");
-        info!("   实际下载: {} bytes ({:.2} MB)", downloaded, downloaded as f64 / 1024.0 / 1024.0);
-        info!("   预期大小: {} bytes ({:.2} MB)", total_size, total_size as f64 / 1024.0 / 1024.0);
-        
+        info!(
+            "   实际下载: {} bytes ({:.2} MB)",
+            downloaded,
+            downloaded as f64 / 1024.0 / 1024.0
+        );
+        info!(
+            "   预期大小: {} bytes ({:.2} MB)",
+            total_size,
+            total_size as f64 / 1024.0 / 1024.0
+        );
+
         // 验证下载是否完整
         if total_size > 0 && downloaded != total_size {
             let error_msg = format!(
                 "下载不完整: 预期 {} bytes ({:.2} MB)，实际下载 {} bytes ({:.2} MB)",
-                total_size, total_size as f64 / 1024.0 / 1024.0,
-                downloaded, downloaded as f64 / 1024.0 / 1024.0
+                total_size,
+                total_size as f64 / 1024.0 / 1024.0,
+                downloaded,
+                downloaded as f64 / 1024.0 / 1024.0
             );
             error!("{}", error_msg);
             return Err(DuckError::Custom(error_msg));
         }
-        
+
         info!("✅ 文件下载完成: {} bytes", downloaded);
-        
+
         // 完成下载
         progress.downloaded_bytes = downloaded;
         progress.percentage = 100.0;
         progress.status = DownloadStatus::Completed;
         callback(progress);
-        
+
         Ok(())
     }
 }

@@ -9,9 +9,9 @@ mod status;
 mod update;
 
 // Status commands
-pub use status::{run_status, run_status_details, show_client_version, run_api_info};
+pub use status::{run_api_info, run_status, run_status_details, show_client_version};
 
-// Backup commands  
+// Backup commands
 pub use backup::{run_backup, run_list_backups, run_rollback};
 
 // Update commands

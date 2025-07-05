@@ -27,4 +27,4 @@ pub struct TableDefinition {
     pub indexes: Vec<TableIndex>,
     pub engine: Option<String>,
     pub charset: Option<String>,
-} 
+}

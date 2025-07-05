@@ -22,7 +22,7 @@ pub enum DbMessage {
         value: String,
         respond_to: oneshot::Sender<Result<()>>,
     },
-    
+
     // ========== 下载任务管理 ==========
     /// 创建下载任务
     CreateDownloadTask {
@@ -57,7 +57,7 @@ pub enum DbMessage {
     GetActiveDownloadTasks {
         respond_to: oneshot::Sender<Result<Vec<DownloadTaskRecord>>>,
     },
-    
+
     // ========== 应用状态管理 ==========
     /// 更新应用状态
     UpdateAppState {
@@ -70,7 +70,7 @@ pub enum DbMessage {
     GetAppState {
         respond_to: oneshot::Sender<Result<Option<AppStateRecord>>>,
     },
-    
+
     // ========== 用户操作历史 ==========
     /// 记录用户操作
     RecordUserAction {
@@ -92,7 +92,7 @@ pub enum DbMessage {
         limit: Option<i32>,
         respond_to: oneshot::Sender<Result<Vec<UserActionRecord>>>,
     },
-    
+
     // ========== 现有的备份和任务管理 ==========
     /// 创建备份记录
     CreateBackupRecord {

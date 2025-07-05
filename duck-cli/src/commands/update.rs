@@ -8,8 +8,8 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool, check: bool)
         info!("🔍 检查Docker服务升级版本");
         info!("========================");
     } else {
-    info!("📦 下载Docker服务文件");
-    info!("=====================");
+        info!("📦 下载Docker服务文件");
+        info!("=====================");
     }
 
     // 检查是否是首次使用（docker目录为空或不存在docker-compose.yml）
@@ -87,7 +87,10 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool, check: bool)
                 info!("   下载类型: {} (全量)", download_type);
 
                 // 强制模式使用优化下载方法，同样支持外链和智能判断
-                let download_result = app.api_client.download_service_update_optimized(&download_path, Some(target_version)).await;
+                let download_result = app
+                    .api_client
+                    .download_service_update_optimized(&download_path, Some(target_version))
+                    .await;
 
                 match download_result {
                     Ok(_) => {

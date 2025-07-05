@@ -4,39 +4,42 @@ use std::io::{Read, Write};
 use tracing::{debug, error, info, warn};
 
 /// 判断是否应该跳过某个文件（智能过滤）
-/// 
+///
 /// 跳过的文件类型：
 /// - macOS 系统文件：__MACOSX, .DS_Store, ._*
 /// - 版本控制文件：.git/, .gitignore, .gitattributes
 /// - 临时文件：.tmp, .temp, .bak
 /// - IDE 文件：.vscode/, .idea/
-/// 
+///
 /// 保留的重要配置文件：
 /// - Docker 配置：.env, .env.*, .dockerignore
 /// - 其他配置：.editorconfig, .prettier*, .eslint*
 fn should_skip_file(file_name: &str) -> bool {
     // 跳过 macOS 系统文件和临时文件
-    if file_name.starts_with("__MACOSX") 
+    if file_name.starts_with("__MACOSX")
         || file_name.ends_with(".DS_Store")
         || file_name.starts_with("._")
         || file_name.ends_with(".tmp")
         || file_name.ends_with(".temp")
-        || file_name.ends_with(".bak") {
+        || file_name.ends_with(".bak")
+    {
         return true;
     }
 
     // 跳过版本控制相关文件
-    if file_name.starts_with(".git/") 
+    if file_name.starts_with(".git/")
         || file_name == ".gitignore"
         || file_name == ".gitattributes"
-        || file_name == ".gitmodules" {
+        || file_name == ".gitmodules"
+    {
         return true;
     }
 
     // 跳过 IDE 和编辑器配置目录
     if file_name.starts_with(".vscode/")
         || file_name.starts_with(".idea/")
-        || file_name.starts_with(".vs/") {
+        || file_name.starts_with(".vs/")
+    {
         return true;
     }
 
@@ -46,7 +49,8 @@ fn should_skip_file(file_name: &str) -> bool {
         || file_name == ".dockerignore"
         || file_name == ".editorconfig"
         || file_name.starts_with(".prettier")
-        || file_name.starts_with(".eslint") {
+        || file_name.starts_with(".eslint")
+    {
         return false;
     }
 
@@ -155,7 +159,7 @@ pub fn copy_with_progress<R: Read, W: Write>(
 pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
     use std::time::Instant;
     let extract_start = Instant::now();
-    
+
     info!("🔍 正在分析ZIP文件: {}", zip_path.display());
 
     // 打开ZIP文件
@@ -180,7 +184,7 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
         // 检查是否有docker-compose.yml，确定根目录结构
         if file_name.ends_with(client_core::constants::docker::COMPOSE_FILE_NAME) {
             info!("🎯 发现 docker-compose.yml: {}", file_name);
-            
+
             // 检查文件路径，确定解压策略
             if let Some(parent_dir) = std::path::Path::new(file_name).parent() {
                 if parent_dir != std::path::Path::new("") {
@@ -206,15 +210,21 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
 
     info!("📊 解压统计分析:");
     info!("   📁 总文件数: {}", total_files);
-    info!("   📏 总数据量: {:.1} MB", total_size as f64 / 1024.0 / 1024.0);
-    info!("   🗂️  解压策略: {}", if has_docker_root { 
-        format!("移除顶层目录 '{}'", docker_root_prefix) 
-    } else { 
-        "直接解压到docker目录".to_string() 
-    });
+    info!(
+        "   📏 总数据量: {:.1} MB",
+        total_size as f64 / 1024.0 / 1024.0
+    );
+    info!(
+        "   🗂️  解压策略: {}",
+        if has_docker_root {
+            format!("移除顶层目录 '{}'", docker_root_prefix)
+        } else {
+            "直接解压到docker目录".to_string()
+        }
+    );
 
     let output_dir = std::path::Path::new("docker");
-    
+
     // 重新打开archive进行解压（避免借用冲突）
     let file = std::fs::File::open(zip_path)?;
     let mut archive = zip::ZipArchive::new(file)?;
@@ -224,10 +234,10 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
     let mut last_progress_report = 0; // 最后一次进度报告
 
     info!("🚀 开始解压文件...");
-    
+
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        
+
         // 先获取必要的文件信息
         let file_name = file.name().to_string();
         let file_size = file.size();
@@ -241,7 +251,8 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
         // 处理文件路径（移除顶层docker目录前缀）
         let target_path = if has_docker_root && file_name.starts_with(&docker_root_prefix) {
             // 移除顶层目录前缀
-            let relative_path = file_name.strip_prefix(&format!("{}/", docker_root_prefix))
+            let relative_path = file_name
+                .strip_prefix(&format!("{}/", docker_root_prefix))
                 .unwrap_or(&file_name);
             output_dir.join(relative_path)
         } else {
@@ -259,9 +270,14 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
             }
 
             // 解压文件
-            if file_size > 50 * 1024 * 1024 { // 大于50MB的文件显示详细信息
-                info!("📦 正在解压大文件: {} ({:.1} MB)", 
-                    target_path.file_name().unwrap_or_default().to_string_lossy(),
+            if file_size > 50 * 1024 * 1024 {
+                // 大于50MB的文件显示详细信息
+                info!(
+                    "📦 正在解压大文件: {} ({:.1} MB)",
+                    target_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy(),
                     file_size as f64 / 1024.0 / 1024.0
                 );
             }
@@ -279,26 +295,37 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
                 let extracted_mb = extracted_size as f64 / 1024.0 / 1024.0;
                 let total_mb = total_size as f64 / 1024.0 / 1024.0;
                 let speed_mbps = extracted_mb / extract_start.elapsed().as_secs_f64();
-                
-                info!("📈 解压进度: {}% ({}/{} 文件, {:.1}/{:.1} MB, {:.1} MB/s)", 
-                    progress_percentage, extracted_files, total_files, 
-                    extracted_mb, total_mb, speed_mbps);
+
+                info!(
+                    "📈 解压进度: {}% ({}/{} 文件, {:.1}/{:.1} MB, {:.1} MB/s)",
+                    progress_percentage,
+                    extracted_files,
+                    total_files,
+                    extracted_mb,
+                    total_mb,
+                    speed_mbps
+                );
             }
         }
     }
 
     let total_elapsed = extract_start.elapsed();
     let extracted_size_mb = extracted_size as f64 / 1024.0 / 1024.0;
-    
+
     info!("🎉 解压完成！");
     info!("📊 解压统计:");
     info!("   ✅ 成功解压文件: {} 个", extracted_files);
     info!("   📏 解压数据大小: {:.1} MB", extracted_size_mb);
     info!("   ⏱️  总耗时: {:?}", total_elapsed);
-    info!("   🚀 平均速度: {:.1} MB/s", extracted_size_mb / total_elapsed.as_secs_f64());
-    
-    info!("解压统计: {} 文件, {:.1}MB, 耗时 {:?}", 
-        extracted_files, extracted_size_mb, total_elapsed);
+    info!(
+        "   🚀 平均速度: {:.1} MB/s",
+        extracted_size_mb / total_elapsed.as_secs_f64()
+    );
+
+    info!(
+        "解压统计: {} 文件, {:.1}MB, 耗时 {:?}",
+        extracted_files, extracted_size_mb, total_elapsed
+    );
 
     Ok(())
 }
@@ -322,7 +349,7 @@ pub fn setup_logging(verbose: bool) {
         let env_filter = EnvFilter::new("warn")
             .add_directive("duck_cli=error".parse().unwrap())
             .add_directive("client_core=error".parse().unwrap());
-        
+
         // 输出到stderr，使用最简格式
         fmt()
             .with_env_filter(env_filter)

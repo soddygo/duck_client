@@ -21,11 +21,11 @@ async fn main() {
         return;
     }
 
-        // `status` 命令特殊处理：即使应用初始化失败也要显示基本信息
+    // `status` 命令特殊处理：即使应用初始化失败也要显示基本信息
     if let Commands::Status = cli.command {
         // 总是先显示客户端版本信息（内置的，不依赖配置）
         duck_cli::show_client_version();
-        
+
         // 尝试初始化应用显示完整状态
         match CliApp::new_with_auto_config().await {
             Ok(app) => {

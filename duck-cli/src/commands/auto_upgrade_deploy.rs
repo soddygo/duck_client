@@ -11,7 +11,10 @@ use tokio::time::sleep;
 use tracing::{error, info, warn};
 
 /// 运行自动升级部署相关命令的统一入口
-pub async fn handle_auto_upgrade_deploy_command(app: &mut CliApp, cmd: AutoUpgradeDeployCommand) -> Result<()> {
+pub async fn handle_auto_upgrade_deploy_command(
+    app: &mut CliApp,
+    cmd: AutoUpgradeDeployCommand,
+) -> Result<()> {
     match cmd {
         AutoUpgradeDeployCommand::Run { port } => {
             info!("🚀 开始自动升级部署流程...");
@@ -258,7 +261,8 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
     };
 
     let _task_id = {
-        let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+        let config_manager =
+            client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
         config_manager.create_auto_upgrade_task(&task).await?
     };
 
@@ -278,7 +282,8 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
 
     // 更新任务状态为进行中
     {
-        let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+        let config_manager =
+            client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
         config_manager
             .update_upgrade_task_status(&task.task_id, "in_progress", Some(0), None)
             .await?;
@@ -296,14 +301,16 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
     // 执行自动升级部署
     match run_auto_upgrade_deploy(app, None).await {
         Ok(_) => {
-            let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+            let config_manager =
+                client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
             config_manager
                 .update_upgrade_task_status(&task.task_id, "completed", Some(100), None)
                 .await?;
             info!("✅ 延迟升级部署任务完成");
         }
         Err(e) => {
-            let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+            let config_manager =
+                client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
             config_manager
                 .update_upgrade_task_status(&task.task_id, "failed", None, Some(&e.to_string()))
                 .await?;
@@ -317,7 +324,8 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
 
 /// 显示自动升级部署状态
 pub async fn show_status(app: &mut CliApp) -> Result<()> {
-    let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+    let config_manager =
+        client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
 
     info!("📊 自动升级部署状态信息:");
     info!("   功能状态: 已实现");

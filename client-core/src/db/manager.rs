@@ -5,7 +5,7 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use super::actor::DuckDbActor;
-use super::messages::{DbMessage, DownloadTaskRecord, AppStateRecord, UserActionRecord};
+use super::messages::{AppStateRecord, DbMessage, DownloadTaskRecord, UserActionRecord};
 use super::models::{BackupRecord, ScheduledTask};
 
 /// DuckDB数据库管理器
@@ -207,7 +207,10 @@ impl DuckDbManager {
         let (respond_to, receiver) = oneshot::channel();
 
         self.sender
-            .send(DbMessage::GetDownloadTask { task_id, respond_to })
+            .send(DbMessage::GetDownloadTask {
+                task_id,
+                respond_to,
+            })
             .await
             .map_err(|_| DuckError::Custom("数据库Actor已关闭".to_string()))?;
 

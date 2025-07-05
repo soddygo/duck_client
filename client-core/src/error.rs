@@ -64,7 +64,6 @@ pub enum DuckError {
     #[error("Docker服务错误: {0}")]
     DockerService(String),
 
-
     #[error("Bad Request: {0}")]
     BadRequest(String),
 }
@@ -104,4 +103,3 @@ impl DuckError {
         Self::DockerService(msg.into())
     }
 }
-

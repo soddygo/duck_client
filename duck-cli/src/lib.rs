@@ -18,13 +18,10 @@ pub use docker_service::{
     get_system_architecture,
 };
 pub use init::run_init;
-pub use utils::{setup_logging, extract_docker_service}; // 导出解压函数
+pub use utils::{extract_docker_service, setup_logging}; // 导出解压函数
 
 // 重新导出核心功能
-pub use client_core::{
-    config_manager::ConfigManager,
-    database_manager::DatabaseManager,
-};
+pub use client_core::{config_manager::ConfigManager, database_manager::DatabaseManager};
 
 // 导出UI支持函数和类型
 pub use ui_support::*;

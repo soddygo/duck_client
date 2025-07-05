@@ -76,7 +76,8 @@ pub async fn run_auto_backup(app: &mut CliApp) -> Result<()> {
 
     // 记录备份执行时间和结果
     {
-        let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+        let config_manager =
+            client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
         if let Err(e) = config_manager
             .update_last_backup_time(backup_start_time, backup_success)
             .await
@@ -137,7 +138,8 @@ pub async fn run_auto_backup(app: &mut CliApp) -> Result<()> {
 /// 配置自动备份的cron表达式
 #[instrument(skip(app))]
 pub async fn configure_cron(app: &mut CliApp, expression: Option<String>) -> Result<()> {
-    let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+    let config_manager =
+        client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
 
     match expression {
         Some(expr) => {
@@ -178,7 +180,8 @@ pub async fn configure_cron(app: &mut CliApp, expression: Option<String>) -> Res
 /// 设置自动备份启用状态
 #[instrument(skip(app))]
 pub async fn set_enabled(app: &mut CliApp, enabled: Option<bool>) -> Result<()> {
-    let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+    let config_manager =
+        client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
 
     match enabled {
         Some(enable) => {
@@ -212,7 +215,8 @@ pub async fn set_enabled(app: &mut CliApp, enabled: Option<bool>) -> Result<()> 
 #[instrument(skip(app))]
 pub async fn show_status(app: &mut CliApp) -> Result<()> {
     debug!("显示自动备份状态信息");
-    let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
+    let config_manager =
+        client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
 
     info!(
         "自动备份状态: 功能已实现, 定时任务需要手动配置系统cron, 流程为停止服务->备份数据->重启服务"

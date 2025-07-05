@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
-use super::messages::{DbMessage, DownloadTaskRecord, AppStateRecord, UserActionRecord};
+use super::messages::{AppStateRecord, DbMessage, DownloadTaskRecord, UserActionRecord};
 use super::models::{BackupRecord, ScheduledTask};
 
 /// DuckDB Actor - 确保单线程访问DuckDB
@@ -125,7 +125,7 @@ impl DuckDbActor {
                 let result = self.cancel_pending_tasks(&task_type);
                 let _ = respond_to.send(result);
             }
-            
+
             // ========== 下载任务管理 ==========
             DbMessage::CreateDownloadTask {
                 task_name,
@@ -135,7 +135,13 @@ impl DuckDbActor {
                 file_hash,
                 respond_to,
             } => {
-                let result = self.create_download_task(&task_name, &download_url, total_size, &target_path, file_hash.as_deref());
+                let result = self.create_download_task(
+                    &task_name,
+                    &download_url,
+                    total_size,
+                    &target_path,
+                    file_hash.as_deref(),
+                );
                 let _ = respond_to.send(result);
             }
             DbMessage::UpdateDownloadTaskStatus {
@@ -145,7 +151,12 @@ impl DuckDbActor {
                 error_message,
                 respond_to,
             } => {
-                let result = self.update_download_task_status(task_id, &status, downloaded_size, error_message.as_deref());
+                let result = self.update_download_task_status(
+                    task_id,
+                    &status,
+                    downloaded_size,
+                    error_message.as_deref(),
+                );
                 let _ = respond_to.send(result);
             }
             DbMessage::CompleteDownloadTask {
@@ -168,7 +179,7 @@ impl DuckDbActor {
                 let result = self.get_active_download_tasks();
                 let _ = respond_to.send(result);
             }
-            
+
             // ========== 应用状态管理 ==========
             DbMessage::UpdateAppState {
                 state,
@@ -176,14 +187,15 @@ impl DuckDbActor {
                 error_message,
                 respond_to,
             } => {
-                let result = self.update_app_state(&state, state_data.as_deref(), error_message.as_deref());
+                let result =
+                    self.update_app_state(&state, state_data.as_deref(), error_message.as_deref());
                 let _ = respond_to.send(result);
             }
             DbMessage::GetAppState { respond_to } => {
                 let result = self.get_app_state();
                 let _ = respond_to.send(result);
             }
-            
+
             // ========== 用户操作历史 ==========
             DbMessage::RecordUserAction {
                 action_type,
@@ -191,7 +203,11 @@ impl DuckDbActor {
                 action_params,
                 respond_to,
             } => {
-                let result = self.record_user_action(&action_type, &action_description, action_params.as_deref());
+                let result = self.record_user_action(
+                    &action_type,
+                    &action_description,
+                    action_params.as_deref(),
+                );
                 let _ = respond_to.send(result);
             }
             DbMessage::CompleteUserAction {
@@ -201,13 +217,15 @@ impl DuckDbActor {
                 duration_seconds,
                 respond_to,
             } => {
-                let result = self.complete_user_action(action_id, &status, result_message.as_deref(), duration_seconds);
+                let result = self.complete_user_action(
+                    action_id,
+                    &status,
+                    result_message.as_deref(),
+                    duration_seconds,
+                );
                 let _ = respond_to.send(result);
             }
-            DbMessage::GetUserActions {
-                limit,
-                respond_to,
-            } => {
+            DbMessage::GetUserActions { limit, respond_to } => {
                 let result = self.get_user_actions(limit);
                 let _ = respond_to.send(result);
             }
@@ -263,7 +281,7 @@ impl DuckDbActor {
             "UPDATE app_config SET config_value = ?, updated_at = CURRENT_TIMESTAMP WHERE config_key = ?",
             params![format!("\"{}\"", value), key],
         )?;
-        
+
         // 如果没有更新任何行，则插入新配置
         if updated == 0 {
             self.connection.execute(
@@ -611,7 +629,7 @@ impl DuckDbActor {
         let mut stmt = self.connection.prepare(
             "SELECT current_state, state_data, last_error, 
              created_at, updated_at 
-             FROM app_state WHERE id = 1"
+             FROM app_state WHERE id = 1",
         )?;
 
         let mut rows = stmt.query([])?;
@@ -683,7 +701,8 @@ impl DuckDbActor {
         } else {
             "SELECT id, action_type, action_description, action_params, status, result_message, 
              started_at, completed_at, duration_seconds, client_version, platform_info 
-             FROM user_actions ORDER BY started_at DESC".to_string()
+             FROM user_actions ORDER BY started_at DESC"
+                .to_string()
         };
 
         let mut stmt = self.connection.prepare(&sql)?;

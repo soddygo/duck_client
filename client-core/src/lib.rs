@@ -10,8 +10,8 @@ pub mod database;
 pub mod database_manager;
 pub mod db;
 pub mod error;
-pub mod upgrade;
 pub mod sql_diff;
+pub mod upgrade;
 
-pub use error::*;
 pub use database_manager::DatabaseManager;
+pub use error::*;

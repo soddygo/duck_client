@@ -1,8 +1,7 @@
 use client_core::{
     api::ApiClient, authenticated_client::AuthenticatedClient, backup::BackupManager,
-    config::AppConfig, container::DockerManager, database::Database, error::Result,
-    upgrade::UpgradeManager,
-    constants::config,
+    config::AppConfig, constants::config, container::DockerManager, database::Database,
+    error::Result, upgrade::UpgradeManager,
 };
 use std::path::PathBuf;
 
@@ -86,7 +85,9 @@ impl CliApp {
                         client_core::error::DuckError::custom(format!("检查更新失败: {e}"))
                     })
             }
-            Commands::Upgrade { full, force, check } => commands::run_upgrade(self, full, force, check).await,
+            Commands::Upgrade { full, force, check } => {
+                commands::run_upgrade(self, full, force, check).await
+            }
             Commands::Backup => commands::run_backup(self).await,
             Commands::ListBackups => commands::run_list_backups(self).await,
             Commands::Rollback { backup_id, force } => {
@@ -102,9 +103,7 @@ impl CliApp {
             Commands::AutoUpgradeDeploy(auto_upgrade_deploy_cmd) => {
                 commands::handle_auto_upgrade_deploy_command(self, auto_upgrade_deploy_cmd).await
             }
-            Commands::Cache(cache_cmd) => {
-                commands::handle_cache_command(self, cache_cmd).await
-            }
+            Commands::Cache(cache_cmd) => commands::handle_cache_command(self, cache_cmd).await,
         }
     }
 }

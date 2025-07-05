@@ -106,7 +106,7 @@ impl DockerManager {
                 matched_services.push(ServiceInfo {
                     name: service_name.clone(),
                     status: crate::container::ServiceStatus::Stopped, // 改为Stopped而不是Unknown
-                    image: "未启动".to_string(), // 更准确的描述
+                    image: "未启动".to_string(),                      // 更准确的描述
                     ports: Vec::new(),
                 });
             }

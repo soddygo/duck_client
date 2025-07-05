@@ -94,7 +94,10 @@ pub async fn run_init(force: bool) -> Result<()> {
     info!("");
     info!("💡 提示:");
     info!("   - 配置文件: config.toml (可手动编辑修改配置)");
-    info!("   - 数据库文件: {} (存储操作历史和备份记录)", db_path.display());
+    info!(
+        "   - 数据库文件: {} (存储操作历史和备份记录)",
+        db_path.display()
+    );
     info!("   - 使用 'duck-cli --help' 查看所有可用命令");
     info!("   - 使用 'duck-cli status' 查看当前系统状态");
 

@@ -1,6 +1,6 @@
-use tauri::{command, AppHandle, Emitter};
-use tauri_plugin_shell::{ShellExt, process::CommandEvent};
 use serde::{Deserialize, Serialize};
+use tauri::{command, AppHandle, Emitter};
+use tauri_plugin_shell::{process::CommandEvent, ShellExt};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CommandResult {
@@ -24,28 +24,28 @@ pub async fn execute_duck_cli_sidecar(
     working_dir: Option<String>,
 ) -> Result<CommandResult, String> {
     let shell = app.shell();
-    
-    let mut cmd = shell.sidecar("duck-cli")
+
+    let mut cmd = shell
+        .sidecar("duck-cli")
         .map_err(|e| format!("创建sidecar命令失败: {}", e))?;
-    
+
     if !args.is_empty() {
         cmd = cmd.args(&args);
     }
-    
+
     if let Some(dir) = working_dir {
         cmd = cmd.current_dir(dir);
     }
-    
+
     // 设置GUI模式环境变量，禁用duck-cli的tracing日志输出
     cmd = cmd.env("DUCK_GUI_MODE", "1");
-    
-    let (mut rx, mut _child) = cmd.spawn()
-        .map_err(|e| format!("执行命令失败: {}", e))?;
-    
+
+    let (mut rx, mut _child) = cmd.spawn().map_err(|e| format!("执行命令失败: {}", e))?;
+
     let mut stdout = String::new();
     let mut stderr = String::new();
     let mut exit_code = 0;
-    
+
     while let Some(event) = rx.recv().await {
         match event {
             CommandEvent::Stdout(data) => {
@@ -68,7 +68,7 @@ pub async fn execute_duck_cli_sidecar(
             _ => {}
         }
     }
-    
+
     Ok(CommandResult {
         success: exit_code == 0,
         exit_code,
@@ -85,27 +85,29 @@ pub async fn execute_duck_cli_system(
     working_dir: Option<String>,
 ) -> Result<CommandResult, String> {
     let shell = app.shell();
-    
+
     let mut cmd = shell.command("duck-cli");
-    
+
     if !args.is_empty() {
         cmd = cmd.args(&args);
     }
-    
+
     if let Some(dir) = working_dir {
         cmd = cmd.current_dir(dir);
     }
-    
+
     // 设置GUI模式环境变量，禁用duck-cli的tracing日志输出
     cmd = cmd.env("DUCK_GUI_MODE", "1");
-    
-    let output = cmd.output().await
+
+    let output = cmd
+        .output()
+        .await
         .map_err(|e| format!("执行系统命令失败: {}", e))?;
-    
+
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let exit_code = output.status.code().unwrap_or(-1);
-    
+
     // 发送输出到前端
     if !stdout.is_empty() {
         let _ = app.emit("cli-output", &stdout);
@@ -114,7 +116,7 @@ pub async fn execute_duck_cli_system(
         let _ = app.emit("cli-error", &stderr);
     }
     let _ = app.emit("cli-complete", exit_code);
-    
+
     Ok(CommandResult {
         success: exit_code == 0,
         exit_code,
@@ -135,14 +137,14 @@ pub async fn execute_duck_cli_smart(
         Ok(result) => Ok(result),
         Err(sidecar_error) => {
             println!("Sidecar执行失败，尝试系统命令: {}", sidecar_error);
-            
+
             // 降级到系统命令
             match execute_duck_cli_system(app.clone(), args, working_dir).await {
                 Ok(result) => Ok(result),
-                Err(system_error) => {
-                    Err(format!("所有CLI执行方式都失败 - Sidecar: {} | System: {}", 
-                              sidecar_error, system_error))
-                }
+                Err(system_error) => Err(format!(
+                    "所有CLI执行方式都失败 - Sidecar: {} | System: {}",
+                    sidecar_error, system_error
+                )),
             }
         }
     }
@@ -155,13 +157,14 @@ pub async fn get_cli_version(app: AppHandle) -> Result<CliVersion, String> {
         Ok(result) => {
             if result.success {
                 // 从输出中提取版本号
-                let version = result.stdout
+                let version = result
+                    .stdout
                     .lines()
                     .find(|line| line.contains("duck-cli"))
                     .and_then(|line| line.split_whitespace().last())
                     .unwrap_or("unknown")
                     .to_string();
-                
+
                 Ok(CliVersion {
                     version,
                     available: true,
@@ -188,4 +191,4 @@ pub async fn get_cli_version(app: AppHandle) -> Result<CliVersion, String> {
 pub async fn check_cli_available(app: AppHandle) -> Result<bool, String> {
     let version_info = get_cli_version(app).await?;
     Ok(version_info.available)
-} 
+}

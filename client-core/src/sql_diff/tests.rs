@@ -1,5 +1,5 @@
-use super::*;
 use super::parser::parse_sql_tables;
+use super::*;
 
 #[test]
 fn test_simple_diff() {
@@ -42,10 +42,11 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("Diff SQL: {diff_sql}");
     println!("Description: {description}");
-    
+
     assert!(diff_sql.contains("ALTER TABLE") && diff_sql.contains("ADD COLUMN"));
     assert!(diff_sql.contains("`email`") && diff_sql.contains("VARCHAR(255)"));
 }
@@ -76,12 +77,12 @@ CREATE TABLE users (
 
     let tables = parse_sql_tables(sql).unwrap();
     assert_eq!(tables.len(), 1);
-    
+
     let users_table = tables.get("users").unwrap();
     assert_eq!(users_table.name, "users");
     assert_eq!(users_table.columns.len(), 2);
     assert_eq!(users_table.indexes.len(), 1);
-    
+
     // 确保被忽略的表没有被解析
     assert!(tables.get("should_be_ignored").is_none());
 }
@@ -123,8 +124,9 @@ CREATE TABLE posts (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
-    
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+
     assert!(diff_sql.contains("CREATE TABLE `posts`"));
     assert!(description.contains("新增表"));
 }
@@ -151,8 +153,9 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
-    
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+
     assert!(diff_sql.contains("DROP TABLE IF EXISTS `posts`"));
     assert!(description.contains("删除表"));
 }
@@ -167,7 +170,8 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(sql), sql, Some("1.0.0"), "1.0.1").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(sql), sql, Some("1.0.0"), "1.0.1").unwrap();
     assert!(diff_sql.is_empty());
     assert!(description.contains("无变化"));
 }
@@ -190,7 +194,8 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, _description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, _description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("Modify column diff SQL: {diff_sql}");
     assert!(diff_sql.contains("ALTER TABLE"));
 }
@@ -217,9 +222,10 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("Index diff SQL: {diff_sql}");
-    
+
     assert!(diff_sql.contains("ALTER TABLE") && diff_sql.contains("ADD"));
     assert!(diff_sql.contains("KEY") || diff_sql.contains("INDEX"));
 }
@@ -246,20 +252,25 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("VARCHAR长度修改差异:");
     println!("Description: {description}");
     println!("Diff SQL:");
     println!("{diff_sql}");
-    
+
     assert!(diff_sql.contains("ALTER TABLE"));
     assert!(diff_sql.contains("MODIFY COLUMN") || diff_sql.contains("CHANGE COLUMN"));
-    
+
     assert!(diff_sql.contains("`name`"));
     assert!(diff_sql.contains("`email`"));
     assert!(diff_sql.contains("`phone`"));
-    
-    assert!(diff_sql.contains("VARCHAR(128)") || diff_sql.contains("VARCHAR(255)") || diff_sql.contains("VARCHAR(20)"));
+
+    assert!(
+        diff_sql.contains("VARCHAR(128)")
+            || diff_sql.contains("VARCHAR(255)")
+            || diff_sql.contains("VARCHAR(20)")
+    );
 }
 
 #[test]
@@ -286,14 +297,15 @@ CREATE TABLE products (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("默认值修改差异:");
     println!("Description: {description}");
     println!("Diff SQL:");
     println!("{diff_sql}");
-    
+
     assert!(diff_sql.contains("ALTER TABLE"));
-    
+
     assert!(diff_sql.contains("`status`") || diff_sql.contains("`price`"));
 }
 
@@ -341,12 +353,13 @@ CREATE TABLE users (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("注释修改差异:");
     println!("Description: {description}");
     println!("Diff SQL:");
     println!("{diff_sql}");
-    
+
     if !diff_sql.is_empty() {
         assert!(diff_sql.contains("ALTER TABLE"));
         assert!(diff_sql.contains("MODIFY COLUMN") || diff_sql.contains("CHANGE COLUMN"));
@@ -375,12 +388,13 @@ CREATE TABLE orders (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("NULL约束修改差异:");
     println!("Description: {description}");
     println!("Diff SQL:");
     println!("{diff_sql}");
-    
+
     if !diff_sql.is_empty() {
         assert!(diff_sql.contains("ALTER TABLE"));
         assert!(diff_sql.contains("`customer_email`") || diff_sql.contains("`notes`"));
@@ -412,18 +426,25 @@ CREATE TABLE analytics (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("数据类型修改差异:");
     println!("Description: {description}");
     println!("Diff SQL:");
     println!("{diff_sql}");
-    
+
     assert!(diff_sql.contains("ALTER TABLE"));
-    
-    assert!(diff_sql.contains("`user_id`") || diff_sql.contains("`view_count`") || 
-            diff_sql.contains("`score`") || diff_sql.contains("`created_date`"));
-    
-    assert!(diff_sql.contains("BIGINT") || diff_sql.contains("DOUBLE") || diff_sql.contains("DATETIME"));
+
+    assert!(
+        diff_sql.contains("`user_id`")
+            || diff_sql.contains("`view_count`")
+            || diff_sql.contains("`score`")
+            || diff_sql.contains("`created_date`")
+    );
+
+    assert!(
+        diff_sql.contains("BIGINT") || diff_sql.contains("DOUBLE") || diff_sql.contains("DATETIME")
+    );
 }
 
 #[test]
@@ -450,16 +471,21 @@ CREATE TABLE user_profiles (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
+    let (diff_sql, description) =
+        generate_schema_diff(Some(from_sql), to_sql, Some("1.0.0"), "1.1.0").unwrap();
     println!("复合字段修改差异:");
     println!("Description: {description}");
     println!("Diff SQL:");
     println!("{diff_sql}");
-    
+
     assert!(diff_sql.contains("ALTER TABLE"));
-    
-    assert!(diff_sql.contains("`username`") || diff_sql.contains("`bio`") || 
-            diff_sql.contains("`status`") || diff_sql.contains("`avatar_url`"));
+
+    assert!(
+        diff_sql.contains("`username`")
+            || diff_sql.contains("`bio`")
+            || diff_sql.contains("`status`")
+            || diff_sql.contains("`avatar_url`")
+    );
 }
 
 #[test]
@@ -523,31 +549,31 @@ CREATE TABLE posts (
     "#;
 
     let tables = parse_sql_tables(sql_with_interference).unwrap();
-    
+
     println!("解析到的表数量: {}", tables.len());
     println!("解析到的表: {:?}", tables.keys().collect::<Vec<_>>());
-    
+
     // 应该只解析到USE语句之后的表
     assert_eq!(tables.len(), 2);
     assert!(tables.contains_key("users"));
     assert!(tables.contains_key("posts"));
-    
+
     // 确保被忽略的表没有被解析
     assert!(!tables.contains_key("ignored_table1"));
     assert!(!tables.contains_key("ignored_table2"));
-    
+
     // 验证users表的结构
     let users_table = tables.get("users").unwrap();
     assert_eq!(users_table.name, "users");
     assert_eq!(users_table.columns.len(), 6); // id, username, email, password_hash, created_at, updated_at
     assert_eq!(users_table.indexes.len(), 3); // PRIMARY, uk_username, uk_email
-    
+
     // 验证posts表的结构
     let posts_table = tables.get("posts").unwrap();
     assert_eq!(posts_table.name, "posts");
     assert_eq!(posts_table.columns.len(), 6); // id, user_id, title, content, status, created_at
     assert_eq!(posts_table.indexes.len(), 4); // PRIMARY, idx_user_id, idx_status, idx_created_at
-    
+
     println!("✅ USE语句分割逻辑测试通过");
 }
 
@@ -612,9 +638,9 @@ CREATE TABLE client_assets (
     FOREIGN KEY (version_id) REFERENCES client_versions(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户端构建包表';
     "#;
-    
+
     println!("SQL 文件长度: {} 字符", sql_content.len());
-    
+
     // 查找 USE 语句
     let lines: Vec<&str> = sql_content.lines().collect();
     for (i, line) in lines.iter().enumerate() {
@@ -623,17 +649,17 @@ CREATE TABLE client_assets (
             println!("找到 USE 语句在第 {} 行: {}", i + 1, line);
         }
     }
-    
+
     let tables = parse_sql_tables(sql_content).unwrap();
-    
+
     println!("解析到的表: {:?}", tables.keys().collect::<Vec<_>>());
-    
+
     // 应该解析到3个表
     assert_eq!(tables.len(), 3, "应该能解析到3个表");
     assert!(tables.contains_key("agent_component_config"));
     assert!(tables.contains_key("client_versions"));
     assert!(tables.contains_key("client_assets"));
-    
+
     // 检查 agent_component_config 表结构
     if let Some(agent_table) = tables.get("agent_component_config") {
         println!("agent_component_config 表结构: {agent_table:?}");
@@ -642,19 +668,19 @@ CREATE TABLE client_assets (
         assert_eq!(agent_table.columns.len(), 7); // id, component_name, config_json, version, status, created_at, updated_at
         assert_eq!(agent_table.indexes.len(), 5); // PRIMARY, uk_component_version, idx_component_name, idx_status, idx_created_at
     }
-    
+
     // 检查 client_versions 表结构
     if let Some(client_versions_table) = tables.get("client_versions") {
         println!("client_versions 表结构: {client_versions_table:?}");
         assert_eq!(client_versions_table.columns.len(), 13);
     }
-    
+
     // 检查 client_assets 表结构
     if let Some(client_assets_table) = tables.get("client_assets") {
         println!("client_assets 表结构: {client_assets_table:?}");
         assert_eq!(client_assets_table.columns.len(), 12);
     }
-    
+
     println!("✅ 真实 MySQL SQL 解析测试通过");
 }
 
@@ -738,18 +764,19 @@ CREATE TABLE comments (
 ) ENGINE=InnoDB;
     "#;
 
-    let (diff_sql, description) = generate_schema_diff(Some(v1_sql), v2_sql, Some("1.0.0"), "2.0.0").unwrap();
-    
+    let (diff_sql, description) =
+        generate_schema_diff(Some(v1_sql), v2_sql, Some("1.0.0"), "2.0.0").unwrap();
+
     println!("复杂SQL差异:");
     println!("Description: {description}");
     println!("Diff SQL:");
     println!("{diff_sql}");
-    
+
     assert!(diff_sql.contains("ALTER TABLE") || diff_sql.contains("CREATE TABLE"));
-    
+
     assert!(diff_sql.contains("comments"));
-    
+
     assert!(diff_sql.contains("users"));
-    
+
     assert!(diff_sql.contains("posts"));
-} 
+}

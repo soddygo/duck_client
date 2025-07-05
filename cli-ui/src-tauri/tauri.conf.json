@@ -37,7 +37,7 @@
       "icons/icon.ico"
     ],
     "externalBin": [
-      "binaries/macos-universal/duck-cli"
+      "binaries/duck-cli"
     ]
   },
   "plugins": {
@@ -52,6 +52,8 @@
     "shell": {
       "open": true
     },
-    "fs": {}
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
   }
 }

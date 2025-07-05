@@ -12,7 +12,7 @@ import {
   CheckBadgeIcon,
   Cog6ToothIcon
 } from '@heroicons/react/24/outline';
-import { DuckCliManager, UpdateManager, DialogManager } from '../utils/tauri';
+import { UpdateManager, DialogManager } from '../utils/tauri';
 import ParameterInputModal from './ParameterInputModal';
 import { getCommandConfig, needsParameterInput } from '../config/commandConfigs';
 import { CommandConfig, ParameterInputResult } from '../types';

@@ -149,8 +149,6 @@ pub async fn execute_duck_cli_smart(
             Ok(result)
         },
         Err(sidecar_error) => {
-            println!("Sidecar执行失败，尝试系统命令: {sidecar_error}");
-
             // 发送降级通知
             let _ = app.emit("cli-output", "⚠️ Sidecar方式失败，使用系统命令...");
 

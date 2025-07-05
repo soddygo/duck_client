@@ -124,7 +124,7 @@ function App() {
     }
   }, [logs]);
 
-  // 设置Tauri事件监听器 - 使用ref避免重复注册
+  // 设置Tauri事件监听器 - 使用全局变量确保应用生命周期内只设置一次
   const addLogEntryRef = useRef(addLogEntry);
   
   // 同步最新的addLogEntry函数到ref
@@ -133,6 +133,13 @@ function App() {
   }, [addLogEntry]);
 
   useEffect(() => {
+    // 使用全局变量防止重复设置监听器
+    if ((window as any).__duck_cli_listeners_setup) {
+      return;
+    }
+
+    (window as any).__duck_cli_listeners_setup = true;
+
     let unlistenOutput: any;
     let unlistenError: any;
     let unlistenComplete: any;
@@ -143,7 +150,6 @@ function App() {
         unlistenOutput = await listen('cli-output', (event) => {
           const output = event.payload as string;
           if (output.trim()) {
-            // 使用ref访问最新的addLogEntry，避免重复注册
             addLogEntryRef.current('info', output.trim());
           }
         });
@@ -152,7 +158,6 @@ function App() {
         unlistenError = await listen('cli-error', (event) => {
           const error = event.payload as string;
           if (error.trim()) {
-            // 使用ref访问最新的addLogEntry，避免重复注册
             addLogEntryRef.current('error', error.trim());
           }
         });
@@ -172,9 +177,16 @@ function App() {
           addLogEntryRef.current('info', '─'.repeat(50));
         });
 
-        console.log('Tauri事件监听器已设置（仅一次）');
+        // 保存清理函数到全局变量
+        (window as any).__duck_cli_listeners_cleanup = () => {
+          if (unlistenOutput) unlistenOutput();
+          if (unlistenError) unlistenError();
+          if (unlistenComplete) unlistenComplete();
+          (window as any).__duck_cli_listeners_setup = false;
+        };
       } catch (error) {
         console.error('设置事件监听器失败:', error);
+        (window as any).__duck_cli_listeners_setup = false;
       }
     };
 
@@ -182,12 +194,9 @@ function App() {
 
     // 清理函数
     return () => {
-      if (unlistenOutput) unlistenOutput();
-      if (unlistenError) unlistenError();
-      if (unlistenComplete) unlistenComplete();
-      console.log('Tauri事件监听器已清理');
+      // 不在组件卸载时清理全局监听器，让它们在应用生命周期内持续存在
     };
-  }, []); // ✅ 空依赖数组，确保只注册一次
+  }, []); // 空依赖数组，确保只注册一次
 
   // 处理工作目录变化
   const handleDirectoryChange = useCallback(async (directory: string | null, isValid: boolean) => {
@@ -232,6 +241,11 @@ function App() {
 
   // 处理命令执行
   const handleCommandExecute = useCallback(async (command: string, args: string[]) => {
+    // 防止重复执行
+    if (isExecuting) {
+      return;
+    }
+    
     addLogEntry('command', '', command, args);
     setIsExecuting(true);
     
@@ -245,9 +259,10 @@ function App() {
       }
     } catch (error) {
       addLogEntry('error', `❌ 命令执行失败: ${error}`);
+      setIsExecuting(false); // 异常时手动重置状态
     }
     // 注意：setIsExecuting(false) 会在事件监听器的 cli-complete 事件中处理
-  }, [addLogEntry, workingDirectory]);
+  }, [addLogEntry, workingDirectory, isExecuting]);
 
   // 处理日志消息
   const handleLogMessage = useCallback((message: string, type: LogEntry['type']) => {

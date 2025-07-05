@@ -23,7 +23,7 @@ function App() {
   
   // 使用 useRef 避免循环依赖
   const logsRef = useRef<LogEntry[]>([]);
-  const lastLogTimeRef = useRef<number>(0);
+
 
   // 同步 logs 状态到 ref
   useEffect(() => {
@@ -57,13 +57,11 @@ function App() {
     const currentLogs = logsRef.current;
     if (currentLogs.length === 0) return false;
     
-    // 检查最近5条日志
-    const recentLogs = currentLogs.slice(-5);
-    const isDuplicate = recentLogs.some(log => 
-      log.message === newMessage && 
-      log.type === newType &&
-      (Date.now() - parseInt(log.id)) < 1000 // 1秒内的重复（使用ID中的时间戳）
-    );
+    // 只检查最后一条日志，避免连续重复
+    const lastLog = currentLogs[currentLogs.length - 1];
+    const isDuplicate = lastLog && 
+      lastLog.message === newMessage && 
+      lastLog.type === newType;
     
     return isDuplicate;
   }, []);
@@ -78,14 +76,7 @@ function App() {
     // 过滤空消息
     if (!message.trim() && type !== 'command') return;
     
-    // 简单的时间限制去重（避免过于频繁的日志）
-    const now = Date.now();
-    if (now - lastLogTimeRef.current < 10) { // 10ms 内的重复调用
-      return;
-    }
-    lastLogTimeRef.current = now;
-    
-    // 智能去重
+    // 只对相同类型的连续消息做去重，移除时间限制
     if (shouldSkipDuplicate(message, type)) return;
     
     const entry: LogEntry = {
@@ -145,16 +136,8 @@ function App() {
         unlistenOutput = await listen('cli-output', (event) => {
           const output = event.payload as string;
           if (output.trim()) {
-            // 将输出按行分割并添加到日志
-            const lines = output.split('\n')
-              .filter(line => line.trim())
-              .map(line => line.trim())
-              .filter(line => line.length > 0);
-            
-            // 使用addLogEntry确保去重逻辑
-            lines.forEach(line => {
-              addLogEntry('info', line);
-            });
+            // 直接添加整个输出块，避免过度分割
+            addLogEntry('info', output.trim());
           }
         });
 
@@ -162,16 +145,8 @@ function App() {
         unlistenError = await listen('cli-error', (event) => {
           const error = event.payload as string;
           if (error.trim()) {
-            // 将错误按行分割并添加到日志
-            const lines = error.split('\n')
-              .filter(line => line.trim())
-              .map(line => line.trim())
-              .filter(line => line.length > 0);
-            
-            // 使用addLogEntry确保去重逻辑
-            lines.forEach(line => {
-              addLogEntry('error', line);
-            });
+            // 直接添加整个错误块，避免过度分割
+            addLogEntry('error', error.trim());
           }
         });
 

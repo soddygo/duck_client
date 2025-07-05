@@ -60,7 +60,7 @@ fn ensure_duck_cli_binary() {
     }
 }
 
-fn check_if_rebuild_needed(binary_path: &Path, target_triple: &str) -> bool {
+fn check_if_rebuild_needed(binary_path: &Path, _target_triple: &str) -> bool {
     // 如果二进制文件不存在，需要重新编译
     if !binary_path.exists() {
         return true;

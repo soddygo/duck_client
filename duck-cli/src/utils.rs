@@ -75,7 +75,6 @@ fn should_skip_file(file_name: &str) -> bool {
 /// ### 环境变量
 /// - `RUST_LOG`：标准的 Rust 日志级别控制（如 `debug`, `info`, `warn`, `error`）
 /// - `DUCK_LOG_FILE`：日志文件路径，设置后日志输出到文件而非终端
-/// - `DUCK_GUI_MODE`：GUI模式标识，设置后禁用大部分tracing日志输出，避免与程序输出重复
 ///
 /// ## 使用示例
 ///
@@ -88,9 +87,6 @@ fn should_skip_file(file_name: &str) -> bool {
 ///
 /// # 日志输出到文件
 /// DUCK_LOG_FILE=duck.log duck-cli auto-backup status
-///
-/// # GUI模式（自动设置，避免日志重复）
-/// DUCK_GUI_MODE=1 duck-cli auto-backup status
 ///
 /// # 使用 RUST_LOG 控制特定模块的日志级别
 /// RUST_LOG=duck_cli::commands::auto_backup=debug duck-cli auto-backup status
@@ -342,30 +338,14 @@ pub fn setup_logging(verbose: bool) {
     #[allow(unused_imports)]
     use tracing_subscriber::{EnvFilter, fmt, util::SubscriberInitExt};
 
-    // 检查是否为GUI模式 - 如果是，则大幅简化日志输出
-    if std::env::var("DUCK_GUI_MODE").is_ok() {
-        // GUI模式：大幅减少tracing日志输出，避免与程序输出重复
-        // 只保留WARN和ERROR级别的日志，过滤掉大部分INFO级别
-        let env_filter = EnvFilter::new("warn")
-            .add_directive("duck_cli=error".parse().unwrap())
-            .add_directive("client_core=error".parse().unwrap());
-
-        // 输出到stderr，使用最简格式
-        fmt()
-            .with_env_filter(env_filter)
-            .with_target(false)
-            .with_thread_names(false)
-            .with_line_number(false)
-            .without_time()
-            .compact()
-            .init();
-        return;
-    }
-
     // 根据verbose参数和环境变量确定日志级别
     let default_level = if verbose { "debug" } else { "info" };
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(default_level))
+        // 过滤掉第三方库的详细日志，减少噪音
+        .add_directive("reqwest=warn".parse().unwrap())
+        .add_directive("tokio=warn".parse().unwrap())
+        .add_directive("hyper=warn".parse().unwrap());
 
     // 检查环境变量，决定是否输出到文件
     if let Ok(log_file) = std::env::var("DUCK_LOG_FILE") {

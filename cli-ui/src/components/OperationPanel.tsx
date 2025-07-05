@@ -20,7 +20,7 @@ import { CommandConfig, ParameterInputResult } from '../types';
 interface OperationPanelProps {
   workingDirectory: string | null;
   isDirectoryValid: boolean;
-  onCommandExecute: (command: string, args: string[]) => void;
+  onCommandExecute: (command: string, args: string[]) => Promise<void>;
   onLogMessage: (message: string, type: 'info' | 'success' | 'error' | 'warning') => void;
 }
 
@@ -174,14 +174,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
         const baseArgs = ['init'];
         const args = parameters ? buildCommandArgs(baseArgs, parameters, []) : baseArgs;
         
-        onCommandExecute('duck-cli', args);
-        
-        const result = await DuckCliManager.initialize(workingDirectory!);
-        if (result.success) {
-          onLogMessage('项目初始化成功', 'success');
-        } else {
-          onLogMessage(`初始化失败: ${result.error}`, 'error');
-        }
+        // 使用统一的命令执行方式，获得实时输出
+        await onCommandExecute('duck-cli', args);
       }
     },
     {
@@ -192,21 +186,15 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       variant: 'secondary',
       commandId: 'upgrade',
       action: async (parameters?: ParameterInputResult) => {
-        onLogMessage('开始下载服务...', 'info');
+        onLogMessage('📥 准备下载Docker服务...', 'info');
         
         // 默认使用全量下载，除非用户指定了其他参数
         const defaultParams = { full: true, ...parameters };
         const baseArgs = ['upgrade'];
         const args = buildCommandArgs(baseArgs, defaultParams, []);
         
-        onCommandExecute('duck-cli', args);
-        
-        const result = await DuckCliManager.upgradeService(workingDirectory!, true);
-        if (result.success) {
-          onLogMessage('服务下载完成', 'success');
-        } else {
-          onLogMessage(`下载失败: ${result.error}`, 'error');
-        }
+        // 只需要调用onCommandExecute，它现在会真正执行命令并显示实时输出
+        await onCommandExecute('duck-cli', args);
       }
     },
     {
@@ -223,14 +211,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
         const baseArgs = ['auto-upgrade-deploy', 'run'];
         const args = parameters ? buildCommandArgs(baseArgs, parameters, []) : baseArgs;
         
-        onCommandExecute('duck-cli', args);
-        
-        const result = await DuckCliManager.autoUpgradeDeploy(workingDirectory!);
-        if (result.success) {
-          onLogMessage('部署完成', 'success');
-        } else {
-          onLogMessage(`部署失败: ${result.error}`, 'error');
-        }
+        // 使用统一的命令执行方式，获得实时输出
+        await onCommandExecute('duck-cli', args);
       }
     },
     {
@@ -240,15 +222,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       icon: <PlayIcon className="h-5 w-5" />,
       variant: 'success',
       action: async () => {
-        onLogMessage('启动服务...', 'info');
-        onCommandExecute('duck-cli', ['docker-service', 'start']);
-        
-        const result = await DuckCliManager.startService(workingDirectory!);
-        if (result.success) {
-          onLogMessage('服务启动成功', 'success');
-        } else {
-          onLogMessage(`启动失败: ${result.error}`, 'error');
-        }
+        onLogMessage('🚀 启动服务...', 'info');
+        await onCommandExecute('duck-cli', ['docker-service', 'start']);
       }
     },
     {
@@ -258,15 +233,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       icon: <StopIcon className="h-5 w-5" />,
       variant: 'warning',
       action: async () => {
-        onLogMessage('停止服务...', 'info');
-        onCommandExecute('duck-cli', ['docker-service', 'stop']);
-        
-        const result = await DuckCliManager.stopService(workingDirectory!);
-        if (result.success) {
-          onLogMessage('服务已停止', 'success');
-        } else {
-          onLogMessage(`停止失败: ${result.error}`, 'error');
-        }
+        onLogMessage('⏹️ 停止服务...', 'info');
+        await onCommandExecute('duck-cli', ['docker-service', 'stop']);
       }
     },
     {
@@ -276,15 +244,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       icon: <ArrowPathIcon className="h-5 w-5" />,
       variant: 'secondary',
       action: async () => {
-        onLogMessage('重启服务...', 'info');
-        onCommandExecute('duck-cli', ['docker-service', 'restart']);
-        
-        const result = await DuckCliManager.restartService(workingDirectory!);
-        if (result.success) {
-          onLogMessage('服务重启成功', 'success');
-        } else {
-          onLogMessage(`重启失败: ${result.error}`, 'error');
-        }
+        onLogMessage('🔄 重启服务...', 'info');
+        await onCommandExecute('duck-cli', ['docker-service', 'restart']);
       }
     },
     {
@@ -305,14 +266,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
         
         const args = Object.keys(filteredParams).length > 0 ? buildCommandArgs(baseArgs, filteredParams, []) : baseArgs;
         
-        onCommandExecute('duck-cli', args);
-        
-        const result = await DuckCliManager.checkCliUpdate(workingDirectory!);
-        if (result.success) {
-          onLogMessage('更新检查完成', 'success');
-        } else {
-          onLogMessage(`检查失败: ${result.error}`, 'error');
-        }
+        // 使用统一的命令执行方式，获得实时输出
+        await onCommandExecute('duck-cli', args);
       }
     },
     {
@@ -323,20 +278,14 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       variant: 'primary',
       commandId: 'upgrade',
       action: async (parameters?: ParameterInputResult) => {
-        onLogMessage('升级服务...', 'info');
+        onLogMessage('🔧 升级服务...', 'info');
         
         // 构建命令参数
         const baseArgs = ['upgrade'];
         const args = parameters ? buildCommandArgs(baseArgs, parameters, []) : baseArgs;
         
-        onCommandExecute('duck-cli', args);
-        
-        const result = await DuckCliManager.upgradeService(workingDirectory!);
-        if (result.success) {
-          onLogMessage('服务升级完成', 'success');
-        } else {
-          onLogMessage(`升级失败: ${result.error}`, 'error');
-        }
+        // 使用统一的命令执行方式，获得实时输出
+        await onCommandExecute('duck-cli', args);
       }
     },
     {
@@ -346,15 +295,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       icon: <DocumentDuplicateIcon className="h-5 w-5" />,
       variant: 'secondary',
       action: async () => {
-        onLogMessage('创建备份...', 'info');
-        onCommandExecute('duck-cli', ['backup', 'create']);
-        
-        const result = await DuckCliManager.createBackup(workingDirectory!);
-        if (result.success) {
-          onLogMessage('备份创建成功', 'success');
-        } else {
-          onLogMessage(`备份失败: ${result.error}`, 'error');
-        }
+        onLogMessage('💾 创建备份...', 'info');
+        await onCommandExecute('duck-cli', ['backup', 'create']);
       }
     },
     {
@@ -370,15 +312,8 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
         );
         
         if (confirmed) {
-          onLogMessage('回滚服务...', 'info');
-          onCommandExecute('duck-cli', ['backup', 'restore', '--latest']);
-          
-          const result = await DuckCliManager.rollbackService(workingDirectory!);
-          if (result.success) {
-            onLogMessage('服务回滚成功', 'success');
-          } else {
-            onLogMessage(`回滚失败: ${result.error}`, 'error');
-          }
+          onLogMessage('🔄 回滚服务...', 'info');
+          await onCommandExecute('duck-cli', ['backup', 'restore', '--latest']);
         }
       }
     },

@@ -3,14 +3,17 @@ import { listen } from '@tauri-apps/api/event';
 import WorkingDirectoryBar from './components/WorkingDirectoryBar';
 import OperationPanel from './components/OperationPanel';
 import TerminalWindow from './components/TerminalWindow';
+import WelcomeSetupModal from './components/WelcomeSetupModal';
+import ErrorBoundary from './components/ErrorBoundary';
 import { LogEntry, DEFAULT_LOG_CONFIG, LogConfig } from './types';
-import { ConfigManager, DialogManager, FileSystemManager } from './utils/tauri';
+import { ConfigManager, DialogManager, DuckCliManager, FileSystemManager, ProcessManager } from './utils/tauri';
 import './App.css';
 
 function App() {
   // 工作目录状态
   const [workingDirectory, setWorkingDirectory] = useState<string | null>(null);
   const [isDirectoryValid, setIsDirectoryValid] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   
   // 日志状态 - 使用循环缓冲区
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -23,7 +26,6 @@ function App() {
   
   // 使用 useRef 避免循环依赖
   const logsRef = useRef<LogEntry[]>([]);
-
 
   // 同步 logs 状态到 ref
   useEffect(() => {
@@ -179,29 +181,67 @@ function App() {
       if (unlistenError) unlistenError();
       if (unlistenComplete) unlistenComplete();
     };
-  }, [addLogEntry, manageLogBuffer]);
-
-  // 处理工作目录变化
-  const handleDirectoryChange = useCallback((directory: string | null, isValid: boolean) => {
-    setWorkingDirectory(directory);
-    setIsDirectoryValid(isValid);
-    
-    // 添加目录变化日志
-    if (directory && isValid) {
-      addLogEntry('success', `工作目录已设置: ${directory}`);
-    } else if (directory && !isValid) {
-      addLogEntry('error', `工作目录无效: ${directory}`);
-    }
   }, [addLogEntry]);
 
+  // 处理工作目录变化
+  const handleDirectoryChange = useCallback(async (directory: string | null, isValid: boolean) => {
+    console.log('工作目录变更:', directory, '有效性:', isValid);
+    
+    const previousDirectory = workingDirectory;
+    setWorkingDirectory(directory);
+    setIsDirectoryValid(isValid);
+
+    if (directory && isValid && directory !== previousDirectory) {
+      // 当工作目录变更且有效时，执行进程检查
+      addLogEntry('info', `📁 工作目录已设置: ${directory}`);
+      
+      try {
+        addLogEntry('info', '🔍 检查并清理冲突进程...');
+        const checkResult = await ProcessManager.initializeProcessCheck(directory);
+        
+        if (checkResult.processCleanup.processes_found.length > 0) {
+          addLogEntry('warning', `🧹 发现 ${checkResult.processCleanup.processes_found.length} 个冲突进程`);
+          addLogEntry('success', `✅ 已清理 ${checkResult.processCleanup.processes_killed.length} 个进程`);
+        }
+        
+        if (checkResult.databaseLocked) {
+          addLogEntry('error', '⚠️ 数据库文件仍被锁定，请稍后重试');
+          setIsDirectoryValid(false); // 临时禁用功能直到锁定解除
+        } else {
+          addLogEntry('success', checkResult.message);
+        }
+      } catch (error) {
+        console.error('进程检查失败:', error);
+        addLogEntry('error', `❌ 进程检查失败: ${error}`);
+      }
+    }
+
+    // 根据是否需要显示欢迎界面
+    if (!directory || !isValid) {
+      setShowWelcomeModal(true);
+    } else {
+      setShowWelcomeModal(false);
+    }
+  }, [workingDirectory, addLogEntry]);
+
   // 处理命令执行
-  const handleCommandExecute = useCallback((command: string, args: string[]) => {
+  const handleCommandExecute = useCallback(async (command: string, args: string[]) => {
     addLogEntry('command', '', command, args);
     setIsExecuting(true);
     
     // 添加执行开始标记
-    addLogEntry('info', `开始执行: ${command} ${args.join(' ')}`);
-  }, [addLogEntry]);
+    addLogEntry('info', `🚀 开始执行: ${command} ${args.join(' ')}`);
+    
+    try {
+      // 真正执行Tauri命令，会触发事件监听器接收实时输出
+      if (command === 'duck-cli' && workingDirectory) {
+        await DuckCliManager.executeSmart(args, workingDirectory);
+      }
+    } catch (error) {
+      addLogEntry('error', `❌ 命令执行失败: ${error}`);
+    }
+    // 注意：setIsExecuting(false) 会在事件监听器的 cli-complete 事件中处理
+  }, [addLogEntry, workingDirectory]);
 
   // 处理日志消息
   const handleLogMessage = useCallback((message: string, type: LogEntry['type']) => {
@@ -245,39 +285,15 @@ function App() {
         const savedDirectory = await ConfigManager.getWorkingDirectory();
         
         if (savedDirectory) {
-          const dirEntry: LogEntry = {
-            id: (Date.now() + 2).toString() + Math.random().toString(36).substr(2, 9),
-            timestamp: new Date().toLocaleTimeString(),
-            type: 'info',
-            message: `📁 加载保存的工作目录: ${savedDirectory}`
-          };
-          
-          setLogs(prev => [...prev, dirEntry]);
-          setTotalLogCount(prev => prev + 1);
-          setWorkingDirectory(savedDirectory);
+          // 验证保存的目录
+          const validation = await FileSystemManager.validateDirectory(savedDirectory);
+          await handleDirectoryChange(savedDirectory, validation.valid);
         } else {
-          const noDirEntry: LogEntry = {
-            id: (Date.now() + 3).toString() + Math.random().toString(36).substr(2, 9),
-            timestamp: new Date().toLocaleTimeString(),
-            type: 'info',
-            message: '❓ 未发现保存的工作目录设置'
-          };
-          
-          setLogs(prev => [...prev, noDirEntry]);
-          setTotalLogCount(prev => prev + 1);
+          setShowWelcomeModal(true);
         }
       } catch (error) {
         console.error('初始化失败:', error);
-        
-        const errorEntry: LogEntry = {
-          id: (Date.now() + 4).toString() + Math.random().toString(36).substr(2, 9),
-          timestamp: new Date().toLocaleTimeString(),
-          type: 'error',
-          message: '❌ 应用初始化失败，请重新设置工作目录'
-        };
-        
-        setLogs(prev => [...prev, errorEntry]);
-        setTotalLogCount(prev => prev + 1);
+        setShowWelcomeModal(true);
       }
       
       setIsInitialized(true);
@@ -285,7 +301,7 @@ function App() {
     };
 
     initializeApp();
-  }, [isInitialized, logConfig.maxEntries]);
+  }, [isInitialized, logConfig.maxEntries, handleDirectoryChange]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
@@ -324,8 +340,28 @@ function App() {
           <span className="text-sm font-medium">正在执行命令...</span>
         </div>
       )}
+
+      {/* 欢迎设置弹窗 */}
+      {showWelcomeModal && (
+        <WelcomeSetupModal
+          isOpen={showWelcomeModal}
+          onComplete={async (directory: string) => {
+            // 验证目录
+            const validation = await FileSystemManager.validateDirectory(directory);
+            await handleDirectoryChange(directory, validation.valid);
+            setShowWelcomeModal(false);
+          }}
+          onSkip={() => setShowWelcomeModal(false)}
+        />
+      )}
     </div>
   );
 }
 
-export default App;
+export default function AppWithErrorBoundary() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}

@@ -25,7 +25,9 @@ pub fn run() {
             commands::execute_duck_cli_system,
             commands::execute_duck_cli_smart,
             commands::get_cli_version,
-            commands::check_cli_available
+            commands::check_cli_available,
+            commands::check_and_cleanup_duck_processes,
+            commands::check_database_lock
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

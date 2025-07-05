@@ -21,6 +21,20 @@ import {
 } from '@tauri-apps/plugin-updater';
 import { exit, relaunch } from '@tauri-apps/plugin-process';
 
+// ============ Types ============
+export interface ProcessInfo {
+  pid: number;
+  command: string;
+  running: boolean;
+}
+
+export interface ProcessCheckResult {
+  processes_found: ProcessInfo[];
+  processes_killed: number[];
+  success: boolean;
+  message: string;
+}
+
 // ============ Shell Commands ============
 export class ShellManager {
   /**
@@ -316,6 +330,78 @@ export class UpdateManager {
 
 // ============ Process Manager ============
 export class ProcessManager {
+  /**
+   * 检查并清理运行中的 duck-cli 进程
+   */
+  static async checkAndCleanupDuckProcesses(): Promise<ProcessCheckResult> {
+    try {
+      return await invoke('check_and_cleanup_duck_processes');
+    } catch (error) {
+      console.error('Check and cleanup duck processes failed:', error);
+      return {
+        processes_found: [],
+        processes_killed: [],
+        success: false,
+        message: `进程检查失败: ${error}`
+      };
+    }
+  }
+
+  /**
+   * 检查数据库文件是否被锁定
+   */
+  static async checkDatabaseLock(workingDir: string): Promise<boolean> {
+    try {
+      return await invoke('check_database_lock', { workingDir });
+    } catch (error) {
+      console.error('Check database lock failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 应用启动时的进程检查和清理
+   */
+  static async initializeProcessCheck(workingDir?: string): Promise<{
+    processCleanup: ProcessCheckResult;
+    databaseLocked: boolean;
+    canProceed: boolean;
+    message: string;
+  }> {
+    try {
+      // 先检查并清理进程
+      const processCleanup = await this.checkAndCleanupDuckProcesses();
+      
+      // 检查数据库锁定状态
+      let databaseLocked = false;
+      if (workingDir) {
+        try {
+          databaseLocked = await this.checkDatabaseLock(workingDir);
+        } catch (error) {
+          console.warn('Database lock check failed:', error);
+          databaseLocked = false; // 检查失败时假设没有锁定
+        }
+      }
+      
+      const canProceed = !databaseLocked;
+      const message = databaseLocked 
+        ? '数据库文件仍被锁定，请稍后重试'
+        : processCleanup.processes_found.length > 0
+          ? `已清理 ${processCleanup.processes_killed.length} 个冲突进程，应用可以正常使用`
+          : '应用启动正常，没有发现进程冲突';
+
+      return {
+        processCleanup,
+        databaseLocked,
+        canProceed,
+        message
+      };
+    } catch (error) {
+      console.error('Initialize process check failed:', error);
+      throw error;
+    }
+  }
+
   /**
    * 重启应用
    */

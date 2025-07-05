@@ -64,6 +64,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::Path;
+use std::io::{self, Write};
 use futures::stream::StreamExt;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -453,45 +454,44 @@ impl ApiClient {
         let mut file = File::create(&save_path).await?;
         let mut stream = response.bytes_stream();
         let mut downloaded = 0u64;
-        let mut last_update = std::time::Instant::now();
-
-        use futures::StreamExt;
-        use std::io::{self, Write};
+        let mut last_progress_time = std::time::Instant::now();
+        let mut last_progress_bytes = 0u64;
+        let progress_interval = std::time::Duration::from_secs(2); // 每2秒至少显示一次进度
 
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            file.write_all(&chunk).await?;
+            let chunk = chunk.map_err(|e| DuckError::custom(format!("下载数据失败: {}", e)))?;
+            
+            tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
+                .await
+                .map_err(|e| DuckError::custom(format!("写入文件失败: {}", e)))?;
+
             downloaded += chunk.len() as u64;
 
-            // 每500KB或每秒更新一次进度显示
-            let should_update =
-                downloaded % (512 * 1024) == 0 || last_update.elapsed().as_secs() >= 1;
-
-            if should_update {
-                if let Some(total) = total_size {
-                    let percentage = (downloaded as f64 / total as f64) * 100.0;
-                    let downloaded_mb = downloaded as f64 / 1024.0 / 1024.0;
-                    let total_mb = total as f64 / 1024.0 / 1024.0;
-
-                    // 创建简单的进度条
-                    let bar_width = 30;
-                    let filled = ((percentage / 100.0) * bar_width as f64) as usize;
-                    let progress_bar = "█".repeat(filled) + &"░".repeat(bar_width - filled);
-
-                    print!(
-                        "\r📦 下载进度: [{progress_bar}] {percentage:.1}% ({downloaded_mb:.1}/{total_mb:.1} MB)"
+            // 改进的进度显示逻辑：每1MB或每2秒显示一次，确保用户能看到实时进度
+            let now = std::time::Instant::now();
+            let bytes_since_last = downloaded - last_progress_bytes;
+            let time_since_last = now.duration_since(last_progress_time);
+            
+            let should_show_progress = 
+                bytes_since_last >= 1024 * 1024 ||  // 每1MB显示一次
+                time_since_last >= progress_interval ||  // 每2秒显示一次
+                (total_size.map_or(false, |size| downloaded >= size)); // 下载完成时显示
+            
+            if should_show_progress {
+                if let Some(size) = total_size {
+                    let percentage = (downloaded as f64 / size as f64 * 100.0) as u32;
+                    info!("📥 下载进度: {}% ({:.1}/{:.1} MB)", 
+                        percentage,
+                        downloaded as f64 / 1024.0 / 1024.0,
+                        size as f64 / 1024.0 / 1024.0
                     );
-                    io::stdout().flush().unwrap();
-
-                    last_update = std::time::Instant::now();
                 } else {
-                    // 没有总大小信息时，只显示已下载量
-                    let downloaded_mb = downloaded as f64 / 1024.0 / 1024.0;
-                    print!("\r📦 下载进度: {downloaded_mb:.1} MB");
-                    io::stdout().flush().unwrap();
-
-                    last_update = std::time::Instant::now();
+                    info!("📥 已下载: {:.1} MB", downloaded as f64 / 1024.0 / 1024.0);
                 }
+                
+                // 更新上次显示进度的时间和字节数
+                last_progress_time = now;
+                last_progress_bytes = downloaded;
             }
         }
 
@@ -1081,6 +1081,9 @@ impl ApiClient {
 
         let mut downloaded = 0u64;
         let mut stream = response.bytes_stream();
+        let mut last_progress_time = std::time::Instant::now();
+        let mut last_progress_bytes = 0u64;
+        let progress_interval = std::time::Duration::from_secs(2); // 每2秒至少显示一次进度
 
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|e| DuckError::custom(format!("下载数据失败: {}", e)))?;
@@ -1111,18 +1114,31 @@ impl ApiClient {
                 });
             }
 
-            // 显示进度日志（每10MB显示一次）
-            if downloaded % (10 * 1024 * 1024) == 0 || (total_size > 0 && downloaded >= total_size) {
+            // 改进的进度显示逻辑：每1MB或每2秒显示一次，确保用户能看到实时进度
+            let now = std::time::Instant::now();
+            let bytes_since_last = downloaded - last_progress_bytes;
+            let time_since_last = now.duration_since(last_progress_time);
+            
+            let should_show_progress = 
+                bytes_since_last >= 1024 * 1024 ||  // 每1MB显示一次
+                time_since_last >= progress_interval ||  // 每2秒显示一次
+                (total_size > 0 && downloaded >= total_size); // 下载完成时显示
+            
+            if should_show_progress {
                 if total_size > 0 {
                     let percentage = (downloaded as f64 / total_size as f64 * 100.0) as u32;
-                    info!("📥 下载进度: {}% ({:.2}/{:.2} MB)", 
+                    info!("📥 下载进度: {}% ({:.1}/{:.1} MB)", 
                         percentage,
                         downloaded as f64 / 1024.0 / 1024.0,
                         total_size as f64 / 1024.0 / 1024.0
                     );
                 } else {
-                    info!("📥 已下载: {:.2} MB", downloaded as f64 / 1024.0 / 1024.0);
+                    info!("📥 已下载: {:.1} MB", downloaded as f64 / 1024.0 / 1024.0);
                 }
+                
+                // 更新上次显示进度的时间和字节数
+                last_progress_time = now;
+                last_progress_bytes = downloaded;
             }
         }
 

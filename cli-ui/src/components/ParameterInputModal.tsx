@@ -21,7 +21,7 @@ const ParameterInputModal: React.FC<ParameterInputModalProps> = ({
     if (commandConfig) {
       const defaultValues: ParameterInputResult = {};
       commandConfig.parameters.forEach(param => {
-        if (param.defaultValue !== undefined) {
+        if (param.defaultValue !== undefined && param.defaultValue !== null) {
           defaultValues[param.name] = param.defaultValue;
         }
       });
@@ -147,13 +147,16 @@ const ParameterInputModal: React.FC<ParameterInputModalProps> = ({
         );
 
       case 'select':
+        // 获取当前值，优先使用参数值，其次使用默认值
+        const currentValue = value !== undefined ? value : (param.defaultValue || '');
+        
         return (
           <select
-            value={value || ''}
+            value={currentValue}
             onChange={(e) => updateParameter(param.name, e.target.value)}
             className={inputBaseClass}
           >
-            <option value="">请选择...</option>
+            {!param.required && <option value="">请选择...</option>}
             {param.options?.map(option => (
               <option key={option.value} value={option.value}>
                 {option.label}

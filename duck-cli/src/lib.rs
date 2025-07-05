@@ -6,6 +6,7 @@ mod docker_service;
 mod docker_utils;
 mod init;
 pub mod project_info; // 公开项目信息模块
+pub mod ui_support; // 公开UI支持模块
 mod utils;
 
 // 通过 pub use 精确控制对外暴露的接口
@@ -17,4 +18,13 @@ pub use docker_service::{
     get_system_architecture,
 };
 pub use init::run_init;
-pub use utils::setup_logging;
+pub use utils::{setup_logging, extract_docker_service}; // 导出解压函数
+
+// 重新导出核心功能
+pub use client_core::{
+    config_manager::ConfigManager,
+    database_manager::DatabaseManager,
+};
+
+// 导出UI支持函数和类型
+pub use ui_support::*;

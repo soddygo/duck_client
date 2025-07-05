@@ -1,6 +1,7 @@
 use client_core::{
     api::{ApiClient, ClientRegisterRequest},
     config::AppConfig,
+    constants::config,
     database::Database,
     error::Result,
 };
@@ -13,8 +14,8 @@ pub async fn run_init(force: bool) -> Result<()> {
 
     // 检查是否已经初始化过
     if !force
-        && (std::path::Path::new("config.toml").exists()
-            || std::path::Path::new("history.db").exists())
+        && (client_core::constants::config::get_config_file_path().exists()
+            || config::get_database_path().exists())
     {
         warn!("⚠️  检测到已存在的配置文件或数据库文件");
         info!("如果您要重新初始化，请使用 --force 参数");
@@ -45,8 +46,9 @@ pub async fn run_init(force: bool) -> Result<()> {
     info!("📋 步骤 2: 初始化数据库");
 
     // 初始化数据库
-    let database = Database::connect("history.db").await?;
-    info!("   ✅ 创建DuckDB数据库: history.db");
+    let db_path = config::get_database_path();
+    let database = Database::connect(&db_path).await?;
+    info!("   ✅ 创建DuckDB数据库: {}", db_path.display());
 
     // 生成新的客户端UUID
     let client_uuid = database.get_or_create_client_uuid().await?;
@@ -92,7 +94,7 @@ pub async fn run_init(force: bool) -> Result<()> {
     info!("");
     info!("💡 提示:");
     info!("   - 配置文件: config.toml (可手动编辑修改配置)");
-    info!("   - 数据库文件: history.db (存储操作历史和备份记录)");
+    info!("   - 数据库文件: {} (存储操作历史和备份记录)", db_path.display());
     info!("   - 使用 'duck-cli --help' 查看所有可用命令");
     info!("   - 使用 'duck-cli status' 查看当前系统状态");
 

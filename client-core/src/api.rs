@@ -1,3 +1,60 @@
+//! # API客户端模块
+//! 
+//! 提供与后端服务通信的统一接口，包括：
+//! - 客户端注册与认证
+//! - 版本检查与更新
+//! - 服务包下载与管理  
+//! - 遥测数据上报
+//! - 文件完整性验证
+//! 
+//! ## 智能下载系统
+//! 
+//! 本模块实现了一个智能的文件下载和缓存系统：
+//! 
+//! ### 缓存路径结构
+//! ```
+//! cacheDuckData/download/{版本号}/full/docker.zip
+//! cacheDuckData/download/{版本号}/full/docker.zip.hash
+//! ```
+//! 
+//! ### 智能下载流程
+//! 1. **获取服务清单**：从服务器获取最新版本信息和文件哈希
+//! 2. **版本检查**：比较请求版本与服务器最新版本
+//! 3. **本地文件检查**：
+//!    - 文件不存在 → 需要下载
+//!    - 文件存在 → 进入哈希验证流程
+//! 4. **哈希验证流程**：
+//!    - 读取本地保存的哈希值（.hash文件）
+//!    - 比较本地哈希与远程哈希
+//!    - 哈希相同 → 验证文件完整性
+//!    - 哈希不同 → 需要下载新版本
+//! 5. **文件完整性验证**：
+//!    - 计算文件实际哈希值
+//!    - 与预期哈希值比较
+//!    - 完整性验证通过 → 跳过下载
+//!    - 完整性验证失败 → 文件损坏，重新下载
+//! 6. **下载执行**：
+//!    - 下载新文件或替换损坏文件
+//!    - 验证下载文件的完整性
+//!    - 保存哈希值到 .hash 文件
+//! 
+//! ### 优势
+//! - **避免重复下载**：相同版本且文件完整时跳过下载
+//! - **自动修复**：检测并修复损坏的缓存文件
+//! - **版本管理**：支持多版本并存的缓存管理
+//! - **完整性保证**：SHA-256哈希验证确保文件完整性
+//! 
+//! ### 使用示例
+//! ```rust
+//! let api_client = ApiClient::new(Some("client_id".to_string()));
+//! 
+//! // 智能下载（自动处理缓存和版本检查）
+//! api_client.download_service_update_optimized(
+//!     &Path::new("cacheDuckData/download/0.0.2/full/docker.zip"),
+//!     Some("0.0.2")
+//! ).await?;
+//! ```
+
 use crate::api_config::ApiConfig;
 use crate::authenticated_client::AuthenticatedClient;
 use crate::error::{DuckError, Result};
@@ -9,6 +66,31 @@ use std::path::Path;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, warn};
+use std::sync::Arc;
+use chrono;
+
+/// 下载进度状态枚举
+#[derive(Debug, Clone)]
+pub enum DownloadStatus {
+    Starting,
+    Downloading,
+    Paused,
+    Completed,
+    Failed(String),
+}
+
+/// 下载进度信息
+#[derive(Debug, Clone)]
+pub struct DownloadProgress {
+    pub task_id: String,
+    pub file_name: String,
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
+    pub download_speed: f64, // bytes/sec
+    pub eta_seconds: u64,
+    pub percentage: f64,
+    pub status: DownloadStatus,
+}
 
 /// API 客户端
 #[derive(Debug, Clone)]
@@ -55,6 +137,14 @@ pub struct PackageInfo {
     pub hash: String,
     pub signature: String,
     pub size: u64,
+    /// 下载方式标识: "direct" 表示直接使用URL下载，"api" 表示使用API接口下载
+    #[serde(default = "default_download_method")]
+    pub download_method: String,
+}
+
+/// 默认下载方式
+fn default_download_method() -> String {
+    "api".to_string()
 }
 
 /// 客户端更新清单响应
@@ -310,19 +400,33 @@ impl ApiClient {
             .config
             .get_endpoint_url(&self.config.endpoints.docker_download_full);
 
+        self.download_service_update_from_url(&url, save_path).await
+    }
+
+    /// 从指定URL下载Docker服务更新包
+    pub async fn download_service_update_from_url<P: AsRef<Path>>(&self, url: &str, save_path: P) -> Result<()> {
+        self.download_service_update_from_url_with_auth(url, save_path, true).await
+    }
+
+    /// 从指定URL下载Docker服务更新包（支持认证控制）
+    pub async fn download_service_update_from_url_with_auth<P: AsRef<Path>>(&self, url: &str, save_path: P, use_auth: bool) -> Result<()> {
         info!("开始下载Docker服务更新包: {}", url);
 
-        // 优先使用AuthenticatedClient进行请求（自动处理认证）
-        let response = if let Some(ref auth_client) = self.authenticated_client {
-            match auth_client.get(&url).await {
-                Ok(request_builder) => auth_client.send(request_builder, &url).await?,
+        // 根据是否需要认证决定使用哪种客户端
+        let response = if use_auth && self.authenticated_client.is_some() {
+            // 使用认证客户端（API下载）
+            let auth_client = self.authenticated_client.as_ref().unwrap();
+            match auth_client.get(url).await {
+                Ok(request_builder) => auth_client.send(request_builder, url).await?,
                 Err(e) => {
                     warn!("使用AuthenticatedClient失败，回退到普通请求: {}", e);
-                    self.build_request(&url).send().await?
+                    self.build_request(url).send().await?
                 }
             }
         } else {
-            self.build_request(&url).send().await?
+            // 使用普通客户端（直接URL下载）
+            info!("使用普通HTTP客户端下载");
+            self.build_request(url).send().await?
         };
 
         if !response.status().is_success() {
@@ -595,26 +699,67 @@ impl ApiClient {
 
     /// 检查文件是否需要下载（基于哈希值比较）
     pub async fn should_download_file(&self, file_path: &Path, remote_hash: &str) -> Result<bool> {
+        info!("🔍 开始智能下载决策检查...");
+        info!("   目标文件: {}", file_path.display());
+        info!("   远程哈希: {}", remote_hash);
+        
         // 文件不存在，需要下载
         if !file_path.exists() {
-            info!("文件不存在，需要下载: {}", file_path.display());
+            info!("📂 文件不存在，需要下载: {}", file_path.display());
+            // 清理可能存在的哈希文件
+            let hash_file_path = file_path.with_extension("hash");
+            if hash_file_path.exists() {
+                info!("🧹 发现孤立的哈希文件，正在清理: {}", hash_file_path.display());
+                if let Err(e) = tokio::fs::remove_file(&hash_file_path).await {
+                    warn!("⚠️ 清理哈希文件失败: {}", e);
+                }
+            }
             return Ok(true);
+        }
+
+        info!("🔍 检查本地文件: {}", file_path.display());
+        
+        // 检查文件大小
+        match tokio::fs::metadata(file_path).await {
+            Ok(metadata) => {
+                let file_size = metadata.len();
+                info!("📊 本地文件大小: {} bytes", file_size);
+                if file_size == 0 {
+                    warn!("⚠️ 本地文件大小为0，需要重新下载");
+                    return Ok(true);
+                }
+            }
+            Err(e) => {
+                warn!("⚠️ 无法获取文件元数据: {}，需要重新下载", e);
+                return Ok(true);
+            }
         }
 
         // 尝试读取本地保存的哈希值
         if let Some(saved_hash) = Self::load_file_hash(file_path).await? {
+            info!("📜 找到本地哈希记录: {}", saved_hash);
+            info!("🌐 远程文件哈希值: {}", remote_hash);
+            
             // 比较保存的哈希值与远程哈希值
             if saved_hash.to_lowercase() == remote_hash.to_lowercase() {
+                info!("✅ 哈希值匹配，验证文件完整性...");
                 // 再验证文件是否真的完整（防止文件被损坏）
-                if Self::verify_file_integrity(file_path, &saved_hash).await? {
-                    info!("✅ 文件已是最新且完整，跳过下载: {}", file_path.display());
-                    return Ok(false);
-                } else {
-                    warn!("⚠️ 文件已损坏，需要重新下载: {}", file_path.display());
-                    return Ok(true);
+                match Self::verify_file_integrity(file_path, &saved_hash).await {
+                    Ok(true) => {
+                        info!("🎯 文件已是最新且完整，跳过下载");
+                        return Ok(false);
+                    }
+                    Ok(false) => {
+                        warn!("💥 文件哈希记录正确但文件已损坏，需要重新下载");
+                        return Ok(true);
+                    }
+                    Err(e) => {
+                        warn!("💥 文件完整性验证出错: {}，需要重新下载", e);
+                        return Ok(true);
+                    }
                 }
             } else {
-                info!("📦 发现新版本，需要下载: {}", file_path.display());
+                info!("🆕 检测到新版本，需要下载更新");
                 info!("   本地哈希: {}", saved_hash);
                 info!("   远程哈希: {}", remote_hash);
                 return Ok(true);
@@ -622,25 +767,29 @@ impl ApiClient {
         }
 
         // 没有哈希文件，计算当前文件哈希值并比较
-        info!("未找到哈希文件，验证现有文件...");
-        let actual_hash = Self::calculate_file_hash(file_path).await?;
+        info!("📝 未找到哈希记录，计算当前文件哈希值...");
+        match Self::calculate_file_hash(file_path).await {
+            Ok(actual_hash) => {
+                info!("🧮 计算出的文件哈希: {}", actual_hash);
 
-        if actual_hash.to_lowercase() == remote_hash.to_lowercase() {
-            // 文件匹配，保存哈希值以供下次使用
-            Self::save_file_hash(file_path, &actual_hash).await?;
-            info!(
-                "✅ 现有文件与远程文件匹配，跳过下载: {}",
-                file_path.display()
-            );
-            Ok(false)
-        } else {
-            info!(
-                "📦 现有文件与远程文件不匹配，需要下载: {}",
-                file_path.display()
-            );
-            info!("   本地哈希: {}", actual_hash);
-            info!("   远程哈希: {}", remote_hash);
-            Ok(true)
+                if actual_hash.to_lowercase() == remote_hash.to_lowercase() {
+                    // 文件匹配，保存哈希值以供下次使用
+                    if let Err(e) = Self::save_file_hash(file_path, &actual_hash).await {
+                        warn!("⚠️ 保存哈希文件失败: {}", e);
+                    }
+                    info!("💾 文件与远程匹配，已保存哈希记录，跳过下载");
+                    Ok(false)
+                } else {
+                    info!("🔄 文件与远程不匹配，需要下载新版本");
+                    info!("   本地哈希: {}", actual_hash);
+                    info!("   远程哈希: {}", remote_hash);
+                    Ok(true)
+                }
+            }
+            Err(e) => {
+                warn!("💥 计算文件哈希失败: {}，需要重新下载", e);
+                Ok(true)
+            }
         }
     }
 
@@ -665,12 +814,16 @@ impl ApiClient {
         }
     }
 
-    /// 下载服务更新包（带哈希验证和优化）
-    pub async fn download_service_update_optimized(
+    /// 下载服务更新包（带哈希验证和优化及进度回调）
+    pub async fn download_service_update_optimized_with_progress<F>(
         &self,
         download_path: &Path,
         version: Option<&str>,
-    ) -> Result<()> {
+        progress_callback: Option<F>,
+    ) -> Result<()>
+    where
+        F: Fn(DownloadProgress) + Send + Sync + 'static,
+    {
         // 1. 获取服务清单信息
         info!("🔍 获取服务版本信息...");
         let manifest = self.get_docker_service_manifest().await?;
@@ -681,15 +834,50 @@ impl ApiClient {
         info!("   包大小: {} bytes", manifest.packages.full.size);
         info!("   包哈希: {}", manifest.packages.full.hash);
 
-        // 2. 检查是否需要下载
-        if !self
-            .should_download_file(download_path, &manifest.packages.full.hash)
-            .await?
-        {
-            return Ok(());
+        // 2. 检查版本参数
+        if let Some(target_version) = version {
+            if target_version != manifest.version {
+                warn!("⚠️ 请求版本 {} 与服务器最新版本 {} 不匹配", target_version, manifest.version);
+                info!("   将下载服务器最新版本: {}", manifest.version);
+            } else {
+                info!("✅ 请求版本与服务器版本一致: {}", target_version);
+            }
         }
 
-        // 3. 确保下载目录存在
+        // 3. 简化下载决策：检查文件是否已存在且大小匹配
+        if download_path.exists() {
+            if let Ok(metadata) = tokio::fs::metadata(download_path).await {
+                if metadata.len() == manifest.packages.full.size {
+                    info!("⏭️ 文件已存在且大小匹配，跳过下载");
+                    // 如果有进度回调，发送完成状态
+                    if let Some(callback) = progress_callback {
+                        let progress = DownloadProgress {
+                            task_id: "skip".to_string(),
+                            file_name: download_path.file_name()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                                .to_string(),
+                            downloaded_bytes: manifest.packages.full.size,
+                            total_bytes: manifest.packages.full.size,
+                            download_speed: 0.0,
+                            eta_seconds: 0,
+                            percentage: 100.0,
+                            status: DownloadStatus::Completed,
+                        };
+                        callback(progress);
+                    }
+                    return Ok(());
+                } else {
+                    info!("📂 文件存在但大小不匹配，需要重新下载");
+                    info!("   当前大小: {} bytes", metadata.len());
+                    info!("   预期大小: {} bytes", manifest.packages.full.size);
+                }
+            }
+        } else {
+            info!("📂 文件不存在，需要下载");
+        }
+
+        // 4. 确保下载目录存在
         if let Some(parent) = download_path.parent() {
             if !parent.exists() {
                 tokio::fs::create_dir_all(parent)
@@ -699,40 +887,225 @@ impl ApiClient {
             }
         }
 
-        // 4. 构建下载URL（包含版本参数）
-        let mut download_url = self
-            .config
-            .get_endpoint_url(&self.config.endpoints.docker_download_full);
+        // 5. 根据下载方式构建下载URL
+        let download_url = match manifest.packages.full.download_method.as_str() {
+            "direct" => {
+                // 直接使用服务器返回的URL（OSS等外部存储）
+                info!("📥 使用直接下载方式 (外部存储)");
+                manifest.packages.full.url.clone()
+            }
+            "api" | _ => {
+                // 使用API接口下载（默认方式）
+                info!("📥 使用API接口下载方式");
+                let mut url = self
+                    .config
+                    .get_endpoint_url(&self.config.endpoints.docker_download_full);
 
-        if let Some(v) = version {
-            download_url = format!("{download_url}?version={v}");
-        }
+                if let Some(v) = version {
+                    url = format!("{url}?version={v}");
+                }
+                url
+            }
+        };
 
         info!("📥 开始下载服务更新包...");
+        info!("   下载方式: {}", manifest.packages.full.download_method);
         info!("   源地址: {}", download_url);
         info!("   目标路径: {}", download_path.display());
+        info!("   预期文件大小: {} bytes", manifest.packages.full.size);
 
-        // 5. 执行下载
-        self.download_service_update(download_path).await?;
-
-        // 6. 验证下载的文件完整性
-        info!("🔐 验证下载文件完整性...");
-        if !Self::verify_file_integrity(download_path, &manifest.packages.full.hash).await? {
-            // 删除损坏的文件
-            if download_path.exists() {
-                tokio::fs::remove_file(download_path)
-                    .await
-                    .map_err(|e| DuckError::Custom(format!("删除损坏文件失败: {e}")))?;
-            }
-            return Err(DuckError::Custom(
-                "下载的文件完整性验证失败，已删除损坏文件".to_string(),
-            ));
+        // 6. 执行下载 - 根据下载方式使用正确的认证设置
+        let use_auth = manifest.packages.full.download_method != "direct";
+        
+        if let Some(callback) = progress_callback {
+            // 使用带进度回调的下载
+            info!("🚀 开始带进度的下载...");
+            self.download_with_progress_internal(&download_url, download_path, callback, use_auth).await?;
+        } else {
+            // 使用普通下载方法
+            info!("🚀 开始普通下载...");
+            self.download_service_update_from_url_with_auth(&download_url, download_path, use_auth).await?;
         }
 
-        // 7. 保存哈希值以供下次校验
-        Self::save_file_hash(download_path, &manifest.packages.full.hash).await?;
+        info!("🎉 服务更新包下载完成!");
+        Ok(())
+    }
 
-        info!("✅ 服务更新包下载并验证完成!");
+    /// 下载服务更新包（带哈希验证和优化）- 保持向后兼容
+    pub async fn download_service_update_optimized(
+        &self,
+        download_path: &Path,
+        version: Option<&str>,
+    ) -> Result<()> {
+        self.download_service_update_optimized_with_progress::<fn(DownloadProgress)>(
+            download_path,
+            version,
+            None,
+        )
+        .await
+    }
+
+    /// 带进度回调的下载函数
+    pub async fn download_with_progress<F>(
+        &self,
+        url: &str,
+        target_path: &Path,
+        progress_callback: F,
+    ) -> Result<()>
+    where
+        F: Fn(DownloadProgress) + Send + Sync + 'static,
+    {
+        self.download_with_progress_internal(url, target_path, progress_callback, true).await
+    }
+
+    /// 带进度回调的下载函数（内部实现，支持是否使用认证）
+    async fn download_with_progress_internal<F>(
+        &self,
+        url: &str,
+        target_path: &Path,
+        progress_callback: F,
+        use_auth: bool,
+    ) -> Result<()>
+    where
+        F: Fn(DownloadProgress) + Send + Sync + 'static,
+    {
+        let callback = Arc::new(progress_callback);
+        
+        // 解析文件名
+        let file_name = target_path.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let task_id = format!("download_{}", chrono::Utc::now().timestamp());
+        
+        // 开始下载进度报告
+        let mut progress = DownloadProgress {
+            task_id: task_id.clone(),
+            file_name: file_name.clone(),
+            downloaded_bytes: 0,
+            total_bytes: 0,
+            download_speed: 0.0,
+            eta_seconds: 0,
+            percentage: 0.0,
+            status: DownloadStatus::Starting,
+        };
+        
+        callback(progress.clone());
+        
+        info!("🔍 开始下载: {}", url);
+        
+        // 开始下载 - 根据是否需要认证决定使用哪种客户端
+        let mut response = if use_auth && self.authenticated_client.is_some() {
+            // 使用认证客户端（API下载）
+            let auth_client = self.authenticated_client.as_ref().unwrap();
+            match auth_client.get(url).await {
+                Ok(request_builder) => auth_client.send(request_builder, url).await?,
+                Err(e) => {
+                    warn!("使用AuthenticatedClient下载失败，回退到普通请求: {}", e);
+                    self.build_request(url).send().await
+                        .map_err(|e| DuckError::Api(format!("开始下载失败: {}", e)))?
+                }
+            }
+        } else {
+            // 使用普通客户端（直接URL下载）
+            info!("使用普通HTTP客户端下载");
+            self.build_request(url).send().await
+                .map_err(|e| DuckError::Api(format!("开始下载失败: {}", e)))?
+        };
+        
+        // 检查GET请求状态
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(DuckError::Api(format!(
+                "下载失败: HTTP {status} - {error_text}",
+            )));
+        }
+        
+        info!("✅ 下载响应成功，开始接收数据...");
+        
+        // 从响应中获取文件大小
+        let total_size = response.content_length().unwrap_or(0);
+        info!("📊 文件大小: {} bytes ({:.2} MB)", total_size, total_size as f64 / 1024.0 / 1024.0);
+        
+        progress.total_bytes = total_size;
+        progress.status = DownloadStatus::Downloading;
+        callback(progress.clone());
+        
+        // 确保目标目录存在
+        if let Some(parent) = target_path.parent() {
+            tokio::fs::create_dir_all(parent).await
+                .map_err(|e| DuckError::Custom(format!("创建目录失败: {}", e)))?;
+        }
+        
+        let mut file = tokio::fs::File::create(target_path).await
+            .map_err(|e| DuckError::Custom(format!("创建文件失败: {}", e)))?;
+        let mut downloaded = 0u64;
+        let start_time = std::time::Instant::now();
+        let mut last_update = start_time;
+        
+        info!("💾 开始写入文件: {}", target_path.display());
+        
+        // 流式下载
+        while let Some(chunk) = response.chunk().await
+            .map_err(|e| DuckError::Api(format!("下载数据失败: {}", e)))? {
+            file.write_all(&chunk).await
+                .map_err(|e| DuckError::Custom(format!("写入文件失败: {}", e)))?;
+            downloaded += chunk.len() as u64;
+            
+            let now = std::time::Instant::now();
+            
+            // 每500ms更新一次进度
+            if now.duration_since(last_update).as_millis() > 500 {
+                let elapsed = now.duration_since(start_time).as_secs_f64();
+                let speed = if elapsed > 0.0 { downloaded as f64 / elapsed } else { 0.0 };
+                let eta = if speed > 0.0 {
+                    ((total_size - downloaded) as f64 / speed) as u64
+                } else {
+                    0
+                };
+                
+                progress.downloaded_bytes = downloaded;
+                progress.download_speed = speed;
+                progress.eta_seconds = eta;
+                progress.percentage = if total_size > 0 {
+                    (downloaded as f64 / total_size as f64) * 100.0
+                } else {
+                    0.0
+                };
+                
+                callback(progress.clone());
+                last_update = now;
+            }
+        }
+        
+        // 确保文件被刷新到磁盘
+        file.flush().await
+            .map_err(|e| DuckError::Custom(format!("刷新文件失败: {}", e)))?;
+        
+        info!("📊 下载完成统计:");
+        info!("   实际下载: {} bytes ({:.2} MB)", downloaded, downloaded as f64 / 1024.0 / 1024.0);
+        info!("   预期大小: {} bytes ({:.2} MB)", total_size, total_size as f64 / 1024.0 / 1024.0);
+        
+        // 验证下载是否完整
+        if total_size > 0 && downloaded != total_size {
+            let error_msg = format!(
+                "下载不完整: 预期 {} bytes ({:.2} MB)，实际下载 {} bytes ({:.2} MB)",
+                total_size, total_size as f64 / 1024.0 / 1024.0,
+                downloaded, downloaded as f64 / 1024.0 / 1024.0
+            );
+            error!("{}", error_msg);
+            return Err(DuckError::Custom(error_msg));
+        }
+        
+        info!("✅ 文件下载完成: {} bytes", downloaded);
+        
+        // 完成下载
+        progress.downloaded_bytes = downloaded;
+        progress.percentage = 100.0;
+        progress.status = DownloadStatus::Completed;
+        callback(progress);
+        
         Ok(())
     }
 }

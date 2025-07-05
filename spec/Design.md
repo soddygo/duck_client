@@ -2,13 +2,20 @@
 [TOC]
 ## 1. 概述
 
-本方案旨在设计一个 **自动化服务管理与升级平台**，用于集中管理和维护大规模部署的、基于 Docker Compose 的服务实例。它通过一个中心化的服务端和跨平台的客户端，替代了传统的手动脚本维护模式，提供了自动化、可调度、可监控的全新运维体验。
+本方案旨在设计一个 **自动化服务管理与升级平台**，用于集中管理和维护大规模部署的、基于 Docker Compose 的服务实例。它通过一个中心化的服务端、跨平台的客户端，以及一个可视化的管理端，替代了传统的手动脚本维护模式，提供了自动化、可调度、可监控的全新运维体验。
+
+平台包含三个核心组件：
+- **服务端 (Server)**: 提供 HTTP API 服务，管理客户端注册、版本分发和遥测数据收集
+- **客户端 (Client)**: 部署在各个服务节点，支持 **Tauri 桌面应用** 和 **CLI 命令行工具** 两种形态
+- **管理端 (Admin Panel)**: 基于 Tauri 2.0 的可视化管理界面，用于自动化构建、发布和管理整个升级流程
 
 平台支持 **Tauri 桌面应用** 和 **CLI 命令行工具** 两种客户端形态，满足不同用户场景下的操作需求。
 
 ## 2. 核心功能
 
 平台的核心功能旨在实现对客户端及其托管服务的全生命周期管理。
+
+### 2.1. 客户端功能
 
 -   **客户端自动注册与管理**: 客户端首次启动时会自动向服务端注册，并获得唯一身份标识，便于服务端进行统一管理和追踪。
 -   **服务版本检查与分发**: 服务端统一管理 Docker 服务和客户端自身的版本清单，客户端可随时查询并获取最新版本信息。
@@ -22,12 +29,36 @@
     参考tauri官方文档: https://tauri.org.cn/plugin/updater/#static-json-file
 -   **跨平台与双模式**: 客户端支持 Windows, macOS, 和 Linux，并同时提供图形界面 (Tauri) 和命令行 (CLI) 两种交互方式。
 
+### 2.2. 管理端功能
+
+管理端是一个基于 **Tauri 2.0** 的桌面应用，用于简化和自动化整个构建发布流程，主要功能包括：
+
+-   **可视化构建管理**: 提供直观的图形界面，一键触发 Docker 服务的构建流程
+-   **自动化 CI/CD 流程**: 
+    -   **Git 仓库监控**: 自动检测 `build_compose_agent` 工程的代码变更
+    -   **自动构建**: 触发 `make dev` 命令进行项目构建
+    -   **文件打包**: 自动将 `docker` 目录下的文件压缩为 `docker.zip`
+    -   **版本管理**: 自动生成版本号和构建元数据
+-   **发布流程管理**:
+    -   **草稿上传**: 构建完成后自动上传为草稿状态
+    -   **版本信息配置**: 可视化界面配置版本信息、更新日志等
+    -   **审核发布**: 提供审核和发布流程，确保版本质量
+-   **构建历史与监控**:
+    -   **构建日志**: 实时显示构建过程和详细日志
+    -   **构建历史**: 查看所有构建记录和状态
+    -   **客户端状态监控**: 查看所有已注册客户端的状态和版本分布
+-   **配置管理**: 
+    -   **服务器配置**: 管理服务端 API 地址和认证信息
+    -   **构建配置**: 管理 Git 仓库地址、分支、构建参数等
+    -   **发布策略**: 配置灰度发布、强制更新等策略
+
 ## 3. 技术架构
 
-本项目采用现代化的 Rust 技术栈，构建一个健壮、高性能且易于维护的 **客户端-服务端** 架构。该架构旨在实现对大规模客户端群体的集中化管理与服务分发。
+本项目采用现代化的 Rust 技术栈，构建一个健壮、高性能且易于维护的 **三层架构**。该架构旨在实现对大规模客户端群体的集中化管理与服务分发，同时提供便捷的可视化管理工具。
 
--   **服务端 (Update Server)**: 作为整个平台的大脑，负责客户端注册、版本管理、任务调度、数据收集和消息分发。
+-   **服务端 (Update Server)**: 作为整个平台的核心，负责客户端注册、版本管理、任务调度、数据收集和消息分发。
 -   **客户端 (Client)**: 部署在每个服务节点上，负责执行来自服务端的指令（如升级、备份），上报本地状态，并为最终用户提供交互界面 (Tauri/CLI)。
+-   **管理端 (Admin Panel)**: 基于 Tauri 2.0 的桌面管理应用，为开发者和运维人员提供可视化的构建、发布和监控界面。
 
 ### 3.1. 技术选型
 
@@ -55,6 +86,25 @@
 -   **HTTP 通信**: `reqwest`
     -   **描述**: 所有与服务端 API 的通信将使用 `reqwest` 库。我们会创建一个 `ApiClient` 包装器来统一处理 `client_id` 注入和错误处理。
 
+#### 3.1.3. 管理端 (Admin Panel)
+
+-   **桌面应用框架**: `Tauri 2.0`
+    -   **描述**: 使用最新的 `Tauri 2.0` 框架构建管理端桌面应用。
+    -   **选型理由**: 提供更好的性能、更丰富的 API 和更现代的架构。
+-   **前端技术栈**: `React` + `TypeScript`
+    -   **描述**: 使用 `React` 和 `TypeScript` 构建类型安全的管理界面。
+    -   **UI 组件库**: 使用 `Ant Design` 或 `Material-UI` 等成熟的组件库。
+-   **自动化构建核心**: 复用现有的 `auto-builder` 模块
+    -   **Git 操作**: 使用 `git2` 进行仓库操作和版本管理。
+    -   **构建执行**: 通过 `tokio::process::Command` 执行 `make` 命令。
+    -   **文件处理**: 使用 `walkdir` 和 `zip` 进行文件打包操作。
+-   **本地数据存储**: `SQLx` + `SQLite`
+    -   **描述**: 存储构建历史、配置信息和任务状态。
+-   **实时通信**: `WebSocket` 或 `Server-Sent Events`
+    -   **描述**: 实现构建进度的实时更新和日志流传输。
+-   **HTTP 通信**: `reqwest`
+    -   **描述**: 与服务端 API 进行通信，上传构建产物和管理版本。
+
 ### 3.2. 客户端命令行工具 (`duck_client_cli`)
 
 -   **参数解析**: 使用 `clap` 库解析命令行参数。
@@ -67,11 +117,14 @@
     -   `duck-cli start | stop | status`: 控制和查看 Docker 服务状态。
     -   `duck-cli self-update`: 检查并更新 CLI 工具自身。
 
-## 4. 项目结构建议 (前后端分离)
+## 4. 项目结构建议
 
-考虑到服务端代码的闭源需求以及客户端的开源计划，我们对项目结构进行调整，从原有的单一Cargo Workspace拆分为两个完全独立的Rust工程：`duck-client` 和 `duck-server`。它们之间的通信纽带是一个独立发布到 `crates.io` 的 `duck-protocol` 共享库。
+考虑到服务端代码的闭源需求以及客户端的开源计划，我们采用了三个独立工程的架构：`duck-client`（开源）、`duck-server`（私有）和 `build_compose_agent`（私有构建工程）。它们之间的通信纽带是一个独立发布到 `crates.io` 的 `duck-protocol` 共享库。
 
-这种结构提供了最大的灵活性和最清晰的权责边界，使得客户端可以独立开发、构建和发布，而服务端则保持私有。
+这种结构提供了最大的灵活性和最清晰的权责边界：
+- **客户端** 可以独立开发、构建和发布
+- **服务端** 保持私有，包含管理端桌面应用
+- **构建工程** 独立维护，专注于 Docker 服务的构建
 
 ### 4.1. 模块依赖关系图
 
@@ -83,7 +136,7 @@ graph TD
         direction LR
         subgraph "用户交互层"
             CLI[duck-cli]
-            Tauri[duck-tauri]
+            ClientTauri[duck-tauri]
         end
 
         subgraph "客户端核心逻辑"
@@ -91,7 +144,7 @@ graph TD
         end
 
         CLI --> ClientCore
-        Tauri --> ClientCore
+        ClientTauri --> ClientCore
     end
 
     subgraph "duck-server (私有仓库)"
@@ -102,7 +155,23 @@ graph TD
         subgraph "数据库逻辑"
             DB[duck-server-db]
         end
+        subgraph "管理端"
+            AdminPanel[admin-panel]
+            AutoBuilder[auto-builder]
+        end
         Server --> DB
+        AdminPanel --> AutoBuilder
+        AdminPanel --> Server
+    end
+
+    subgraph "build_compose_agent (私有构建仓库)"
+        direction LR
+        BuildProject[构建工程]
+        DockerFiles[docker/ 目录]
+        Makefile[Makefile]
+        
+        Makefile --> DockerFiles
+        BuildProject --> Makefile
     end
     
     subgraph "crates.io (公共注册表)"
@@ -111,212 +180,106 @@ graph TD
 
     ClientCore -- "依赖" --> Protocol
     Server -- "依赖" --> Protocol
+    AdminPanel -- "依赖" --> Protocol
     
-    User[fa:fa-user User] --> CLI
-    User --> Tauri
+    EndUser[fa:fa-user 终端用户] --> CLI
+    EndUser --> ClientTauri
+    DevOps[fa:fa-user 运维人员] --> AdminPanel
+    
     ClientCore -- "HTTP/S API" --> Server
+    AdminPanel -- "Git Clone & Build" --> BuildProject
+    AdminPanel -- "Upload docker.zip" --> Server
 ```
 
 ### 4.2. 项目与模块职责说明
 
 -   `duck-protocol` (**公共 API 协议库**):
-    -   **职责**: 定义所有客户端与服务端之间通信的数据结构（使用 `serde`）。这是一个纯数据结构库，不包含任何业务逻辑。它将被独立发布到 **`crates.io`**，供 `duck-client` 和 `duck-server` 两个项目共同依赖。
+    -   **职责**: 定义所有客户端、管理端与服务端之间通信的数据结构（使用 `serde`）。这是一个纯数据结构库，不包含任何业务逻辑。它将被独立发布到 **`crates.io`**，供各个项目共同依赖。
     -   **代码状态**: **公开**。
 
 -   `duck-client` (**客户端工程**):
     -   **职责**: 一个独立的 Cargo Workspace，包含所有客户端相关的代码。此项目将**在 GitHub 上开源**。
+    -   **仓库地址**: https://github.com/soddygo/duck_client (dev 分支)
     -   **内部模块**:
         -   `duck-client-core`: 实现所有客户端的核心业务逻辑，如 API 通信、服务升级、备份恢复、数据库管理等。
         -   `duck-cli`: 轻量级的命令行"外壳"，负责解析参数并调用 `client-core` 中的功能。
         -   `duck-tauri`: 轻量级的图形界面"外壳"，通过 Tauri 命令调用 `client-core` 中的功能并与前端交互。
-        使用 deno , react 前端技术,使用的 tauri 前端
 
 -   `duck-server` (**服务端工程**):
-    -   **职责**: 一个独立的 Cargo Workspace，包含所有服务端的代码。此项目将作为**私有仓库**进行管理。
+    -   **职责**: 一个独立的 Cargo Workspace，包含所有服务端和管理端的代码。此项目将作为**私有仓库**进行管理。
     -   **内部模块**:
         -   `duck-server`: 实现所有 API 端点的 Axum Web 服务。
         -   `duck-server-db`: 封装所有与服务端数据库的交互逻辑。
+        -   `auto-builder`: 自动化构建系统，负责 Git 监控、Docker 构建和文件打包。
+        -   `admin-panel`: 基于 Tauri 2.0 的管理端桌面应用，提供可视化的构建发布管理界面。
 
-### 4.3. 文件夹结构
+-   `build_compose_agent` (**构建工程**):
+    -   **职责**: 独立的 Docker 服务构建工程，包含所有服务的 Docker Compose 配置和构建脚本。
+    -   **仓库地址**: https://git.yichamao.com/agent-platform/build_compose_agent (dev 分支)
+    -   **构建流程**:
+        -   **初始化**: `make all` - 导出基础镜像（Redis、MySQL 等）
+        -   **日常构建**: `make dev` - 快速构建，复用基础镜像
+        -   **产物目录**: `docker/` - 包含所有构建产物，将被打包为 `docker.zip`
+    -   **代码状态**: **私有**。
 
-#### `duck-client` (客户端项目)
-```
-duck_client/
-├── Cargo.toml           # Workspace配置
-├── config.toml          # 用户配置文件
-├── duck-tauri  # tauri桌面app ui
-├── client-core # 核心业务逻辑库
-├── duck-cli   # 命令行,同时提供 lib,可以供 duck-tauri 使用.不需要UI的时候,只使用 cli command ,编译此模块
-└── spec/
-    ├── Design.md 设计文档
-    └── task.md   开发任务文档
-```
+## 5. 核心流程设计
 
-#### `duck-server` (服务端项目)
-```
-/duck-server/
-|-- Cargo.toml              # Workspace: 定义 server, server-db
-|-- README.md
-|-- .gitignore
-|
-|-- server/       # Axum Web 服务
-|-- server-db/    # 数据库交互逻辑
-|-- migrations/         # 数据库迁移文件
-```
-
-## 5. 数据持久化设计 (Database Design)
-
-我们将分别在客户端和服务端使用数据库来持久化关键数据。
-
-### 5.1. 客户端数据库 (SQLite)
-
-客户端使用一个本地的 `SQLite` 数据库 (`history.db`) 来存储用户配置、历史记录和身份信息。
-
-#### 5.1.1. 表结构: `client_identity`
-
-用于存储客户端自身的唯一标识，确保表中只有一条记录。
-
-| 字段名      | 类型      | 约束                | 描述                         |
-| ----------- | --------- | ------------------- | ---------------------------- |
-| `id`        | `INTEGER` | `PRIMARY KEY`       | 唯一标识，确保只有一行记录。 |
-| `client_uuid` | `TEXT`    | `NOT NULL`, `UNIQUE`| 客户端的 UUID 标识。         |
-| `created_at`| `DATETIME`| `NOT NULL`          | 记录创建时间。               |
-
-#### 5.1.2. 表结构: `backups`
-
-用于持久化管理备份历史。
-
-| 字段名          | 类型      | 约束                | 描述                                           |
-| --------------- | --------- | ------------------- | ---------------------------------------------- |
-| `id`            | `INTEGER` | `PRIMARY KEY`       | 备份记录的唯一标识符。                         |
-| `file_path`     | `TEXT`    | `NOT NULL`, `UNIQUE`| 备份文件的绝对路径。                           |
-| `service_version` | `TEXT`    | `NOT NULL`          | 备份时服务的版本号。                           |
-| `backup_type`   | `TEXT`    | `NOT NULL`          | 备份类型（如 `manual`, `pre-upgrade`）。       |
-| `status`        | `TEXT`    | `NOT NULL`          | 备份状态（如 `completed`, `failed`）。         |
-| `created_at`    | `DATETIME`| `NOT NULL`          | 备份创建时间。                                 |
-
-#### 5.1.3. 表结构: `scheduled_tasks`
-
-此表用于存储所有待执行的计划任务，核心是实现服务的预约升级。
-
-**业务逻辑**: 为了确保同一时间只有一个有效的预约升级，应用在创建新的 `SERVICE_UPGRADE` 任务前，必须先将所有状态为 `PENDING` 的旧升级任务更新为 `CANCELLED` 状态。
-
-| 字段名           | 类型       | 约束                         | 描述                                                                         |
-| ---------------- | ---------- | ---------------------------- | ---------------------------------------------------------------------------- |
-| `id`             | `INTEGER`  | `PRIMARY KEY`                | 任务的唯一标识符。                                                           |
-| `task_type`      | `TEXT`     | `NOT NULL`                   | 任务类型（目前为 `SERVICE_UPGRADE`，未来可扩展）。                           |
-| `target_version` | `TEXT`     | `NOT NULL`                   | 计划升级到的服务版本号。                                                     |
-| `scheduled_at`   | `DATETIME` | `NOT NULL`                   | 用户指定的任务执行时间 (UTC)。                                               |
-| `status`         | `TEXT`     | `NOT NULL`                   | 任务状态 (`PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`)。 |
-| `details`        | `TEXT`     |                              | 存储额外信息，如失败时的错误日志。                                           |
-| `created_at`     | `DATETIME` | `NOT NULL`, `DEFAULT NOW()`  | 任务记录的创建时间。                                                         |
-| `completed_at`   | `DATETIME` |                              | 任务完成、失败或取消的时间。                                                 |
-
-### 5.2. 服务端数据库
-
-服务端数据库用于管理所有客户端的信息、版本发布和升级历史。
-
-#### 5.2.1. 表结构: `clients`
-
-记录所有已注册的客户端实例。
-
-| 字段名           | 类型       | 约束                         | 描述                                       |
-| ---------------- | ---------- | ---------------------------- | ------------------------------------------ |
-| `id`             | `INTEGER`  | `PRIMARY KEY`                | 内部自增ID。                               |
-| `client_uuid`    | `UUID`     | `NOT NULL`, `UNIQUE`         | 客户端生成的唯一标识符 (`X-Client-ID`)。   |
-| `os_type`        | `TEXT`     |                              | 操作系统类型 (e.g., "windows")。           |
-| `os_version`     | `TEXT`     |                              | 操作系统版本。                             |
-| `architecture`   | `TEXT`     |                              | CPU 架构 (e.g., "x86_64")。                |
-| `first_seen_at`  | `DATETIME` | `NOT NULL`, `DEFAULT NOW()`  | 首次注册时间。                             |
-| `last_seen_at`   | `DATETIME` | `NOT NULL`                   | 最后一次活跃时间（每次API调用时更新）。    |
-
-#### 5.2.2. 表结构: `service_upgrade_history`
-
-记录每个客户端 **对 Docker 服务** 的升级历史。
-
-| 字段名         | 类型      | 约束                         | 描述                                     |
-| -------------- | --------- | ---------------------------- | ---------------------------------------- |
-| `id`           | `INTEGER` | `PRIMARY KEY`                | 记录的唯一ID。                           |
-| `client_id`    | `INTEGER` | `NOT NULL`, `FK to clients.id` | 关联到执行升级的客户端。                 |
-| `from_version` | `TEXT`    | `NOT NULL`                   | 升级前的 **服务** 版本。                       |
-| `to_version`   | `TEXT`    | `NOT NULL`                   | 升级后的 **服务** 版本。                       |
-| `status`       | `TEXT`    | `NOT NULL`                   | 升级结果 (`SUCCESS`, `FAILED`)。         |
-| `details`      | `TEXT`    |                              | 失败时的详细错误信息。                   |
-| `upgraded_at`  | `DATETIME`| `NOT NULL`, `DEFAULT NOW()`  | 升级操作发生的时间。                     |
-
-#### 5.2.3. 表结构: `client_self_upgrade_history`
-
-记录 **客户端自身** 的更新历史，用于追踪客户端的迭代和采纳率。
-
-| 字段名         | 类型      | 约束                         | 描述                                     |
-| -------------- | --------- | ---------------------------- | ---------------------------------------- |
-| `id`           | `INTEGER` | `PRIMARY KEY`                | 记录的唯一ID。                           |
-| `client_id`    | `INTEGER` | `NOT NULL`, `FK to clients.id` | 关联到执行升级的客户端。                 |
-| `from_version` | `TEXT`    | `NOT NULL`                   | 升级前的 **客户端** 版本。                   |
-| `to_version`   | `TEXT`    | `NOT NULL`                   | 升级后的 **客户端** 版本。                   |
-| `status`       | `TEXT`    | `NOT NULL`                   | 升级结果 (`SUCCESS`, `FAILED`)。         |
-| `details`      | `TEXT`    |                              | 失败时的详细错误信息。                   |
-| `upgraded_at`  | `DATETIME`| `NOT NULL`, `DEFAULT NOW()`  | 升级操作发生的时间。                     |
-
-## 6. 配置文件设计
-
-我们设计了一个功能全面的配置结构，它能清晰地管理版本、API端点、备份和公告等所有信息。
-
-```toml
-# [versions]
-# 统一管理客户端和服务端的版本号
-[versions]
-client = "0.1.0"   # duck-cli 工具自身的当前版本
-service = "1.1.0"  # 已部署的 Docker 服务的当前版本
-
-# [docker]
-# Docker 相关配置
-[docker]
-compose_file = "./docker/docker-compose.yml"
-
-# [endpoints]
-# 中心化的 API 端点管理
-[endpoints]
-base_url = "https://your-server.com"
-# Docker 服务更新相关的 API
-[endpoints.service_update]
-manifest_uri = "/api/v1/docker/update/manifest"
-
-# 客户端自更新相关的 API (为中国大陆访问优化)
-[endpoints.client_self_update]
-manifest_uri = "/api/v1/client/update/manifest"
-
-# 获取公告的 API
-[endpoints.announcements]
-list_uri = "/api/v1/announcements"
-
-# [backup]
-# 备份相关的所有配置
-[backup]
-# 备份文件的统一存储目录。用户可随时修改。
-storage_dir = "./backups"
-```
-
-## 7. 核心流程设计
-
-### 7.1. 客户端注册与识别
+### 5.1. 客户端注册与识别
 
 1.  **首次启动**: 客户端在首次启动时，检查本地是否存在 `client_id`。若不存在，则生成一个 UUID，收集系统信息（OS、架构），并调用服务端 `POST /api/v1/clients/register` 接口进行注册。成功后，将 `client_id` 持久化到本地 SQLite 数据库。
 2.  **后续请求**: 所有对服务端的 API 请求，都在请求头中自动添加 `X-Client-ID`，用于身份识别。
 
-### 7.2. 更新分发机制：基于清单的差量更新
+### 5.2. 管理端自动化构建流程
+
+管理端提供了完整的自动化构建和发布管理流程：
+
+#### 5.2.1. 构建触发流程
+
+1.  **手动触发**: 运维人员在管理端界面点击"开始构建"按钮
+2.  **配置检查**: 系统检查构建配置（Git 仓库地址、分支、构建参数等）
+3.  **任务创建**: 创建构建任务并加入任务队列
+
+#### 5.2.2. 自动化构建执行
+
+1.  **Git 操作**: 
+    - 克隆或更新 `build_compose_agent` 工程到本地
+    - 切换到指定分支（默认为 `dev`）
+    - 检查最新提交信息
+2.  **构建执行**:
+    - 如果是首次构建，执行 `make all` 命令（导出基础镜像）
+    - 日常构建执行 `make dev` 命令（快速构建）
+    - 实时捕获和显示构建日志
+3.  **产物处理**:
+    - 检查 `docker/` 目录下的构建产物
+    - 计算文件哈希值，生成清单信息
+    - 将 `docker/` 目录压缩为 `docker.zip` 文件
+4.  **版本管理**:
+    - 根据 Git 提交信息自动生成版本号
+    - 创建版本元数据（构建时间、提交 ID、文件大小等）
+
+#### 5.2.3. 发布管理流程
+
+1.  **草稿上传**: 构建完成后，系统自动将 `docker.zip` 上传到服务端存储
+2.  **版本配置**: 运维人员在管理界面配置：
+    - 版本信息和更新日志
+    - 发布策略（全量/增量）
+    - 目标客户端群体
+3.  **审核发布**: 
+    - 预览版本信息和影响范围
+    - 确认发布，系统更新 `manifest.json`
+    - 客户端即可检测到新版本
+
+### 5.3. 更新分发机制：基于清单的差量更新
 
 为提升更新效率，我们采用基于文件哈希比对的差量更新机制。
 
-#### 7.2.1. 服务端流程
+#### 5.3.1. 服务端流程
 
-1.  **打包与上传**: 管理员将包含所有部署文件的文件夹（`docker-compose.yml`, `.tar` 镜像包等）压缩成 `docker.zip` 并上传。
-2.  **生成清单**: 服务端自动解压 `zip` 包，遍历所有文件，计算每个文件的哈希值（如 SHA256），和历史版本对比，并生成一个文件清单列表，然后根据清单列表，进行打包 .zip 文件。同时，提供增量和全量两种更新包。
-注： 如果没有历史版本，第一次升级，则是全量升级方式， 增量升级的内容，和全量升级的 .zip 包内容是一样的。
+1.  **文件分析**: 管理端上传 `docker.zip` 后，服务端自动解压并分析文件结构
+2.  **增量计算**: 与历史版本对比，计算文件差异，生成增量更新包
+3.  **清单生成**: 创建包含全量和增量更新包信息的 `manifest.json`
 
-最终提供给用户使用的结构 `manifest.json` ,用于客户端升级使用,根据自己选择的升级方式,来下载对应的文件,进行升级。
-
-#### 7.2.2. `manifest.json` 结构设计
+#### 5.3.2. `manifest.json` 结构设计
 
 ```json
 {
@@ -340,9 +303,7 @@ storage_dir = "./backups"
 }
 ```
 
--   **核心字段**: `version`, `notes` (更新日志),  `packages` (全量与增量更新包的下载信息)。
-
-### 7.3. 服务升级流程 (客户端视角)
+### 5.4. 服务升级流程 (客户端视角)
 
 系统的核心原则是：**检查是自动的，但升级永远是手动的、需经用户明确同意的。**
 
@@ -359,206 +320,69 @@ storage_dir = "./backups"
     6.  **健康检查与清理**: 检查服务是否成功启动，然后清理下载的临时文件。
     7.  **完成**: 通知用户升级成功，并更新本地记录的版本号。
 
-### 7.4. 预约升级流程
+### 5.5. 预约升级流程
 
 1.  **用户决策**: 当检测到新版本后，UI 界面提供"立即升级"和"预约升级"选项。
 2.  **任务调度**: 若用户选择预约，可指定一个未来的时间点（如次日凌晨2:00）。该任务（类型、版本、执行时间）被记录到本地 SQLite 的 `scheduled_tasks` 表中。
-3.  **后台执行**: Tauri 后端的轻量级调度器会定时检查任务表。当到达指定时间，它会自动触发完整的[服务升级流程](#73-服务升级流程-客户端视角)。
+3.  **后台执行**: Tauri 后端的轻量级调度器会定时检查任务表。当到达指定时间，它会自动触发完整的服务升级流程。
 4.  **结果反馈**: 升级结果（成功/失败及日志）被记录到数据库。用户下次打开应用时会收到通知。
 
-### 7.5. 客户端自升级流程
+### 5.6. 客户端自升级流程
 
 1.  **检查版本**: 客户端启动时，访问服务端的客户端更新清单。
 2.  **提示更新**: 若有新版本，提示用户并展示更新日志。
 3.  **下载与替换**: 用户确认后，Tauri 应用使用 `tauri-plugin-updater`，CLI 工具使用 `self-update` Crate，自动完成下载、替换和重启的流程。
 
-### 7.6. 备份与恢复机制
+## 6. 管理端 UI 设计
 
-为了提升备份系统的健壮性、灵活性和可维护性，我们对备份机制进行重构，核心思想是将 **动态的备份历史** 与 **静态的用户配置** 分离。
+### 6.1. 设计原则
 
-#### 7.6.1. 备份内容
+-   **高效操作**: 界面聚焦于构建发布流程，减少不必要的步骤
+-   **实时反馈**: 构建过程提供实时日志和进度显示
+-   **安全可控**: 重要操作需要确认，提供回滚和撤销机制
 
-为简化操作并确保完整性，`duck-cli backup` 命令将默认备份 **整个 Docker 服务目录**（即 `docker-compose.yml` 文件所在的目录）。这包括了所有服务配置、数据卷映射等，从而保证了备份的完整性和一致性。
+### 6.2. 主要界面
 
-#### 7.6.2. 备份历史存储
+#### 6.2.1. 构建管理页面
 
-所有备份操作的元数据（历史记录）将不再写入 `config.toml`，而是存储在一个独立的、由程序管理的本地数据库（`backups` 表）中。
+-   **构建触发区域**:
+    - Git 仓库状态显示
+    - "开始构建" 主操作按钮
+    - 构建配置快速设置
+-   **构建历史**:
+    - 构建任务列表（状态、时间、版本）
+    - 构建日志查看
+    - 构建产物下载
 
--   **技术选型**: 我们将使用 **`sqlx`** crate，并启用其 **`sqlite`** 特性。
--   **优点**:
-    -   **数据解耦**: 彻底分离了用户静态配置和程序动态生成的数据。
-    -   **高性能查询**: 可以轻松地对备份历史进行复杂的查询、排序和管理。
-    -   **高扩展性**: 未来可以方便地为备份记录增加更多维度的信息（如备份大小、状态、类型等）。
+#### 6.2.2. 发布管理页面
 
-#### 7.6.3. `storage_dir` 变更的智能处理
+-   **版本管理**:
+    - 草稿版本列表
+    - 已发布版本历史
+    - 版本对比功能
+-   **发布流程**:
+    - 版本信息编辑
+    - 更新日志编写
+    - 发布确认和审核
 
-我们认识到用户可能会更改备份目录 (`config.toml` 中的 `backup.storage_dir`)。为了提供无缝的体验，CLI 将智能处理此变更：
+#### 6.2.3. 客户端监控页面
 
-1.  **变更检测**: 每次启动时，CLI 会读取 `config.toml` 中的 `storage_dir`，并与数据库中记录的（或一个状态文件中缓存的）上一次使用的路径进行比较。
-2.  **用户确认**: 如果检测到路径不一致，程序将主动询问用户：
-    > "检测到您的备份存储目录已从 `<old_path>` 更改为 `<new_path>`。是否需要将所有历史备份文件迁移至新目录？\n**警告**: 此操作可能需要较长时间并消耗大量磁盘I/O，请确保您有足够的时间和磁盘空间。(y/N)"
-3.  **执行迁移**:
-    -   如果用户输入 `y`，CLI 将开始迁移过程：
-        1.  将旧目录下的所有备份文件移动到新目录。
-        2.  更新数据库中 **所有** 备份记录的 `file_path` 字段，使其指向新的文件位置。
-        3.  完成后，将新路径记录为当前使用的路径。
-    -   如果用户输入 `n`，CLI 将不会移动旧文件。旧的备份记录依然指向旧路径（可能导致 `rollback` 失败），但所有 **新的备份** 将被创建在 `config.toml` 指定的新目录中。
+-   **客户端状态**:
+    - 在线客户端列表
+    - 版本分布统计
+    - 升级历史查看
 
-#### 7.6.4. 回滚流程
-
-1.  **查找备份**: 用户通过 `duck-cli list-backups` 查看所有可用的本地备份。
-2.  **执行回滚**: 用户执行 `duck-cli rollback <BACKUP_IDENTIFIER>` 命令。
-3.  **用户确认**: 系统会警告此操作将覆盖当前文件，并请求最终确认。
-4.  **执行恢复**: 停止当前服务，清空相关目录，然后将指定的备份包完整解压到原位。
-5.  **重启服务**: 使用恢复后的文件和镜像重新启动服务。
-
-## 8. 服务端 API 设计
-
-### 8.1. 全局要求
-
--   **基础 URL**: 所有 API 路径均以 `https://your-server.com/api/v1` 为前缀。
--   **认证**: 除注册接口外，所有发向服务端的请求都必须在 HTTP Header 中包含 `X-Client-ID: <uuid>`，否则将被拒绝 (`400 Bad Request`)。服务端会根据此 ID 更新客户端的 `last_seen_at` 时间戳。
--   **通用响应**: 服务端在发生错误时，应返回一个标准的 JSON 错误对象：
-    ```json
-    {
-      "error_code": "RESOURCE_NOT_FOUND",
-      "message": "The requested resource was not found."
-    }
-    ```
-
-### 8.2. 客户端管理 (Client Management)
-
-#### 8.2.1. 注册客户端
-
--   **Endpoint**: `POST /clients/register`
--   **描述**: 客户端首次启动时调用，用于向服务端注册自己。
--   **请求体 (JSON)**:
-    ```json
-    {
-      "client_uuid": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-      "os_type": "macos",
-      "os_version": "14.5",
-      "architecture": "aarch64"
-    }
-    ```
--   **成功响应**: `201 Created` (空响应体)
--   **失败响应**:
-    -   `400 Bad Request`: 请求体格式错误。
-    -   `409 Conflict`: 该 `client_uuid` 已被注册。
-
-### 8.3. 更新与分发 (Updates & Distribution)
-
-#### 8.3.1. 获取 Docker 服务更新清单
-
--   **Endpoint**: `GET /services/updates/manifest`
--   **描述**: 客户端定期调用此接口，检查是否有新的 Docker 服务版本。
--   **查询参数**:
-    -   `current_version` (String, 必需): 客户端当前的服务版本号。
--   **成功响应 (200 OK)**: 返回 `manifest.json` 文件内容，结构见 [7.2.2. `manifest.json` 结构设计](#722-manifestjson-结构设计)。如果版本已是最新，可以返回 `304 Not Modified`。
-
-#### 8.3.2. 获取客户端自我更新清单
-
--   **Endpoint**: `GET /client/updates/manifest`
--   **描述**: 客户端启动时调用，检查自身是否有新版本。此接口返回的 JSON 结构严格遵循 [Tauri Updater 插件的规范](https://tauri.app/v1/guides/distribution/updater/)，以确保兼容性。
--   **查询参数**:
-    -   `platform` (String, 必需): 客户端平台 (e.g., `windows-x86_64`, `darwin-aarch64`)。
-    -   `current_version` (String, 必需): 客户端当前的版本号。
--   **成功响应 (200 OK)**: 返回 Tauri Updater 兼容的 JSON 清单。
-    -   `version`: 新版本的版本号 (e.g., `"v1.2.0"`)。
-    -   `notes`: 本次更新的发行说明。
-    -   `pub_date`: 版本发布的 ISO 8601 格式日期 (e.g., `"2025-06-25T12:00:00Z"`)。
-    -   `platforms`: 一个对象，包含了不同平台和架构的更新包信息。
-        -   `signature`: **极其重要**。这是由 Tauri 打包工具生成的 `.sig` 文件的 **内容** (不是文件名或路径)。Tauri Updater 会用它来验证下载的更新包是否被篡改，是安全性的核心保障。
-        -   `url`: 新版本更新包的下载地址。根据用户要求，这会指向我们自己服务器的地址。
-
-    **示例 (包含多个平台):**
-    ```json
-    {
-      "version": "v1.2.0",
-      "notes": "修复了一些关键 bug，并优化了启动性能。",
-      "pub_date": "2025-06-25T12:00:00Z",
-      "platforms": {
-        "windows-x86_64": {
-          "signature": "Content of the my-app_1.2.0_x64_en-US.msi.zip.sig file",
-          "url": "https://your-server.com/downloads/client/1.2.0/my-app_1.2.0_x64_en-US.msi.zip"
-        },
-        "linux-x86_64": {
-          "signature": "Content of the my-app_1.2.0_amd64.AppImage.tar.gz.sig file",
-          "url": "https://your-server.com/downloads/client/1.2.0/my-app_1.2.0_amd64.AppImage.tar.gz"
-        },
-        "darwin-aarch64": {
-          "signature": "Content of the my-app.app.tar.gz.sig file",
-          "url": "https://your-server.com/downloads/client/1.2.0/my-app.app.tar.gz"
-        }
-      }
-    }
-    ```
-
-### 8.4. 数据与遥测 (Data & Telemetry)
-
-#### 8.4.1. 上报服务升级结果
-
--   **Endpoint**: `POST /history/service-upgrades`
--   **描述**: 客户端在完成一次 **Docker 服务升级**（无论成功或失败）后，调用此接口将结果上报给服务端，以便记录到 `service_upgrade_history` 表中。
--   **请求体 (JSON)**:
-    ```json
-    {
-      "from_version": "1.1.0",
-      "to_version": "1.2.0",
-      "status": "SUCCESS",
-      "details": "Upgrade failed due to network error during image pull."
-    }
-    ```
--   **成功响应**: `202 Accepted` (空响应体)
-
-#### 8.4.2. 上报客户端自我更新结果
-
--   **Endpoint**: `POST /history/client-self-upgrades`
--   **描述**: **新版本**的客户端在完成自我更新并首次启动后，调用此接口将更新结果上报给服务端，以便记录到 `client_self_upgrade_history` 表中。
--   **请求体 (JSON)**:
-    ```json
-    {
-      "from_version": "0.1.0",
-      "to_version": "0.2.0",
-      "status": "SUCCESS",
-      "details": ""
-    }
-    ```
--   **成功响应**: `202 Accepted` (空响应体)
-
-### 8.5. 消息通知 (Announcements)
-
-#### 8.5.1. 获取公告列表
-
--   **Endpoint**: `GET /announcements`
--   **描述**: 客户端定期获取对用户可见的公告消息。
--   **查询参数**:
-    -   `since` (String, 可选): ISO 8601 格式的时间戳。如果提供，则只返回此时间之后发布的公告。
--   **成功响应 (200 OK)**:
-    ```json
-    {
-      "announcements": [
-        {
-          "id": 1,
-          "level": "info",
-          "content": "系统将于 6月26日 凌晨 2:00-3:00 进行维护。",
-          "created_at": "2025-06-25T14:00:00Z"
-        }
-      ]
-    }
-    ```
-
-## 9. 客户端UI设计
+## 7. 客户端UI设计
 
 为确保桌面客户端（Tauri App）简洁、直观且易于操作，我们提出以下UI设计方案。
 
-### 9.1. 设计原则
+### 7.1. 设计原则
 
 -   **简洁至上 (Simplicity)**: 界面元素保持最简化，避免不必要的装饰和信息过载。每个页面聚焦于一个核心任务。
 -   **信息清晰 (Clarity)**: 关键信息（如服务状态、版本号）一目了然。使用明确的标签、颜色和图标来传递状态。
 -   **操作高效 (Efficiency)**: 将最常用的操作（如启动/停止、升级）放在最显眼的位置，减少用户点击次数。
 
-### 9.2. 整体布局
+### 7.2. 整体布局
 
 应用采用经典的 **侧边栏导航 + 内容区** 布局。
 
@@ -573,9 +397,9 @@ storage_dir = "./backups"
 | [图标] 设置       |                                                            |
 | [图标] 关于       |                                                            |
 
-### 9.3. 核心页面设计
+### 7.3. 核心页面设计
 
-#### 9.3.1. 仪表盘 (Dashboard)
+#### 7.3.1. 仪表盘 (Dashboard)
 
 这是应用的默认主页，提供系统状态的概览。
 
@@ -593,7 +417,7 @@ storage_dir = "./backups"
     - 导航栏的"仪表盘"图标上显示一个小红点，提示用户。
 - **最近活动**: (可选) 一个简短的日志列表，显示最近几次的关键操作（如 "升级成功", "备份已创建"）。
 
-#### 9.3.2. 服务管理 (Service Management)
+#### 7.3.2. 服务管理 (Service Management)
 
 此页面提供对 Docker 服务的详细控制。
 
@@ -606,7 +430,7 @@ storage_dir = "./backups"
   - 一个实时的日志输出窗口，显示 `docker-compose logs` 的内容。
   - 提供 "清空日志" 和 "导出日志" 的功能。
 
-#### 9.3.3. 备份与恢复 (Backup & Rollback)
+#### 7.3.3. 备份与恢复 (Backup & Rollback)
 
 管理所有的数据备份。
 
@@ -617,7 +441,7 @@ storage_dir = "./backups"
   - 一个醒目的 **"立即创建备份"** 按钮。
   - 在备份列表的每一行，都有一个 **"从此备份恢复"** 按钮。点击后会弹出高风险操作确认框。
 
-#### 9.3.4. 设置 (Settings)
+#### 7.3.4. 设置 (Settings)
 
 配置应用的行为。
 
@@ -628,7 +452,7 @@ storage_dir = "./backups"
 - **备份设置**:
   - `备份文件存储路径`: 用户可以自定义备份文件的存放位置。
 
-### 9.4. 关键交互流程
+### 7.4. 关键交互流程
 
 - **升级确认**:
   1. 用户点击"立即升级"或"预约升级"。
@@ -640,9 +464,9 @@ storage_dir = "./backups"
   2. 弹出一个 **红色警告** 模态框，强调"此操作将覆盖当前所有服务文件和数据，且不可逆！"。
   3. 用户需要手动输入 "confirm" 或进行类似操作才能激活"确认回滚"按钮，防止误操作。
 
-## 10. 扩展功能规划
+## 8. 扩展功能规划
 
-### 10.1. 远程日志上报 (Remote Log Uploading)
+### 8.1. 远程日志上报 (Remote Log Uploading)
 
 为了在用户遇到问题时能够快速、准确地进行远程诊断，我们规划了客户端日志上报功能。
 
@@ -669,16 +493,16 @@ storage_dir = "./backups"
     -   客户端将打包好的日志文件通过 `POST` 请求上传到服务端的一个专用接口（例如 `/api/v1/diagnostics/upload`）。
     -   服务端接收到文件后，根据 `CLIENT_ID` 进行归档存储，以待开发人员分析。
 
-## 11. 附录：行业实践与同类方案分析
+## 9. 附录：行业实践与同类方案分析
 
 本附录旨在将我们的设计方案置于更广阔的行业背景中进行审视，以验证其合理性与先进性。
 
-### 11.1. Tauri 桌面客户端升级方案对比
+### 9.1. Tauri 桌面客户端升级方案对比
 
 -   **行业标准**: Tauri 官方提供的 `updater` 插件是为 Tauri 应用实现自动更新的唯一官方推荐和行业标准方案。它通过中心化的更新清单 (JSON) 和数字签名机制，确保了更新流程的安全、可靠与平台无关性。
 -   **本方案对齐**: 我们的设计完全采纳了此方案，确保了在客户端自我更新这一环节上，我们遵循了最安全、最成熟的最佳实践。
 
-### 11.2. Docker 服务集中管理方案对比
+### 9.2. Docker 服务集中管理方案对比
 
 对于如何管理和升级部署在大量节点上的 Docker 服务，行业内主要存在以下三类方案：
 

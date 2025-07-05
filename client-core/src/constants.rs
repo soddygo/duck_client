@@ -224,7 +224,7 @@ pub mod docker {
 pub mod api {
 
     /// 默认API服务器地址
-    pub const DEFAULT_BASE_URL: &str = "http://192.168.1.14:3000";
+    pub const DEFAULT_BASE_URL: &str = "http://127.0.0.1:3000";
 
     /// API版本前缀
     pub const VERSION_PREFIX: &str = "/api/v1";
@@ -476,7 +476,7 @@ pub mod version {
         pub const CORE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
         /// Docker 服务版本（默认，手动维护）
-        pub const DEFAULT_DOCKER_SERVICE_VERSION: &str = "1.0.0";
+        pub const DEFAULT_DOCKER_SERVICE_VERSION: &str = "0.0.1";
 
         /// 最小支持的 Docker 版本
         pub const MIN_DOCKER_VERSION: &str = "20.10.0";

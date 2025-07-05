@@ -1,10 +1,33 @@
 use crate::app::CliApp;
+use crate::cli::AutoBackupCommand;
 use crate::commands::{backup, docker_service};
 use crate::docker_utils;
 use client_core::constants::{cron, timeout};
 use client_core::error::Result;
 
 use tracing::{debug, error, info, instrument, warn};
+
+/// 运行自动备份相关命令的统一入口
+pub async fn handle_auto_backup_command(app: &mut CliApp, cmd: AutoBackupCommand) -> Result<()> {
+    match cmd {
+        AutoBackupCommand::Run => {
+            info!("🔄 开始自动备份流程...");
+            run_auto_backup(app).await
+        }
+        AutoBackupCommand::Cron { expression } => {
+            info!("配置自动备份 cron 表达式");
+            configure_cron(app, expression).await
+        }
+        AutoBackupCommand::Enabled { enabled } => {
+            info!("设置自动备份启用状态");
+            set_enabled(app, enabled).await
+        }
+        AutoBackupCommand::Status => {
+            info!("显示自动备份状态");
+            show_status(app).await
+        }
+    }
+}
 
 /// 执行自动备份流程：停止服务 -> 备份 -> 重启服务
 #[instrument(skip(app))]
@@ -53,7 +76,7 @@ pub async fn run_auto_backup(app: &mut CliApp) -> Result<()> {
 
     // 记录备份执行时间和结果
     {
-        let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+        let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
         if let Err(e) = config_manager
             .update_last_backup_time(backup_start_time, backup_success)
             .await
@@ -114,7 +137,7 @@ pub async fn run_auto_backup(app: &mut CliApp) -> Result<()> {
 /// 配置自动备份的cron表达式
 #[instrument(skip(app))]
 pub async fn configure_cron(app: &mut CliApp, expression: Option<String>) -> Result<()> {
-    let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+    let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
 
     match expression {
         Some(expr) => {
@@ -141,9 +164,9 @@ pub async fn configure_cron(app: &mut CliApp, expression: Option<String>) -> Res
             info!(
                 cron_expression = %config.cron_expression,
                 enabled = config.enabled,
-                last_backup_at = ?config.last_backup_at,
-                consecutive_failures = config.consecutive_failures,
-                max_failures = config.max_failures,
+                last_backup_time = ?config.last_backup_time,
+                retention_days = config.backup_retention_days,
+                backup_dir = %config.backup_directory,
                 "当前自动备份配置"
             );
         }
@@ -155,7 +178,7 @@ pub async fn configure_cron(app: &mut CliApp, expression: Option<String>) -> Res
 /// 设置自动备份启用状态
 #[instrument(skip(app))]
 pub async fn set_enabled(app: &mut CliApp, enabled: Option<bool>) -> Result<()> {
-    let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+    let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
 
     match enabled {
         Some(enable) => {
@@ -189,7 +212,7 @@ pub async fn set_enabled(app: &mut CliApp, enabled: Option<bool>) -> Result<()> 
 #[instrument(skip(app))]
 pub async fn show_status(app: &mut CliApp) -> Result<()> {
     debug!("显示自动备份状态信息");
-    let config_manager = client_core::config_manager::ConfigManager::new(&app.database);
+    let config_manager = client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
 
     info!(
         "自动备份状态: 功能已实现, 定时任务需要手动配置系统cron, 流程为停止服务->备份数据->重启服务"
@@ -200,9 +223,9 @@ pub async fn show_status(app: &mut CliApp) -> Result<()> {
     info!(
         enabled = config.enabled,
         cron_expression = %config.cron_expression,
-        last_backup_at = ?config.last_backup_at,
-        consecutive_failures = config.consecutive_failures,
-        max_failures = config.max_failures,
+        last_backup_time = ?config.last_backup_time,
+        retention_days = config.backup_retention_days,
+        backup_dir = %config.backup_directory,
         "自动备份配置信息"
     );
 

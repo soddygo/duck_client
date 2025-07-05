@@ -102,6 +102,21 @@ pub enum DockerServiceCommand {
     ListImages,
 }
 
+/// 缓存管理相关命令
+#[derive(Subcommand, Debug)]
+pub enum CacheCommand {
+    /// 清理所有缓存文件
+    Clear,
+    /// 显示缓存使用情况
+    Status,
+    /// 清理下载缓存（保留最新版本）
+    CleanDownloads {
+        /// 保留的版本数量
+        #[arg(long, default_value = "3", help = "保留的版本数量")]
+        keep: u32,
+    },
+}
+
 /// Duck Client CLI - Docker 服务管理和升级工具
 #[derive(Parser)]
 #[command(name = "duck-cli")]
@@ -145,6 +160,9 @@ pub enum Commands {
         /// 强制重新下载（用于文件损坏时）
         #[arg(long)]
         force: bool,
+        /// 只检查是否有可用的升级版本，不执行下载
+        #[arg(long)]
+        check: bool,
     },
     /// 手动创建备份
     Backup,
@@ -176,4 +194,8 @@ pub enum Commands {
     /// 自动升级部署
     #[command(subcommand)]
     AutoUpgradeDeploy(AutoUpgradeDeployCommand),
+
+    /// 缓存管理
+    #[command(subcommand)]
+    Cache(CacheCommand),
 }

@@ -3,6 +3,57 @@ use std::io::{Read, Write};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, warn};
 
+/// 判断是否应该跳过某个文件（智能过滤）
+/// 
+/// 跳过的文件类型：
+/// - macOS 系统文件：__MACOSX, .DS_Store, ._*
+/// - 版本控制文件：.git/, .gitignore, .gitattributes
+/// - 临时文件：.tmp, .temp, .bak
+/// - IDE 文件：.vscode/, .idea/
+/// 
+/// 保留的重要配置文件：
+/// - Docker 配置：.env, .env.*, .dockerignore
+/// - 其他配置：.editorconfig, .prettier*, .eslint*
+fn should_skip_file(file_name: &str) -> bool {
+    // 跳过 macOS 系统文件和临时文件
+    if file_name.starts_with("__MACOSX") 
+        || file_name.ends_with(".DS_Store")
+        || file_name.starts_with("._")
+        || file_name.ends_with(".tmp")
+        || file_name.ends_with(".temp")
+        || file_name.ends_with(".bak") {
+        return true;
+    }
+
+    // 跳过版本控制相关文件
+    if file_name.starts_with(".git/") 
+        || file_name == ".gitignore"
+        || file_name == ".gitattributes"
+        || file_name == ".gitmodules" {
+        return true;
+    }
+
+    // 跳过 IDE 和编辑器配置目录
+    if file_name.starts_with(".vscode/")
+        || file_name.starts_with(".idea/")
+        || file_name.starts_with(".vs/") {
+        return true;
+    }
+
+    // 保留重要的配置文件（即使以.开头）
+    if file_name == ".env"
+        || file_name.starts_with(".env.")
+        || file_name == ".dockerignore"
+        || file_name == ".editorconfig"
+        || file_name.starts_with(".prettier")
+        || file_name.starts_with(".eslint") {
+        return false;
+    }
+
+    // 其他以.开头的文件，谨慎起见也保留（除非明确知道要跳过）
+    false
+}
+
 /// # Duck CLI 日志系统使用说明
 ///
 /// 本项目遵循 Rust CLI 应用的日志最佳实践：
@@ -20,6 +71,7 @@ use tracing::{debug, error, info, warn};
 /// ### 环境变量
 /// - `RUST_LOG`：标准的 Rust 日志级别控制（如 `debug`, `info`, `warn`, `error`）
 /// - `DUCK_LOG_FILE`：日志文件路径，设置后日志输出到文件而非终端
+/// - `DUCK_GUI_MODE`：GUI模式标识，设置后禁用大部分tracing日志输出，避免与程序输出重复
 ///
 /// ## 使用示例
 ///
@@ -32,6 +84,9 @@ use tracing::{debug, error, info, warn};
 ///
 /// # 日志输出到文件
 /// DUCK_LOG_FILE=duck.log duck-cli auto-backup status
+///
+/// # GUI模式（自动设置，避免日志重复）
+/// DUCK_GUI_MODE=1 duck-cli auto-backup status
 ///
 /// # 使用 RUST_LOG 控制特定模块的日志级别
 /// RUST_LOG=duck_cli::commands::auto_backup=debug duck-cli auto-backup status
@@ -98,11 +153,16 @@ pub fn copy_with_progress<R: Read, W: Write>(
 /// 解压Docker服务包
 #[allow(dead_code)]
 pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
-    info!("   🔍 正在分析ZIP文件...");
+    use std::time::Instant;
+    let extract_start = Instant::now();
+    
+    info!("🔍 正在分析ZIP文件: {}", zip_path.display());
 
     // 打开ZIP文件
     let file = std::fs::File::open(zip_path)?;
     let mut archive = zip::ZipArchive::new(file)?;
+
+    info!("✅ ZIP文件打开成功，开始分析内部结构...");
 
     // 分析ZIP内部结构，检查是否有顶层docker目录
     let mut has_docker_root = false;
@@ -119,203 +179,126 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
 
         // 检查是否有docker-compose.yml，确定根目录结构
         if file_name.ends_with(client_core::constants::docker::COMPOSE_FILE_NAME) {
-            if let Some(pos) = file_name.rfind(client_core::constants::docker::COMPOSE_FILE_NAME) {
-                let prefix = &file_name[..pos];
-                if prefix.is_empty() {
-                    // docker-compose.yml在根目录
-                    has_docker_root = false;
-                } else if prefix == "docker/" {
-                    // docker-compose.yml在docker/目录下
+            info!("🎯 发现 docker-compose.yml: {}", file_name);
+            
+            // 检查文件路径，确定解压策略
+            if let Some(parent_dir) = std::path::Path::new(file_name).parent() {
+                if parent_dir != std::path::Path::new("") {
                     has_docker_root = true;
-                    docker_root_prefix = "docker/".to_string();
-                } else {
-                    // 其他目录结构
-                    docker_root_prefix = prefix.to_string();
-                    has_docker_root = true;
+                    docker_root_prefix = parent_dir.to_string_lossy().to_string();
+                    info!("📁 检测到顶层目录: {}", docker_root_prefix);
+                    break;
                 }
-                break;
             }
         }
     }
 
-    info!(
-        "   📋 ZIP结构分析: {}",
-        if has_docker_root {
-            format!("包含根目录 '{}'", docker_root_prefix.trim_end_matches('/'))
-        } else {
-            "文件直接在根目录".to_string()
-        }
-    );
-
-    // 重新打开文件进行统计
-    let file = std::fs::File::open(zip_path)?;
-    let mut archive = zip::ZipArchive::new(file)?;
-
-    // 首先统计需要解压的文件数量（跳过隐藏文件和目录）
+    // 首先统计需要解压的文件数量（使用智能过滤跳过系统文件，保留重要配置文件）
     let mut total_files = 0;
     let mut total_size = 0u64;
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;
-        if !file.name().starts_with('.') && !file.name().starts_with("__MACOSX") && !file.is_dir() {
+        if !should_skip_file(file.name()) && !file.is_dir() {
             total_files += 1;
             total_size += file.size();
         }
     }
 
-    info!(
-        "   📊 总计需要解压: {} 个文件 (总大小: {:.1} GB)",
-        total_files,
-        total_size as f64 / 1024.0 / 1024.0 / 1024.0
-    );
+    info!("📊 解压统计分析:");
+    info!("   📁 总文件数: {}", total_files);
+    info!("   📏 总数据量: {:.1} MB", total_size as f64 / 1024.0 / 1024.0);
+    info!("   🗂️  解压策略: {}", if has_docker_root { 
+        format!("移除顶层目录 '{}'", docker_root_prefix) 
+    } else { 
+        "直接解压到docker目录".to_string() 
+    });
 
-    // 确定解压目标目录
-    let extract_dir = if has_docker_root {
-        // 如果ZIP内部有docker目录，直接解压到当前目录，让内部的docker目录成为我们的docker目录
-        std::path::Path::new(".")
-    } else {
-        // 如果ZIP内部没有docker目录，解压到docker目录
-        std::fs::create_dir_all("docker")?;
-        std::path::Path::new("docker")
-    };
-
-    info!("   📁 解压目标: {}", extract_dir.display());
-
-    // 重新打开ZIP文件进行解压
+    let output_dir = std::path::Path::new("docker");
+    
+    // 重新打开archive进行解压（避免借用冲突）
     let file = std::fs::File::open(zip_path)?;
     let mut archive = zip::ZipArchive::new(file)?;
 
     let mut extracted_files = 0;
     let mut extracted_size = 0u64;
-    let mut last_percent = 0;
+    let mut last_progress_report = 0; // 最后一次进度报告
 
-    info!("   📤 开始解压文件...");
-
-    // 解压所有文件
+    info!("🚀 开始解压文件...");
+    
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
-        let file_name = file.name();
+        
+        // 先获取必要的文件信息
+        let file_name = file.name().to_string();
+        let file_size = file.size();
+        let file_is_dir = file.is_dir();
 
-        // 跳过隐藏文件和系统文件
-        if file_name.starts_with('.') || file_name.starts_with("__MACOSX") {
+        // 使用智能过滤跳过系统文件，保留重要配置文件如 .env
+        if should_skip_file(&file_name) {
             continue;
         }
 
-        // 构建输出路径
-        let outpath = if has_docker_root {
-            // 如果ZIP内部有docker目录，直接解压到当前目录，保持内部的docker目录结构
-            std::path::PathBuf::from(file_name)
+        // 处理文件路径（移除顶层docker目录前缀）
+        let target_path = if has_docker_root && file_name.starts_with(&docker_root_prefix) {
+            // 移除顶层目录前缀
+            let relative_path = file_name.strip_prefix(&format!("{}/", docker_root_prefix))
+                .unwrap_or(&file_name);
+            output_dir.join(relative_path)
         } else {
-            // 如果ZIP内部没有docker目录，解压到docker目录下
-            std::path::Path::new("docker").join(file_name)
+            output_dir.join(&file_name)
         };
 
-        if file.is_dir() {
-            std::fs::create_dir_all(&outpath)?;
+        if file_is_dir {
+            // 创建目录
+            debug!("📁 创建目录: {}", target_path.display());
+            std::fs::create_dir_all(&target_path)?;
         } else {
-            if let Some(parent) = outpath.parent() {
+            // 确保父目录存在
+            if let Some(parent) = target_path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
 
-            // 显示当前正在解压的文件（如果文件很大的话）
-            let file_size = file.size();
-            if file_size > 100 * 1024 * 1024 {
-                // 大于100MB的文件
-                info!(
-                    "   📄 正在解压大文件: {} ({:.1} MB)",
-                    file.name(),
+            // 解压文件
+            if file_size > 50 * 1024 * 1024 { // 大于50MB的文件显示详细信息
+                info!("📦 正在解压大文件: {} ({:.1} MB)", 
+                    target_path.file_name().unwrap_or_default().to_string_lossy(),
                     file_size as f64 / 1024.0 / 1024.0
                 );
             }
 
-            // 诊断和处理路径冲突
-            if outpath.exists() && outpath.is_dir() {
-                error!("🔍 发现路径冲突诊断信息:");
-                error!("   ZIP条目: {} (文件)", file.name());
-                error!("   本地路径: {} (目录)", outpath.display());
-
-                // 显示目录内容
-                match std::fs::read_dir(&outpath) {
-                    Ok(entries) => {
-                        let items: Vec<_> = entries.collect();
-                        if items.is_empty() {
-                            warn!("   目录为空，可能是之前解压失败留下的");
-                            warn!("   正在删除空目录...");
-                            std::fs::remove_dir(&outpath)?;
-                        } else {
-                            error!("   目录内容 ({} 项):", items.len());
-                            for (i, entry) in items.iter().enumerate() {
-                                if i < 5 {
-                                    // 只显示前5项
-                                    if let Ok(entry) = entry {
-                                        let path = entry.path();
-                                        let file_type =
-                                            if path.is_dir() { "目录" } else { "文件" };
-                                        error!(
-                                            "     - {} ({})",
-                                            path.file_name().unwrap_or_default().to_string_lossy(),
-                                            file_type
-                                        );
-                                    }
-                                }
-                            }
-                            if items.len() > 5 {
-                                error!("     ... 还有 {} 项", items.len() - 5);
-                            }
-
-                            return Err(client_core::DuckError::custom(format!(
-                                "路径冲突：ZIP中的文件 '{}' 与现有目录 '{}' 冲突。\n建议：删除现有目录或检查ZIP文件结构",
-                                file.name(),
-                                outpath.display()
-                            )));
-                        }
-                    }
-                    Err(e) => {
-                        error!("   无法读取目录内容: {}", e);
-                        return Err(client_core::DuckError::custom(format!(
-                            "无法处理路径冲突: {e}"
-                        )));
-                    }
-                }
-            }
-
-            let mut outfile = std::fs::File::create(&outpath)?;
-
-            // 使用带进度显示的复制函数
-            if file_size > 100 * 1024 * 1024 {
-                let file_name = file.name().to_string(); // 先获取文件名
-                copy_with_progress(&mut file, &mut outfile, file_size, &file_name)?;
-            } else {
-                std::io::copy(&mut file, &mut outfile)?;
-            }
+            let mut outfile = std::fs::File::create(&target_path)?;
+            std::io::copy(&mut file, &mut outfile)?;
 
             extracted_files += 1;
             extracted_size += file_size;
 
-            // 计算并显示进度（每5%显示一次，或者每50个文件显示一次）
-            if total_files > 0 {
-                let percent = (extracted_files * 100) / total_files;
-                if percent != last_percent && (percent % 5 == 0 || extracted_files % 50 == 0) {
-                    let size_percent = if total_size > 0 {
-                        (extracted_size * 100) / total_size
-                    } else {
-                        0
-                    };
-                    info!(
-                        "   📤 解压进度: {}% ({}/{} 文件, {:.1}% 大小)",
-                        percent, extracted_files, total_files, size_percent
-                    );
-                    last_percent = percent;
-                }
+            // 每解压25%的文件或每1000个文件报告一次进度
+            let progress_percentage = (extracted_files * 100) / total_files;
+            if progress_percentage >= last_progress_report + 25 || extracted_files % 1000 == 0 {
+                last_progress_report = progress_percentage;
+                let extracted_mb = extracted_size as f64 / 1024.0 / 1024.0;
+                let total_mb = total_size as f64 / 1024.0 / 1024.0;
+                let speed_mbps = extracted_mb / extract_start.elapsed().as_secs_f64();
+                
+                info!("📈 解压进度: {}% ({}/{} 文件, {:.1}/{:.1} MB, {:.1} MB/s)", 
+                    progress_percentage, extracted_files, total_files, 
+                    extracted_mb, total_mb, speed_mbps);
             }
         }
     }
 
-    info!(
-        "   📤 解压完成: 100% ({}/{} 文件, {:.1} GB)",
-        extracted_files,
-        total_files,
-        extracted_size as f64 / 1024.0 / 1024.0 / 1024.0
-    );
+    let total_elapsed = extract_start.elapsed();
+    let extracted_size_mb = extracted_size as f64 / 1024.0 / 1024.0;
+    
+    info!("🎉 解压完成！");
+    info!("📊 解压统计:");
+    info!("   ✅ 成功解压文件: {} 个", extracted_files);
+    info!("   📏 解压数据大小: {:.1} MB", extracted_size_mb);
+    info!("   ⏱️  总耗时: {:?}", total_elapsed);
+    info!("   🚀 平均速度: {:.1} MB/s", extracted_size_mb / total_elapsed.as_secs_f64());
+    
+    info!("解压统计: {} 文件, {:.1}MB, 耗时 {:?}", 
+        extracted_files, extracted_size_mb, total_elapsed);
 
     Ok(())
 }
@@ -331,6 +314,26 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
 pub fn setup_logging(verbose: bool) {
     #[allow(unused_imports)]
     use tracing_subscriber::{EnvFilter, fmt, util::SubscriberInitExt};
+
+    // 检查是否为GUI模式 - 如果是，则大幅简化日志输出
+    if std::env::var("DUCK_GUI_MODE").is_ok() {
+        // GUI模式：大幅减少tracing日志输出，避免与程序输出重复
+        // 只保留WARN和ERROR级别的日志，过滤掉大部分INFO级别
+        let env_filter = EnvFilter::new("warn")
+            .add_directive("duck_cli=error".parse().unwrap())
+            .add_directive("client_core=error".parse().unwrap());
+        
+        // 输出到stderr，使用最简格式
+        fmt()
+            .with_env_filter(env_filter)
+            .with_target(false)
+            .with_thread_names(false)
+            .with_line_number(false)
+            .without_time()
+            .compact()
+            .init();
+        return;
+    }
 
     // 根据verbose参数和环境变量确定日志级别
     let default_level = if verbose { "debug" } else { "info" };

@@ -63,6 +63,10 @@ pub enum DuckError {
 
     #[error("Docker服务错误: {0}")]
     DockerService(String),
+
+
+    #[error("Bad Request: {0}")]
+    BadRequest(String),
 }
 
 // 为DuckDB错误实现From trait
@@ -100,3 +104,4 @@ impl DuckError {
         Self::DockerService(msg.into())
     }
 }
+

@@ -1,7 +1,54 @@
 use crate::app::CliApp;
+use crate::cli::DockerServiceCommand;
 use crate::docker_service::{ContainerStatus, DockerService};
 use client_core::Result;
 use tracing::{error, info, warn};
+
+/// 运行 Docker 服务相关命令的统一入口
+pub async fn run_docker_service_command(app: &CliApp, cmd: DockerServiceCommand) -> Result<()> {
+    match cmd {
+        DockerServiceCommand::Start => {
+            info!("▶️  启动 Docker 服务...");
+            start_docker_services(app).await
+        }
+        DockerServiceCommand::Stop => {
+            info!("⏹️  停止 Docker 服务...");
+            stop_docker_services(app).await
+        }
+        DockerServiceCommand::Restart => {
+            info!("🔄 重启 Docker 服务...");
+            restart_docker_services(app).await
+        }
+        DockerServiceCommand::Status => {
+            info!("📊 检查 Docker 服务状态...");
+            check_docker_services_status(app).await
+        }
+        DockerServiceCommand::RestartContainer { container_name } => {
+            info!("🔄 重启容器: {}", container_name);
+            restart_container(app, &container_name).await
+        }
+        DockerServiceCommand::Extract { file, version } => {
+            info!("📦 解压 Docker 服务包...");
+            extract_docker_service(app, file, version).await
+        }
+        DockerServiceCommand::LoadImages => {
+            info!("📦 加载 Docker 镜像...");
+            load_docker_images(app).await
+        }
+        DockerServiceCommand::SetupTags => {
+            info!("🏷️  设置镜像标签...");
+            setup_image_tags(app).await
+        }
+        DockerServiceCommand::ArchInfo => {
+            info!("🏗️  系统架构信息:");
+            show_architecture_info(app).await
+        }
+        DockerServiceCommand::ListImages => {
+            info!("🔍 列出 Docker 镜像:");
+            list_docker_images_with_ducker(app).await
+        }
+    }
+}
 
 /// 部署 Docker 服务
 pub async fn deploy_docker_services(app: &CliApp, frontend_port: Option<u16>) -> Result<()> {

@@ -7,8 +7,11 @@ pub mod config_manager;
 pub mod constants;
 pub mod container;
 pub mod database;
+pub mod database_manager;
 pub mod db;
 pub mod error;
 pub mod upgrade;
+pub mod sql_diff;
 
 pub use error::*;
+pub use database_manager::DatabaseManager;

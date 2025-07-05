@@ -137,14 +137,6 @@ pub struct PackageInfo {
     pub hash: String,
     pub signature: String,
     pub size: u64,
-    /// 下载方式标识: "direct" 表示直接使用URL下载，"api" 表示使用API接口下载
-    #[serde(default = "default_download_method")]
-    pub download_method: String,
-}
-
-/// 默认下载方式
-fn default_download_method() -> String {
-    "api".to_string()
 }
 
 /// 客户端更新清单响应
@@ -697,7 +689,30 @@ impl ApiClient {
         Ok(matches)
     }
 
-    /// 检查文件是否需要下载（基于哈希值比较）
+    /// 检查文件是否需要下载（简化版本）
+    pub async fn needs_file_download(&self, file_path: &Path, remote_hash: &str) -> Result<bool> {
+        // 计算当前文件哈希值并比较
+        match Self::calculate_file_hash(file_path).await {
+            Ok(actual_hash) => {
+                info!("🧮 计算出的文件哈希: {}", actual_hash);
+                if actual_hash.to_lowercase() == remote_hash.to_lowercase() {
+                    info!("✅ 文件哈希匹配，跳过下载");
+                    Ok(false)
+                } else {
+                    info!("🔄 文件哈希不匹配，需要下载新版本");
+                    info!("   本地哈希: {}", actual_hash);
+                    info!("   远程哈希: {}", remote_hash);
+                    Ok(true)
+                }
+            }
+            Err(e) => {
+                warn!("💥 计算文件哈希失败: {}，需要重新下载", e);
+                Ok(true)
+            }
+        }
+    }
+
+    /// 检查文件是否需要下载（完整版本，包含哈希文件缓存）
     pub async fn should_download_file(&self, file_path: &Path, remote_hash: &str) -> Result<bool> {
         info!("🔍 开始智能下载决策检查...");
         info!("   目标文件: {}", file_path.display());
@@ -831,8 +846,13 @@ impl ApiClient {
         info!("📋 服务清单信息:");
         info!("   版本: {}", manifest.version);
         info!("   发布日期: {}", manifest.release_date);
-        info!("   包大小: {} bytes", manifest.packages.full.size);
+        info!("   包URL: {}", manifest.packages.full.url);
         info!("   包哈希: {}", manifest.packages.full.hash);
+        if manifest.packages.full.size > 0 {
+            info!("   包大小: {} bytes ({:.2} MB)", manifest.packages.full.size, manifest.packages.full.size as f64 / 1024.0 / 1024.0);
+        } else {
+            info!("   包大小: 未提供 (外链文件)");
+        }
 
         // 2. 检查版本参数
         if let Some(target_version) = version {
@@ -844,79 +864,83 @@ impl ApiClient {
             }
         }
 
-        // 3. 简化下载决策：检查文件是否已存在且大小匹配
-        if download_path.exists() {
-            if let Ok(metadata) = tokio::fs::metadata(download_path).await {
-                if metadata.len() == manifest.packages.full.size {
-                    info!("⏭️ 文件已存在且大小匹配，跳过下载");
-                    // 如果有进度回调，发送完成状态
-                    if let Some(callback) = progress_callback {
-                        let progress = DownloadProgress {
-                            task_id: "skip".to_string(),
-                            file_name: download_path.file_name()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string(),
-                            downloaded_bytes: manifest.packages.full.size,
-                            total_bytes: manifest.packages.full.size,
-                            download_speed: 0.0,
-                            eta_seconds: 0,
-                            percentage: 100.0,
-                            status: DownloadStatus::Completed,
-                        };
-                        callback(progress);
+        // 3. 检查是否为外链文件（hash为"external"）
+        let is_external_file = manifest.packages.full.hash.to_lowercase() == "external";
+        
+        if is_external_file {
+            info!("📦 检测到外链文件，跳过本地文件验证");
+            // 外链文件始终需要下载，不进行本地文件检查
+        } else {
+            // 内部文件，进行常规的文件大小和哈希验证
+            if download_path.exists() {
+                if let Ok(metadata) = std::fs::metadata(download_path) {
+                    let file_size = metadata.len();
+                    if manifest.packages.full.size > 0 && file_size == manifest.packages.full.size {
+                        info!("📦 文件已存在且大小匹配，开始哈希验证...");
+                        
+                        // 进行哈希验证
+                        let needs_download = self.needs_file_download(download_path, &manifest.packages.full.hash).await?;
+                        
+                        if !needs_download {
+                            info!("✅ 文件已存在且验证通过，跳过下载");
+                            return Ok(());
+                        }
+                    } else {
+                        info!("📦 文件已存在但大小不匹配: {} != {}, 需要重新下载", file_size, manifest.packages.full.size);
                     }
-                    return Ok(());
-                } else {
-                    info!("📂 文件存在但大小不匹配，需要重新下载");
-                    info!("   当前大小: {} bytes", metadata.len());
-                    info!("   预期大小: {} bytes", manifest.packages.full.size);
                 }
             }
-        } else {
-            info!("📂 文件不存在，需要下载");
         }
 
         // 4. 确保下载目录存在
-        if let Some(parent) = download_path.parent() {
-            if !parent.exists() {
-                tokio::fs::create_dir_all(parent)
-                    .await
-                    .map_err(|e| DuckError::Custom(format!("创建下载目录失败: {e}")))?;
-                info!("📁 创建下载目录: {}", parent.display());
-            }
+        if let Some(parent_dir) = download_path.parent() {
+            std::fs::create_dir_all(parent_dir)?;
         }
 
-        // 5. 根据下载方式构建下载URL
-        let download_url = match manifest.packages.full.download_method.as_str() {
-            "direct" => {
-                // 直接使用服务器返回的URL（OSS等外部存储）
-                info!("📥 使用直接下载方式 (外部存储)");
-                manifest.packages.full.url.clone()
-            }
-            "api" | _ => {
-                // 使用API接口下载（默认方式）
-                info!("📥 使用API接口下载方式");
-                let mut url = self
-                    .config
-                    .get_endpoint_url(&self.config.endpoints.docker_download_full);
-
+        // 5. 根据hash字段智能判断下载方式
+        let (download_url, use_auth) = if is_external_file {
+            // 外链文件，直接使用URL下载
+            info!("📥 使用直接下载方式 (外链文件: hash=external)");
+            (manifest.packages.full.url.clone(), false)
+        } else if manifest.packages.full.url.starts_with("http://") || manifest.packages.full.url.starts_with("https://") {
+            // 完整URL，检查是否是本地服务器
+            if manifest.packages.full.url.starts_with(&self.config.base_url) {
+                // 是本地服务器的URL，使用API模式
+                info!("📥 使用API接口下载方式 (本地服务器URL)");
+                let mut url = manifest.packages.full.url.clone();
                 if let Some(v) = version {
                     url = format!("{url}?version={v}");
                 }
-                url
+                (url, true)
+            } else {
+                // 外部URL，使用直接下载
+                info!("📥 使用直接下载方式 (外部URL)");
+                (manifest.packages.full.url.clone(), false)
             }
+        } else {
+            // 相对路径，使用API接口下载
+            info!("📥 使用API接口下载方式 (相对路径)");
+            let mut url = self
+                .config
+                .get_endpoint_url(&self.config.endpoints.docker_download_full);
+
+            if let Some(v) = version {
+                url = format!("{url}?version={v}");
+            }
+            (url, true)
         };
 
         info!("📥 开始下载服务更新包...");
-        info!("   下载方式: {}", manifest.packages.full.download_method);
+        info!("   下载方式: {}", if use_auth { "API接口" } else { "直接下载" });
         info!("   源地址: {}", download_url);
         info!("   目标路径: {}", download_path.display());
-        info!("   预期文件大小: {} bytes", manifest.packages.full.size);
+        if manifest.packages.full.size > 0 {
+            info!("   预期文件大小: {} bytes", manifest.packages.full.size);
+        } else {
+            info!("   预期文件大小: 未知 (外链文件)");
+        }
 
-        // 6. 执行下载 - 根据下载方式使用正确的认证设置
-        let use_auth = manifest.packages.full.download_method != "direct";
-        
+        // 6. 执行下载
         if let Some(callback) = progress_callback {
             // 使用带进度回调的下载
             info!("🚀 开始带进度的下载...");
@@ -925,6 +949,13 @@ impl ApiClient {
             // 使用普通下载方法
             info!("🚀 开始普通下载...");
             self.download_service_update_from_url_with_auth(&download_url, download_path, use_auth).await?;
+        }
+
+        // 7. 下载完成后，对于外链文件跳过哈希验证
+        if is_external_file {
+            info!("📦 外链文件下载完成，跳过哈希验证");
+        } else {
+            info!("📦 内部文件下载完成，可以进行哈希验证");
         }
 
         info!("🎉 服务更新包下载完成!");

@@ -388,8 +388,10 @@ impl UpgradeManager {
             UpgradeStep::DownloadingUpdate,
             "正在下载更新",
         );
+        
+        // 使用优化的下载方法，支持外链和智能判断
         self.api_client
-            .download_service_update(download_path)
+            .download_service_update_optimized(download_path, None)
             .await?;
 
         self.send_progress(

@@ -86,8 +86,8 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool, check: bool)
                 info!("   目标版本: {}", target_version);
                 info!("   下载类型: {} (全量)", download_type);
 
-                // 强制模式使用传统下载方法，跳过优化检查
-                let download_result = app.api_client.download_service_update(&download_path).await;
+                // 强制模式使用优化下载方法，同样支持外链和智能判断
+                let download_result = app.api_client.download_service_update_optimized(&download_path, Some(target_version)).await;
 
                 match download_result {
                     Ok(_) => {

@@ -64,7 +64,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
+use futures::stream::StreamExt;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, warn};
@@ -868,148 +868,326 @@ impl ApiClient {
                 manifest.packages.full.size as f64 / 1024.0 / 1024.0
             );
         } else {
-            info!("   包大小: 未提供 (外链文件)");
+            info!("   包大小: 未知 (外链文件)");
         }
 
         // 2. 检查版本参数
         if let Some(target_version) = version {
             if target_version != manifest.version {
                 warn!(
-                    "⚠️ 请求版本 {} 与服务器最新版本 {} 不匹配",
+                    "⚠️  请求版本 {} 与服务器版本 {} 不匹配",
                     target_version, manifest.version
                 );
-                info!("   将下载服务器最新版本: {}", manifest.version);
-            } else {
-                info!("✅ 请求版本与服务器版本一致: {}", target_version);
+                info!("   将下载服务器版本: {}", manifest.version);
             }
         }
 
-        // 3. 检查是否为外链文件（hash为"external"）
+        // 3. 获取哈希文件路径
+        let hash_file_path = download_path.with_extension("zip.hash");
+        
+        // 4. 智能下载决策
         let is_external_file = manifest.packages.full.hash.to_lowercase() == "external";
-
+        
         info!("🔍 下载方式判断:");
         info!("   原始URL: {}", manifest.packages.full.url);
         info!("   Hash值: {}", manifest.packages.full.hash);
         info!("   是否外链: {}", is_external_file);
         info!("   配置的base_url: {}", self.config.base_url);
 
-        if is_external_file {
-            info!("📦 检测到外链文件，跳过本地文件验证");
-            // 外链文件始终需要下载，不进行本地文件检查
-        } else {
-            // 内部文件，进行常规的文件大小和哈希验证
-            if download_path.exists() {
-                if let Ok(metadata) = std::fs::metadata(download_path) {
-                    let file_size = metadata.len();
-                    if manifest.packages.full.size > 0 && file_size == manifest.packages.full.size {
-                        info!("📦 文件已存在且大小匹配，开始哈希验证...");
-
-                        // 进行哈希验证
-                        let needs_download = self
-                            .needs_file_download(download_path, &manifest.packages.full.hash)
-                            .await?;
-
-                        if !needs_download {
-                            info!("✅ 文件已存在且验证通过，跳过下载");
-                            return Ok(());
-                        }
-                    } else {
-                        info!(
-                            "📦 文件已存在但大小不匹配: {} != {}, 需要重新下载",
-                            file_size, manifest.packages.full.size
-                        );
-                    }
-                }
-            }
-        }
-
-        // 4. 确保下载目录存在
-        if let Some(parent_dir) = download_path.parent() {
-            std::fs::create_dir_all(parent_dir)?;
-        }
-
-        // 5. 根据hash字段智能判断下载方式
         let (download_url, use_auth) = if is_external_file {
-            // 外链文件，直接使用URL下载
+            // 外链文件，直接下载，无需认证
             info!("📥 使用直接下载方式 (外链文件: hash=external)");
             (manifest.packages.full.url.clone(), false)
-        } else if manifest.packages.full.url.starts_with("http://")
-            || manifest.packages.full.url.starts_with("https://")
-        {
-            // 完整URL，检查是否是本地服务器
-            if manifest
-                .packages
-                .full
-                .url
-                .starts_with(&self.config.base_url)
-            {
-                // 是本地服务器的URL，使用API模式
-                info!("📥 使用API接口下载方式 (本地服务器URL)");
-                let mut url = manifest.packages.full.url.clone();
-                if let Some(v) = version {
-                    url = format!("{url}?version={v}");
-                    info!("   添加版本参数后的URL: {}", url);
-                }
-                (url, true)
+        } else if manifest.packages.full.url.starts_with("http://") || manifest.packages.full.url.starts_with("https://") {
+            // 检查是否是本地服务器的URL
+            if manifest.packages.full.url.contains(&self.config.base_url) {
+                // 本地API，使用认证
+                info!("📥 使用认证下载方式 (本地API)");
+                (manifest.packages.full.url.clone(), true)
             } else {
-                // 外部URL，使用直接下载
-                info!("📥 使用直接下载方式 (外部URL)");
+                // 外部链接，直接下载
+                info!("📥 使用直接下载方式 (外部链接)");
                 (manifest.packages.full.url.clone(), false)
             }
         } else {
-            // 相对路径，使用API接口下载
-            info!("📥 使用API接口下载方式 (相对路径)");
-            let mut url = self
-                .config
-                .get_endpoint_url(&self.config.endpoints.docker_download_full);
-
-            info!("   构建的API接口URL: {}", url);
-            if let Some(v) = version {
-                url = format!("{url}?version={v}");
-                info!("   添加版本参数后的URL: {}", url);
-            }
-            (url, true)
+            // 相对路径，构建完整URL
+            info!("📥 使用认证下载方式 (相对路径)");
+            let full_url = format!("{}{}", self.config.base_url, manifest.packages.full.url);
+            (full_url, true)
         };
 
-        info!("📥 开始下载服务更新包...");
-        info!(
-            "   下载方式: {}",
-            if use_auth {
-                "API接口"
+        // 5. 检查文件是否已存在且完整
+        let should_download = if download_path.exists() {
+            info!("📁 发现已存在的文件: {}", download_path.display());
+            
+            // 检查哈希文件是否存在
+            if hash_file_path.exists() {
+                info!("📋 发现哈希文件: {}", hash_file_path.display());
+                
+                // 读取保存的哈希和版本信息
+                if let Ok(hash_content) = std::fs::read_to_string(&hash_file_path) {
+                    let lines: Vec<&str> = hash_content.trim().lines().collect();
+                    if lines.len() >= 3 {
+                        let saved_hash = lines[0];
+                        let saved_version = lines[1];
+                        let saved_timestamp = lines[2];
+                        
+                        info!("📊 哈希文件信息:");
+                        info!("   保存的哈希: {}", saved_hash);
+                        info!("   保存的版本: {}", saved_version);
+                        info!("   保存时间: {}", saved_timestamp);
+                        
+                        // 检查版本是否匹配
+                        if saved_version == manifest.version {
+                            info!("✅ 版本匹配: {}", manifest.version);
+                            
+                            // 对于外链文件，不进行本地哈希验证
+                            if is_external_file {
+                                info!("✅ 外链文件且版本匹配，跳过下载");
+                                info!("   文件路径: {}", download_path.display());
+                                return Ok(());
+                            } else {
+                                // 验证本地文件哈希
+                                info!("🧮 验证本地文件哈希...");
+                                if let Ok(actual_hash) = Self::calculate_file_hash(download_path).await {
+                                    if actual_hash.to_lowercase() == saved_hash.to_lowercase() {
+                                        info!("✅ 文件哈希验证通过，跳过下载");
+                                        info!("   本地哈希: {}", actual_hash);
+                                        info!("   服务器哈希: {}", saved_hash);
+                                        return Ok(());
+                                    } else {
+                                        warn!("⚠️  文件哈希不匹配，需要重新下载");
+                                        warn!("   本地哈希: {}", actual_hash);
+                                        warn!("   期望哈希: {}", saved_hash);
+                                        true
+                                    }
+                                } else {
+                                    warn!("⚠️  无法计算本地文件哈希，重新下载");
+                                    true
+                                }
+                            }
+                        } else {
+                            info!("🔄 版本不匹配，需要下载新版本");
+                            info!("   本地版本: {}", saved_version);
+                            info!("   服务器版本: {}", manifest.version);
+                            true
+                        }
+                    } else {
+                        warn!("⚠️  哈希文件格式无效，重新下载");
+                        true
+                    }
+                } else {
+                    warn!("⚠️  无法读取哈希文件，重新下载");
+                    true
+                }
             } else {
-                "直接下载"
+                info!("📋 未发现哈希文件，验证文件完整性...");
+                
+                // 对于外链文件，假设存在即有效
+                if is_external_file {
+                    warn!("⚠️  外链文件无哈希文件，建议重新下载以生成哈希记录");
+                    true
+                } else {
+                    // 尝试验证现有文件（如果服务器提供了哈希）
+                    if manifest.packages.full.hash != "external" && !manifest.packages.full.hash.is_empty() {
+                        info!("🧮 使用服务器哈希验证现有文件...");
+                        if let Ok(actual_hash) = Self::calculate_file_hash(download_path).await {
+                            if actual_hash.to_lowercase() == manifest.packages.full.hash.to_lowercase() {
+                                info!("✅ 现有文件哈希验证通过");
+                                // 生成哈希文件
+                                if let Err(e) = self.save_hash_file(&hash_file_path, &manifest.packages.full.hash, &manifest.version).await {
+                                    warn!("⚠️  保存哈希文件失败: {}", e);
+                                }
+                                return Ok(());
+                            } else {
+                                warn!("⚠️  现有文件哈希不匹配，重新下载");
+                                warn!("   本地哈希: {}", actual_hash);
+                                warn!("   服务器哈希: {}", manifest.packages.full.hash);
+                                true
+                            }
+                        } else {
+                            warn!("⚠️  无法计算现有文件哈希，重新下载");
+                            true
+                        }
+                    } else {
+                        warn!("⚠️  服务器未提供文件哈希，强制重新下载");
+                        true
+                    }
+                }
             }
-        );
+        } else {
+            info!("📁 文件不存在，需要下载");
+            true
+        };
+
+        if !should_download {
+            info!("⏭️  跳过下载，使用现有文件");
+            return Ok(());
+        }
+
+        // 6. 确保下载目录存在
+        if let Some(parent) = download_path.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                return Err(DuckError::custom(format!("创建下载目录失败: {}", e)));
+            }
+        }
+
+        info!("📥 开始下载服务更新包...");
+        info!("   下载方式: {}", if use_auth { "认证下载" } else { "直接下载" });
         info!("   最终下载URL: {}", download_url);
         info!("   目标路径: {}", download_path.display());
         info!("   使用认证: {}", use_auth);
         if manifest.packages.full.size > 0 {
-            info!("   预期文件大小: {} bytes", manifest.packages.full.size);
+            info!("   预期文件大小: {} bytes ({:.2} MB)", manifest.packages.full.size, manifest.packages.full.size as f64 / 1024.0 / 1024.0);
         } else {
             info!("   预期文件大小: 未知 (外链文件)");
         }
 
-        // 6. 执行下载
-        if let Some(callback) = progress_callback {
-            // 使用带进度回调的下载
-            info!("🚀 开始带进度的下载...");
-            self.download_with_progress_internal(&download_url, download_path, callback, use_auth)
-                .await?;
+        // 7. 执行下载
+        let response = if use_auth {
+            // 使用认证客户端
+            let auth_client = self.authenticated_client.as_ref().unwrap();
+            let request_builder = auth_client.get(&download_url)
+                .await
+                .map_err(|e| DuckError::custom(format!("创建认证请求失败: {}", e)))?;
+            request_builder.send()
+                .await
+                .map_err(|e| DuckError::custom(format!("发起下载请求失败: {}", e)))?
         } else {
-            // 使用普通下载方法
-            info!("🚀 开始普通下载...");
-            self.download_service_update_from_url_with_auth(&download_url, download_path, use_auth)
-                .await?;
+            // 使用普通客户端
+            self.client.get(&download_url)
+                .send()
+                .await
+                .map_err(|e| DuckError::custom(format!("发起下载请求失败: {}", e)))?
+        };
+
+        if !response.status().is_success() {
+            return Err(DuckError::custom(format!(
+                "下载失败: HTTP {}",
+                response.status()
+            )));
         }
 
-        // 7. 下载完成后，对于外链文件跳过哈希验证
-        if is_external_file {
-            info!("📦 外链文件下载完成，跳过哈希验证");
+        // 获取实际文件大小
+        let total_size = response.content_length().unwrap_or(0);
+        if total_size > 0 {
+            info!("📦 实际文件大小: {} bytes ({:.2} MB)", total_size, total_size as f64 / 1024.0 / 1024.0);
+        }
+
+        // 8. 下载并保存文件
+        let mut file = tokio::fs::File::create(download_path)
+            .await
+            .map_err(|e| DuckError::custom(format!("创建文件失败: {}", e)))?;
+
+        let mut downloaded = 0u64;
+        let mut stream = response.bytes_stream();
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| DuckError::custom(format!("下载数据失败: {}", e)))?;
+            
+            tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
+                .await
+                .map_err(|e| DuckError::custom(format!("写入文件失败: {}", e)))?;
+
+            downloaded += chunk.len() as u64;
+
+            // 调用进度回调
+            if let Some(ref callback) = progress_callback {
+                let progress = if total_size > 0 {
+                    downloaded as f64 / total_size as f64 * 100.0
+                } else {
+                    0.0
+                };
+
+                callback(DownloadProgress {
+                    task_id: "download_task".to_string(),
+                    file_name: download_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                    downloaded_bytes: downloaded,
+                    total_bytes: total_size,
+                    download_speed: 0.0,
+                    eta_seconds: 0,
+                    percentage: progress,
+                    status: DownloadStatus::Downloading,
+                });
+            }
+
+            // 显示进度日志（每10MB显示一次）
+            if downloaded % (10 * 1024 * 1024) == 0 || (total_size > 0 && downloaded >= total_size) {
+                if total_size > 0 {
+                    let percentage = (downloaded as f64 / total_size as f64 * 100.0) as u32;
+                    info!("📥 下载进度: {}% ({:.2}/{:.2} MB)", 
+                        percentage,
+                        downloaded as f64 / 1024.0 / 1024.0,
+                        total_size as f64 / 1024.0 / 1024.0
+                    );
+                } else {
+                    info!("📥 已下载: {:.2} MB", downloaded as f64 / 1024.0 / 1024.0);
+                }
+            }
+        }
+
+        // 确保文件已刷新到磁盘
+        file.flush().await
+            .map_err(|e| DuckError::custom(format!("刷新文件缓冲区失败: {}", e)))?;
+
+        drop(file);
+
+        info!("✅ 文件下载完成");
+        info!("   文件路径: {}", download_path.display());
+        info!("   下载大小: {} bytes ({:.2} MB)", downloaded, downloaded as f64 / 1024.0 / 1024.0);
+
+        // 9. 验证下载的文件（只对非外链文件进行哈希验证）
+        if !is_external_file && manifest.packages.full.hash != "external" && !manifest.packages.full.hash.is_empty() {
+            info!("🔍 验证下载文件的哈希值...");
+            let actual_hash = Self::calculate_file_hash(download_path).await
+                .map_err(|e| DuckError::custom(format!("计算文件哈希失败: {}", e)))?;
+
+            if actual_hash.to_lowercase() != manifest.packages.full.hash.to_lowercase() {
+                // 删除损坏的文件
+                let _ = std::fs::remove_file(download_path);
+                return Err(DuckError::custom(format!(
+                    "文件哈希验证失败\n预期: {}\n实际: {}",
+                    manifest.packages.full.hash, actual_hash
+                )));
+            }
+
+            info!("✅ 文件哈希验证通过: {}", actual_hash);
         } else {
-            info!("📦 内部文件下载完成，可以进行哈希验证");
+            info!("⏭️  外链文件跳过哈希验证");
+        }
+
+        // 10. 保存哈希文件
+        let hash_to_save = if is_external_file {
+            // 对于外链文件，计算本地哈希并保存
+            info!("🧮 计算外链文件的本地哈希...");
+            match Self::calculate_file_hash(download_path).await {
+                Ok(local_hash) => {
+                    info!("📋 外链文件本地哈希: {}", local_hash);
+                    local_hash
+                },
+                Err(e) => {
+                    warn!("⚠️  计算外链文件哈希失败: {}", e);
+                    "external".to_string()
+                }
+            }
+        } else {
+            manifest.packages.full.hash.clone()
+        };
+        
+        info!("💾 保存哈希文件...");
+        if let Err(e) = self.save_hash_file(&hash_file_path, &hash_to_save, &manifest.version).await {
+            warn!("⚠️  保存哈希文件失败: {}", e);
+            warn!("   文件已下载成功，但哈希记录保存失败");
+            warn!("   下次可能会重新下载该文件");
+        } else {
+            info!("✅ 哈希文件保存成功: {}", hash_file_path.display());
         }
 
         info!("🎉 服务更新包下载完成!");
+        info!("   文件位置: {}", download_path.display());
+        info!("   文件大小: {} bytes ({:.2} MB)", downloaded, downloaded as f64 / 1024.0 / 1024.0);
+        info!("   版本信息: {}", manifest.version);
+
         Ok(())
     }
 
@@ -1027,198 +1205,15 @@ impl ApiClient {
         .await
     }
 
-    /// 带进度回调的下载函数
-    pub async fn download_with_progress<F>(
-        &self,
-        url: &str,
-        target_path: &Path,
-        progress_callback: F,
-    ) -> Result<()>
-    where
-        F: Fn(DownloadProgress) + Send + Sync + 'static,
-    {
-        self.download_with_progress_internal(url, target_path, progress_callback, true)
+    /// 保存哈希文件
+    async fn save_hash_file(&self, hash_file_path: &Path, hash: &str, version: &str) -> Result<()> {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let content = format!("{}\n{}\n{}\n", hash, version, timestamp);
+        
+        tokio::fs::write(hash_file_path, content)
             .await
-    }
-
-    /// 带进度回调的下载函数（内部实现，支持是否使用认证）
-    async fn download_with_progress_internal<F>(
-        &self,
-        url: &str,
-        target_path: &Path,
-        progress_callback: F,
-        use_auth: bool,
-    ) -> Result<()>
-    where
-        F: Fn(DownloadProgress) + Send + Sync + 'static,
-    {
-        let callback = Arc::new(progress_callback);
-
-        // 解析文件名
-        let file_name = target_path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        let task_id = format!("download_{}", chrono::Utc::now().timestamp());
-
-        // 开始下载进度报告
-        let mut progress = DownloadProgress {
-            task_id: task_id.clone(),
-            file_name: file_name.clone(),
-            downloaded_bytes: 0,
-            total_bytes: 0,
-            download_speed: 0.0,
-            eta_seconds: 0,
-            percentage: 0.0,
-            status: DownloadStatus::Starting,
-        };
-
-        callback(progress.clone());
-
-        info!("🔍 开始下载: {}", url);
-
-        // 开始下载 - 根据是否需要认证决定使用哪种客户端
-        let mut response = if use_auth && self.authenticated_client.is_some() {
-            // 使用认证客户端（API下载）
-            let auth_client = self.authenticated_client.as_ref().unwrap();
-            match auth_client.get(url).await {
-                Ok(request_builder) => auth_client.send(request_builder, url).await?,
-                Err(e) => {
-                    warn!("使用AuthenticatedClient下载失败，回退到普通请求: {}", e);
-                    self.build_request(url)
-                        .send()
-                        .await
-                        .map_err(|e| DuckError::Api(format!("开始下载失败: {e}")))?
-                }
-            }
-        } else {
-            // 使用普通客户端（直接URL下载）
-            info!("使用普通HTTP客户端下载");
-            self.build_request(url)
-                .send()
-                .await
-                .map_err(|e| DuckError::Api(format!("开始下载失败: {e}")))?
-        };
-
-        // 检查GET请求状态
-        if !response.status().is_success() {
-            let status = response.status();
-            let error_text = response.text().await.unwrap_or_default();
-            return Err(DuckError::Api(format!(
-                "下载失败: HTTP {status} - {error_text}",
-            )));
-        }
-
-        info!("✅ 下载响应成功，开始接收数据...");
-
-        // 从响应中获取文件大小
-        let total_size = response.content_length().unwrap_or(0);
-        info!(
-            "📊 文件大小: {} bytes ({:.2} MB)",
-            total_size,
-            total_size as f64 / 1024.0 / 1024.0
-        );
-
-        progress.total_bytes = total_size;
-        progress.status = DownloadStatus::Downloading;
-        callback(progress.clone());
-
-        // 确保目标目录存在
-        if let Some(parent) = target_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| DuckError::Custom(format!("创建目录失败: {e}")))?;
-        }
-
-        let mut file = tokio::fs::File::create(target_path)
-            .await
-            .map_err(|e| DuckError::Custom(format!("创建文件失败: {e}")))?;
-        let mut downloaded = 0u64;
-        let start_time = std::time::Instant::now();
-        let mut last_update = start_time;
-
-        info!("💾 开始写入文件: {}", target_path.display());
-
-        // 流式下载
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|e| DuckError::Api(format!("下载数据失败: {e}")))?
-        {
-            file.write_all(&chunk)
-                .await
-                .map_err(|e| DuckError::Custom(format!("写入文件失败: {e}")))?;
-            downloaded += chunk.len() as u64;
-
-            let now = std::time::Instant::now();
-
-            // 每500ms更新一次进度
-            if now.duration_since(last_update).as_millis() > 500 {
-                let elapsed = now.duration_since(start_time).as_secs_f64();
-                let speed = if elapsed > 0.0 {
-                    downloaded as f64 / elapsed
-                } else {
-                    0.0
-                };
-                let eta = if speed > 0.0 {
-                    ((total_size - downloaded) as f64 / speed) as u64
-                } else {
-                    0
-                };
-
-                progress.downloaded_bytes = downloaded;
-                progress.download_speed = speed;
-                progress.eta_seconds = eta;
-                progress.percentage = if total_size > 0 {
-                    (downloaded as f64 / total_size as f64) * 100.0
-                } else {
-                    0.0
-                };
-
-                callback(progress.clone());
-                last_update = now;
-            }
-        }
-
-        // 确保文件被刷新到磁盘
-        file.flush()
-            .await
-            .map_err(|e| DuckError::Custom(format!("刷新文件失败: {e}")))?;
-
-        info!("📊 下载完成统计:");
-        info!(
-            "   实际下载: {} bytes ({:.2} MB)",
-            downloaded,
-            downloaded as f64 / 1024.0 / 1024.0
-        );
-        info!(
-            "   预期大小: {} bytes ({:.2} MB)",
-            total_size,
-            total_size as f64 / 1024.0 / 1024.0
-        );
-
-        // 验证下载是否完整
-        if total_size > 0 && downloaded != total_size {
-            let error_msg = format!(
-                "下载不完整: 预期 {} bytes ({:.2} MB)，实际下载 {} bytes ({:.2} MB)",
-                total_size,
-                total_size as f64 / 1024.0 / 1024.0,
-                downloaded,
-                downloaded as f64 / 1024.0 / 1024.0
-            );
-            error!("{}", error_msg);
-            return Err(DuckError::Custom(error_msg));
-        }
-
-        info!("✅ 文件下载完成: {} bytes", downloaded);
-
-        // 完成下载
-        progress.downloaded_bytes = downloaded;
-        progress.percentage = 100.0;
-        progress.status = DownloadStatus::Completed;
-        callback(progress);
-
+            .map_err(|e| DuckError::custom(format!("写入哈希文件失败: {}", e)))?;
+            
         Ok(())
     }
 }

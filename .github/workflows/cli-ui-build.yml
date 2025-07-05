@@ -412,6 +412,14 @@ jobs:
           find cli-ui/src-tauri/binaries -name "duck-cli*" -type f | head -10
           echo "=== 二进制文件列表 ==="
           ls -la cli-ui/src-tauri/binaries/
+          
+          echo "=== 测试 duck-cli 功能 ==="
+          # 测试版本信息
+          if [[ "${{ matrix.platform.os }}" == "windows-latest" ]]; then
+            ./cli-ui/src-tauri/binaries/duck-cli-${{ matrix.platform.rust_target }}.exe --version || echo "⚠️ 版本检查失败"
+          else
+            ./cli-ui/src-tauri/binaries/duck-cli-${{ matrix.platform.rust_target }} --version || echo "⚠️ 版本检查失败"
+          fi
         shell: bash
 
       - name: Build Tauri app

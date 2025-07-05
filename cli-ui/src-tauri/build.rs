@@ -3,6 +3,12 @@ use std::process::Command;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    
+    // 监听duck-cli源代码变化
+    println!("cargo:rerun-if-changed=../../duck-cli/src");
+    println!("cargo:rerun-if-changed=../../duck-cli/Cargo.toml");
+    println!("cargo:rerun-if-changed=../../client-core/src");
+    println!("cargo:rerun-if-changed=../../client-core/Cargo.toml");
 
     // 检查并自动构建duck-cli二进制文件
     ensure_duck_cli_binary();
@@ -17,20 +23,31 @@ fn ensure_duck_cli_binary() {
     let binary_name = get_binary_name(&target_triple);
     let binary_path = Path::new("binaries").join(&binary_name);
 
-    if binary_path.exists() {
+    // 检查是否需要重新编译
+    let needs_rebuild = check_if_rebuild_needed(&binary_path, &target_triple);
+    
+    if binary_path.exists() && !needs_rebuild {
         println!(
-            "cargo:warning=Duck CLI binary found: {}",
+            "cargo:warning=Duck CLI binary is up to date: {}",
             binary_path.display()
         );
         return;
     }
 
+    if binary_path.exists() {
+        println!(
+            "cargo:warning=Duck CLI binary found but needs rebuild: {}",
+            binary_path.display()
+        );
+    } else {
+        println!(
+            "cargo:warning=Duck CLI binary not found: {}",
+            binary_path.display()
+        );
+    }
+    
     println!(
-        "cargo:warning=Duck CLI binary not found: {}",
-        binary_path.display()
-    );
-    println!(
-        "cargo:warning=Auto-building duck-cli for target: {target_triple}"
+        "cargo:warning=Building duck-cli for target: {target_triple}"
     );
 
     // 自动构建 duck-cli
@@ -39,7 +56,66 @@ fn ensure_duck_cli_binary() {
         copy_binary_to_sidecar_location(&target_triple, &binary_name);
     } else {
         println!("cargo:warning=Failed to build duck-cli automatically");
-        println!("cargo:warning=Please build manually: cargo build --release -p duck-cli");
+        println!("cargo:warning=Please build manually: cargo build --release -p duck-cli --target {}", target_triple);
+    }
+}
+
+fn check_if_rebuild_needed(binary_path: &Path, target_triple: &str) -> bool {
+    // 如果二进制文件不存在，需要重新编译
+    if !binary_path.exists() {
+        return true;
+    }
+
+    // 获取二进制文件的修改时间
+    let binary_mtime = match std::fs::metadata(binary_path) {
+        Ok(metadata) => metadata.modified().unwrap_or(std::time::UNIX_EPOCH),
+        Err(_) => return true, // 如果无法获取元数据，强制重新编译
+    };
+
+    // 检查源代码目录的修改时间
+    let workspace_root = get_workspace_root();
+    let source_dirs = [
+        workspace_root.join("duck-cli/src"),
+        workspace_root.join("client-core/src"),
+    ];
+
+    for dir in &source_dirs {
+        if is_directory_newer_than(dir, binary_mtime) {
+            println!("cargo:warning=Source code changed in {}, rebuilding...", dir.display());
+            return true;
+        }
+    }
+
+    false
+}
+
+fn is_directory_newer_than(dir: &Path, timestamp: std::time::SystemTime) -> bool {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if is_directory_newer_than(&path, timestamp) {
+                    return true;
+                }
+            } else if path.extension().map_or(false, |ext| ext == "rs") {
+                if let Ok(metadata) = std::fs::metadata(&path) {
+                    if let Ok(mtime) = metadata.modified() {
+                        if mtime > timestamp {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn get_workspace_root() -> PathBuf {
+    if let Some(manifest_dir) = std::env::var_os("CARGO_MANIFEST_DIR") {
+        Path::new(&manifest_dir).parent().unwrap().parent().unwrap().to_path_buf()
+    } else {
+        PathBuf::from("../..")
     }
 }
 
@@ -91,10 +167,8 @@ fn build_duck_cli(target_triple: &str) -> bool {
     ]);
 
     // 确保在工作区根目录执行
-    if let Some(manifest_dir) = std::env::var_os("CARGO_MANIFEST_DIR") {
-        let workspace_root = Path::new(&manifest_dir).parent().unwrap().parent().unwrap();
-        cmd.current_dir(workspace_root);
-    }
+    let workspace_root = get_workspace_root();
+    cmd.current_dir(workspace_root);
 
     match cmd.status() {
         Ok(status) if status.success() => {
@@ -116,13 +190,7 @@ fn build_duck_cli(target_triple: &str) -> bool {
 }
 
 fn copy_binary_to_sidecar_location(target_triple: &str, binary_name: &str) {
-    let workspace_root = match std::env::var_os("CARGO_MANIFEST_DIR") {
-        Some(manifest_dir) => {
-            let path = Path::new(&manifest_dir).parent().unwrap().parent().unwrap();
-            path.to_path_buf()
-        }
-        None => PathBuf::from("../.."),
-    };
+    let workspace_root = get_workspace_root();
 
     let source_binary_name = if target_triple.contains("windows") {
         "duck-cli.exe"

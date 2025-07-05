@@ -57,7 +57,6 @@ jobs:
             pkg-config
           
           echo "=== 安装 GLib 和相关系统库 ==="
-          # 注意：gobject-2.0 和 gio-2.0 功能都包含在 libglib2.0-dev 中
           sudo apt-get install -y \
             libglib2.0-dev \
             libglib2.0-0 \
@@ -65,18 +64,17 @@ jobs:
             libglib2.0-bin \
             glib-networking \
             glib-networking-common \
-            glib-networking-services
+            glib-networking-services >/dev/null 2>&1
           
           echo "=== 安装其他必要的系统依赖 ==="
-          # 分别安装以便更好地调试错误
-          sudo apt-get install -y libssl-dev
-          sudo apt-get install -y libgtk-3-dev
+          sudo apt-get install -y libssl-dev >/dev/null 2>&1
+          sudo apt-get install -y libgtk-3-dev >/dev/null 2>&1
           
           # 尝试安装 WebKit，如果失败则使用备用方案
-          echo "=== 尝试安装 WebKit 开发包 ==="
-          if ! sudo apt-get install -y libwebkit2gtk-4.0-dev; then
-            echo "⚠️  libwebkit2gtk-4.0-dev 安装失败，尝试备用包名"
-            sudo apt-get install -y libwebkit2gtk-4.1-dev || echo "❌ WebKit 安装失败，继续..."
+          echo "=== 安装 WebKit 开发包 ==="
+          if ! sudo apt-get install -y libwebkit2gtk-4.0-dev >/dev/null 2>&1; then
+            echo "⚠️  尝试备用 WebKit 包"
+            sudo apt-get install -y libwebkit2gtk-4.1-dev >/dev/null 2>&1 || echo "❌ WebKit 安装失败，继续..."
           fi
           
           # 安装 libsoup-3.0 (Tauri 2.0 需要)
@@ -182,11 +180,12 @@ jobs:
             arch: x64
             build_args: ""
 
-          - name: Linux-aarch64
-            os: ubuntu-22.04
-            rust_target: aarch64-unknown-linux-gnu
-            arch: arm64
-            build_args: ""
+          # 暂时禁用 ARM64 构建，因为 GitHub Actions 交叉编译环境存在问题
+          # - name: Linux-aarch64
+          #   os: ubuntu-22.04
+          #   rust_target: aarch64-unknown-linux-gnu
+          #   arch: arm64
+          #   build_args: ""
 
           - name: Windows-x86_64
             os: windows-latest
@@ -194,11 +193,12 @@ jobs:
             arch: x64
             build_args: ""
 
-          - name: Windows-aarch64
-            os: windows-latest
-            rust_target: aarch64-pc-windows-msvc
-            arch: arm64
-            build_args: ""
+          # 暂时禁用 Windows ARM64 构建
+          # - name: Windows-aarch64
+          #   os: windows-latest
+          #   rust_target: aarch64-pc-windows-msvc
+          #   arch: arm64
+          #   build_args: ""
 
           - name: macOS-x86_64
             os: macos-latest
@@ -206,11 +206,12 @@ jobs:
             arch: x64
             build_args: ""
 
-          - name: macOS-aarch64
-            os: macos-latest
-            rust_target: aarch64-apple-darwin
-            arch: arm64
-            build_args: ""
+          # 暂时禁用 macOS ARM64 构建
+          # - name: macOS-aarch64
+          #   os: macos-latest
+          #   rust_target: aarch64-apple-darwin
+          #   arch: arm64
+          #   build_args: ""
 
     steps:
       - name: Checkout
@@ -224,12 +225,12 @@ jobs:
           # 添加重试机制处理网络问题
           for i in {1..3}; do
             echo "尝试 $i/3 次更新包列表..."
-            if sudo apt-get update; then
+            if sudo apt-get update >/dev/null 2>&1; then
               echo "✅ 包列表更新成功"
               break
             else
               echo "⚠️  包列表更新失败，等待重试..."
-              sleep 10
+              sleep 5
               if [ $i -eq 3 ]; then
                 echo "❌ 包列表更新最终失败，使用现有缓存继续"
               fi
@@ -237,6 +238,7 @@ jobs:
           done
           
           # 先安装基础开发工具
+          echo "=== 安装基础开发工具 ==="
           sudo apt-get install -y \
             curl \
             wget \
@@ -244,22 +246,14 @@ jobs:
             build-essential \
             libc6-dev \
             m4 \
-            pkg-config
+            pkg-config >/dev/null 2>&1
           
-          # 如果是ARM64构建，添加多架构支持
-          if [[ "${{ matrix.platform.rust_target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            echo "=== 设置 ARM64 多架构支持 ==="
-            sudo dpkg --add-architecture arm64
-            
-            echo "=== 更新ARM64包列表（允许失败）==="
-            # 尝试更新包列表，如果失败则继续（使用现有缓存）
-            if ! sudo apt-get update 2>/dev/null; then
-              echo "⚠️  ARM64 包列表更新失败，使用现有缓存继续"
-              echo "   这不会影响主要构建过程"
-            else
-              echo "✅ ARM64 包列表更新成功"
-            fi
-          fi
+          # ARM64 构建已暂时禁用
+          # if [[ "${{ matrix.platform.rust_target }}" == "aarch64-unknown-linux-gnu" ]]; then
+          #   echo "=== 设置 ARM64 多架构支持 ==="
+          #   sudo dpkg --add-architecture arm64
+          #   sudo apt-get update >/dev/null 2>&1
+          # fi
           
           # 安装 GLib 和相关系统库 (完整包含所有必需的 dev 包)
           # 注意：gobject-2.0 和 gio-2.0 功能都包含在 libglib2.0-dev 中
@@ -279,29 +273,11 @@ jobs:
           export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig"
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig" >> $GITHUB_ENV
           
-          # 验证主要 GLib 依赖
-          echo "=== 主机架构 GLib 验证 ==="
+          # 验证主要依赖
+          echo "=== 验证 Tauri 2.0 依赖 ==="
           pkg-config --exists glib-2.0 && echo "✅ glib-2.0 found" || echo "❌ glib-2.0 not found"
-          pkg-config --exists gobject-2.0 && echo "✅ gobject-2.0 found" || echo "❌ gobject-2.0 not found"
-          pkg-config --exists gio-2.0 && echo "✅ gio-2.0 found" || echo "❌ gio-2.0 not found"
-          
-          # 验证 Tauri 2.0 关键依赖
-          echo "=== Tauri 2.0 关键依赖验证 ==="
           pkg-config --exists libsoup-3.0 && echo "✅ libsoup-3.0 found" || echo "❌ libsoup-3.0 not found"
-          pkg-config --exists webkit2gtk-4.1 && echo "✅ webkit2gtk-4.1 found" || echo "❌ webkit2gtk-4.1 not found"
-          pkg-config --exists webkit2gtk-4.0 && echo "✅ webkit2gtk-4.0 found" || echo "❌ webkit2gtk-4.0 not found"
           pkg-config --exists javascriptcoregtk-4.1 && echo "✅ javascriptcoregtk-4.1 found" || echo "❌ javascriptcoregtk-4.1 not found"
-          pkg-config --exists javascriptcoregtk-4.0 && echo "✅ javascriptcoregtk-4.0 found" || echo "❌ javascriptcoregtk-4.0 not found"
-          
-          # 显示版本信息
-          echo "=== 依赖版本信息 ==="
-          pkg-config --modversion glib-2.0 gobject-2.0 gio-2.0 2>/dev/null || echo "❌ version check failed"
-          pkg-config --modversion libsoup-3.0 2>/dev/null || echo "⚠️ libsoup-3.0 version check failed"
-          pkg-config --modversion javascriptcoregtk-4.1 2>/dev/null || echo "⚠️ javascriptcoregtk-4.1 version check failed"
-          
-          # 手动验证关键的 .pc 文件
-          echo "=== 验证主机架构 .pc 文件 ==="
-          ls -la /usr/lib/x86_64-linux-gnu/pkgconfig/ | grep -E "(glib|gobject|gio)" | head -5 || echo "❌ x86_64 pc files not found"
           
           # 安装完整的 Tauri 依赖
           echo "=== 安装核心 Tauri 依赖 ==="
@@ -311,15 +287,14 @@ jobs:
             librsvg2-dev \
             patchelf
           
-          # 处理应用指示器依赖冲突 - 优先使用现代的 Ayatana 版本
+          # 处理应用指示器依赖冲突
           echo "=== 安装应用指示器依赖 ==="
-          if sudo apt-get install -y libayatana-appindicator3-dev; then
+          if sudo apt-get install -y libayatana-appindicator3-dev >/dev/null 2>&1; then
             echo "✅ 使用 Ayatana 应用指示器"
           else
             echo "⚠️  Ayatana 安装失败，尝试传统版本"
-            # 清理可能的冲突包
-            sudo apt-get remove -y libayatana-appindicator3-dev 2>/dev/null || true
-            sudo apt-get install -y libappindicator3-dev || echo "❌ 应用指示器安装失败"
+            sudo apt-get remove -y libayatana-appindicator3-dev >/dev/null 2>&1 || true
+            sudo apt-get install -y libappindicator3-dev >/dev/null 2>&1 || echo "❌ 应用指示器安装失败"
           fi
           
           echo "=== 尝试安装 WebKit 开发包 ==="
@@ -342,37 +317,27 @@ jobs:
           fi
           
           echo "=== 安装其他图形和媒体库 ==="
-          # 分组安装，避免潜在冲突
           sudo apt-get install -y \
             libxdo-dev \
             libcairo2-dev \
             libpango1.0-dev \
             libatk1.0-dev \
-            libgdk-pixbuf-2.0-dev || echo "⚠️ 部分图形库安装失败"
+            libgdk-pixbuf-2.0-dev >/dev/null 2>&1 || echo "⚠️ 部分图形库安装失败"
           
           # 安装 libsoup-3.0 (Tauri 2.0 需要)
           echo "=== 安装 libsoup-3.0 ==="
-          if sudo apt-get install -y libsoup-3.0-dev; then
+          if sudo apt-get install -y libsoup-3.0-dev >/dev/null 2>&1; then
             echo "✅ libsoup-3.0-dev 安装成功"
           else
             echo "⚠️ libsoup-3.0-dev 安装失败，尝试备用方案"
-            sudo apt-get install -y libsoup2.4-dev || echo "❌ libsoup 安装失败"
-          fi
-          
-          # 安装 JavaScriptCore GTK (Tauri 2.0 需要 4.1 版本)
-          echo "=== 安装 JavaScriptCore GTK ==="
-          if sudo apt-get install -y libjavascriptcoregtk-4.1-dev; then
-            echo "✅ libjavascriptcoregtk-4.1-dev 安装成功"
-          else
-            echo "⚠️ libjavascriptcoregtk-4.1-dev 安装失败，尝试备用版本"
-            sudo apt-get install -y libjavascriptcoregtk-4.0-dev || echo "❌ JavaScriptCore 安装失败"
+            sudo apt-get install -y libsoup2.4-dev >/dev/null 2>&1 || echo "❌ libsoup 安装失败"
           fi
           
           sudo apt-get install -y \
             libjpeg-dev \
             libpng-dev \
             libtiff-dev \
-            libgif-dev || echo "⚠️ 部分图像库安装失败"
+            libgif-dev >/dev/null 2>&1 || echo "⚠️ 部分图像库安装失败"
           
           sudo apt-get install -y \
             libx11-dev \
@@ -384,10 +349,10 @@ jobs:
             libxfixes-dev \
             libxrandr-dev \
             libxss-dev \
-            libxss1 || echo "⚠️ 部分X11库安装失败"
+            libxss1 >/dev/null 2>&1 || echo "⚠️ 部分X11库安装失败"
           
           sudo apt-get install -y \
-            libgconf-2-4 || echo "⚠️ GConf库安装失败，但不影响构建"
+            libgconf-2-4 >/dev/null 2>&1 || echo "⚠️ GConf库安装失败，但不影响构建"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -421,141 +386,28 @@ jobs:
           cd cli-ui
           npm ci
 
-      - name: Setup cross-compilation for Linux ARM64
-        if: matrix.platform.rust_target == 'aarch64-unknown-linux-gnu'
-        run: |
-          echo "=== 设置 ARM64 交叉编译 ==="
-          
-          # 安装交叉编译工具链（允许失败）
-          echo "=== 更新包列表（ARM64 交叉编译） ==="
-          if ! sudo apt-get update 2>/dev/null; then
-            echo "⚠️  包列表更新失败，尝试使用现有缓存"
-          fi
-          
-          echo "=== 安装 ARM64 交叉编译工具链 ==="
-          if sudo apt-get install -y \
-            gcc-aarch64-linux-gnu \
-            g++-aarch64-linux-gnu \
-            libc6-dev-arm64-cross 2>/dev/null; then
-            echo "✅ ARM64 交叉编译工具链安装成功"
-          else
-            echo "⚠️  ARM64 交叉编译工具链安装失败"
-            echo "   将回退到使用主机架构进行构建"
-            echo "   生成的binary可能不是原生ARM64，但构建可以继续"
-          fi
-          
-          # 尝试安装 ARM64 特定的开发包（允许失败）
-          echo "=== 尝试安装 ARM64 开发包（可选） ==="
-          echo "注意：ARM64 包安装失败不会影响构建，将使用主机架构的头文件"
-          
-          # 安装 ARM64 GLib 开发包
-          echo "=== 安装 ARM64 GLib 依赖 ==="
-          if sudo apt-get install -y libglib2.0-dev:arm64 2>/dev/null; then
-            echo "✅ ARM64 GLib 包安装成功"
-          else
-            echo "⚠️  ARM64 GLib 包安装失败，将使用主机架构的头文件"
-          fi
-          
-          # 安装 ARM64 libsoup-3.0
-          echo "=== 安装 ARM64 libsoup-3.0 ==="
-          if sudo apt-get install -y libsoup-3.0-dev:arm64 2>/dev/null; then
-            echo "✅ ARM64 libsoup-3.0 包安装成功"
-          else
-            echo "⚠️  ARM64 libsoup-3.0 包安装失败，将使用主机架构的库"
-          fi
-          
-          # 安装 ARM64 JavaScriptCore GTK
-          echo "=== 安装 ARM64 JavaScriptCore GTK ==="
-          if sudo apt-get install -y libjavascriptcoregtk-4.1-dev:arm64 2>/dev/null; then
-            echo "✅ ARM64 JavaScriptCore GTK 包安装成功"
-          else
-            echo "⚠️  ARM64 JavaScriptCore GTK 包安装失败，将使用主机架构的库"
-          fi
-          
-          # 设置交叉编译环境变量（仅当工具链可用时）
-          if [ "$CROSS_COMPILE_AVAILABLE" = "true" ]; then
-            echo "=== 设置 ARM64 交叉编译环境变量 ==="
-            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-            echo "PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
-            echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
-            echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
-            echo "✅ ARM64 交叉编译环境变量已设置"
-          else
-            echo "⚠️  跳过 ARM64 交叉编译环境变量设置"
-            echo "   将回退到主机架构构建"
-          fi
-          
-          # 验证交叉编译工具链
-          echo "=== 验证交叉编译工具链 ==="
-          if aarch64-linux-gnu-gcc --version >/dev/null 2>&1; then
-            echo "✅ ARM64 GCC 可用"
-            aarch64-linux-gnu-gcc --version | head -1
-            echo "CROSS_COMPILE_AVAILABLE=true" >> $GITHUB_ENV
-          else
-            echo "❌ ARM64 GCC 不可用，将使用主机架构构建"
-            echo "CROSS_COMPILE_AVAILABLE=false" >> $GITHUB_ENV
-          fi
-          
-          # 验证 ARM64 pkg-config 文件 (如果存在)
-          echo "=== ARM64 依赖验证 ==="
-          if [ -d "/usr/lib/aarch64-linux-gnu/pkgconfig/" ]; then
-            echo "✅ ARM64 pkgconfig 目录存在"
-            
-            echo "=== ARM64 GLib 验证 ==="
-            if ls /usr/lib/aarch64-linux-gnu/pkgconfig/ | grep -E "(glib|gobject|gio)" >/dev/null 2>&1; then
-              echo "✅ 发现 ARM64 GLib pkg-config 文件"
-              ls -la /usr/lib/aarch64-linux-gnu/pkgconfig/ | grep -E "(glib|gobject|gio)" | head -3
-            else
-              echo "⚠️  未发现 ARM64 GLib pkg-config 文件，将使用主机架构"
-            fi
-            
-            echo "=== ARM64 Tauri 依赖验证 ==="
-            if ls /usr/lib/aarch64-linux-gnu/pkgconfig/ | grep -E "(libsoup|javascriptcore)" >/dev/null 2>&1; then
-              echo "✅ 发现 ARM64 Tauri pkg-config 文件"
-              ls -la /usr/lib/aarch64-linux-gnu/pkgconfig/ | grep -E "(libsoup|javascriptcore)" | head -3
-            else
-              echo "⚠️  未发现 ARM64 Tauri pkg-config 文件，将使用主机架构"
-            fi
-          else
-            echo "⚠️  ARM64 pkgconfig 目录不存在，将使用主机架构配置"
-            echo "   这是正常情况，交叉编译将使用主机架构的头文件"
-          fi
+      # ARM64 交叉编译步骤已禁用
+      # - name: Setup cross-compilation for Linux ARM64
+      #   if: matrix.platform.rust_target == 'aarch64-unknown-linux-gnu'
+      #   run: |
+      #     echo "ARM64 构建已暂时禁用"
 
       - name: Build duck-cli binary
         run: |
-          # 设置环境变量 (针对不同架构)
-          if [[ "${{ matrix.platform.rust_target }}" == "x86_64-unknown-linux-gnu" ]]; then
+          # 设置环境变量 (针对Linux)
+          if [[ "${{ matrix.platform.os }}" == "ubuntu-22.04" ]]; then
             export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig"
             export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
             export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
-          elif [[ "${{ matrix.platform.rust_target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig"
-            export PKG_CONFIG_ALLOW_CROSS=1
-            export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
-            export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
-            export PKG_CONFIG_SYSROOT_DIR=/
-          fi
-          
-          # 验证关键依赖是否可用
-          if [[ "${{ matrix.platform.os }}" == "ubuntu-22.04" ]]; then
-            echo "=== 构建前验证关键依赖 ==="
-            echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
+            
+            echo "=== 验证关键依赖 ==="
             pkg-config --exists glib-2.0 && echo "✅ glib-2.0 available" || echo "❌ glib-2.0 not found"
-            pkg-config --exists gobject-2.0 && echo "✅ gobject-2.0 available" || echo "❌ gobject-2.0 not found"
-            pkg-config --exists gio-2.0 && echo "✅ gio-2.0 available" || echo "❌ gio-2.0 not found"
             pkg-config --exists libsoup-3.0 && echo "✅ libsoup-3.0 available" || echo "❌ libsoup-3.0 not found"
             pkg-config --exists javascriptcoregtk-4.1 && echo "✅ javascriptcoregtk-4.1 available" || echo "❌ javascriptcoregtk-4.1 not found"
-            
-            # 测试关键库的编译标志
-            pkg-config --cflags glib-2.0 gobject-2.0 gio-2.0 2>/dev/null || echo "❌ pkg-config cflags failed"
-            pkg-config --libs glib-2.0 gobject-2.0 gio-2.0 2>/dev/null || echo "❌ pkg-config libs failed"
-            pkg-config --cflags libsoup-3.0 2>/dev/null || echo "❌ libsoup-3.0 cflags failed"
-            pkg-config --libs libsoup-3.0 2>/dev/null || echo "❌ libsoup-3.0 libs failed"
-            pkg-config --cflags javascriptcoregtk-4.1 2>/dev/null || echo "❌ javascriptcoregtk-4.1 cflags failed"
-            pkg-config --libs javascriptcoregtk-4.1 2>/dev/null || echo "❌ javascriptcoregtk-4.1 libs failed"
           fi
           
-          # 只构建 duck-cli 模块，避免其他模块的依赖问题
+          # 构建 duck-cli 模块
+          echo "=== 构建 duck-cli 二进制文件 ==="
           cargo build --release --target ${{ matrix.platform.rust_target }} -p duck-cli
         shell: bash
 
@@ -579,8 +431,6 @@ jobs:
       - name: Verify duck-cli binary
         run: |
           echo "=== 验证 duck-cli 二进制文件 ==="
-          find cli-ui/src-tauri/binaries -name "duck-cli*" -type f | head -10
-          echo "=== 二进制文件列表 ==="
           ls -la cli-ui/src-tauri/binaries/
           
           echo "=== 测试 duck-cli 功能 ==="
@@ -599,13 +449,9 @@ jobs:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
           # 根据目标架构设置正确的 PKG_CONFIG_PATH
-          PKG_CONFIG_PATH: ${{ matrix.platform.rust_target == 'x86_64-unknown-linux-gnu' && '/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig' || matrix.platform.rust_target == 'aarch64-unknown-linux-gnu' && '/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig' || '' }}
-          PKG_CONFIG_ALLOW_CROSS: ${{ matrix.platform.rust_target == 'aarch64-unknown-linux-gnu' && '1' || '' }}
+          PKG_CONFIG_PATH: ${{ matrix.platform.rust_target == 'x86_64-unknown-linux-gnu' && '/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig' || '' }}
           PKG_CONFIG_ALLOW_SYSTEM_CFLAGS: 1
           PKG_CONFIG_ALLOW_SYSTEM_LIBS: 1
-          PKG_CONFIG_SYSROOT_DIR: ${{ matrix.platform.rust_target == 'aarch64-unknown-linux-gnu' && '/' || '' }}
-          # ARM64 交叉编译链接器（仅当工具链可用时）
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.platform.rust_target == 'aarch64-unknown-linux-gnu' && env.CROSS_COMPILE_AVAILABLE == 'true' && 'aarch64-linux-gnu-gcc' || '' }}
         with:
           projectPath: cli-ui
           args: --target ${{ matrix.platform.rust_target }} ${{ matrix.platform.build_args }}
@@ -697,9 +543,12 @@ jobs:
           echo "- macOS Universal build: ${{ needs.build-macos-universal.result == 'success' && '✅ Completed' || needs.build-macos-universal.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Supported Platforms" >> $GITHUB_STEP_SUMMARY
-          echo "- 🐧 Linux (x86_64, ARM64)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🪟 Windows (x86_64, ARM64)" >> $GITHUB_STEP_SUMMARY
-          echo "- 🍎 macOS (x86_64, ARM64, Universal)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🐧 Linux (x86_64)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🪟 Windows (x86_64)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🍎 macOS (x86_64, Universal)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Temporarily Disabled" >> $GITHUB_STEP_SUMMARY
+          echo "- ARM64 builds (Linux, Windows, macOS) - 交叉编译环境问题" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "Built applications can be found in the **Artifacts** section of this workflow run." >> $GITHUB_STEP_SUMMARY

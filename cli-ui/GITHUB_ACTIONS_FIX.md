@@ -1,11 +1,18 @@
 # GitHub Actions 构建修复
 
 ## 问题描述
-GitHub Actions 在构建 CLI-UI Tauri 应用时出现 `glib-2.0` 依赖缺失错误：
+GitHub Actions 在构建 CLI-UI Tauri 应用时出现 GObject 系统依赖缺失错误：
 
+### 第一轮错误：glib-2.0 缺失
 ```
 The system library `glib-2.0` required by crate `glib-sys` was not found.
 The file `glib-2.0.pc` needs to be installed and the PKG_CONFIG_PATH environment variable must contain its parent directory.
+```
+
+### 第二轮错误：gobject-2.0 缺失
+```
+The system library `gobject-2.0` required by crate `gobject-sys` was not found.
+The file `gobject-2.0.pc` needs to be installed and the PKG_CONFIG_PATH environment variable must contain its parent directory.
 ```
 
 ## 问题原因
@@ -33,6 +40,8 @@ The file `glib-2.0.pc` needs to be installed and the PKG_CONFIG_PATH environment
       libgtk-3-dev \
       libayatana-appindicator3-dev \
       libglib2.0-dev \              # 🔧 新增：解决 glib-2.0 缺失
+      libgobject-2.0-dev \          # 🔧 新增：解决 gobject-2.0 缺失
+      libgio-2.0-dev \              # 🔧 新增：GIO 系统库
       libcairo2-dev \               # 🔧 新增：Cairo 图形库
       libpango1.0-dev \             # 🔧 新增：文本渲染库
       libatk1.0-dev \               # 🔧 新增：可访问性工具包
@@ -46,7 +55,9 @@ The file `glib-2.0.pc` needs to be installed and the PKG_CONFIG_PATH environment
 ### 2. 依赖说明
 
 #### 核心修复依赖
-- **libglib2.0-dev**: 解决主要错误，提供 `glib-2.0.pc` 文件
+- **libglib2.0-dev**: 解决 glib-2.0 缺失，提供 `glib-2.0.pc` 文件
+- **libgobject-2.0-dev**: 解决 gobject-2.0 缺失，提供 `gobject-2.0.pc` 文件
+- **libgio-2.0-dev**: 提供 GIO 系统库，完整的 GObject 生态系统
 - **pkg-config**: 允许构建系统正确找到和链接系统库
 - **build-essential**: 提供 GCC 编译器和基础构建工具
 
@@ -76,9 +87,22 @@ The file `glib-2.0.pc` needs to be installed and the PKG_CONFIG_PATH environment
 ### 本地验证
 ```bash
 # 在 Ubuntu 环境中测试
-sudo apt-get install libglib2.0-dev pkg-config
+sudo apt-get install libglib2.0-dev libgobject-2.0-dev libgio-2.0-dev pkg-config
+
+# 验证 GLib 库
 pkg-config --exists glib-2.0
 echo $?  # 应该输出 0
+
+# 验证 GObject 库
+pkg-config --exists gobject-2.0
+echo $?  # 应该输出 0
+
+# 验证 GIO 库
+pkg-config --exists gio-2.0
+echo $?  # 应该输出 0
+
+# 检查完整的 GObject 系统
+pkg-config --modversion glib-2.0 gobject-2.0 gio-2.0
 ```
 
 ### CI 验证
@@ -100,7 +124,10 @@ echo $?  # 应该输出 0
 Tauri 应用需要 WebKit 和 GTK 生态系统：
 - **WebKit**: 渲染 Web 前端
 - **GTK**: 原生窗口和控件
-- **GLib**: GTK 的基础库系统
+- **GObject 系统**: GTK 的基础对象系统
+  - **GLib**: 核心库系统和工具
+  - **GObject**: 面向对象的类型系统
+  - **GIO**: 现代 I/O 和应用程序框架
 - **Cairo/Pango**: 图形和文本渲染
 
 ## 日期

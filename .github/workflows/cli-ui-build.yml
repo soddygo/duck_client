@@ -80,9 +80,18 @@ jobs:
           fi
           
           sudo apt-get install -y \
-            libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
+          
+          # 处理应用指示器依赖冲突
+          echo "=== 安装应用指示器依赖 ==="
+          if sudo apt-get install -y libayatana-appindicator3-dev; then
+            echo "✅ 使用 Ayatana 应用指示器"
+          else
+            echo "⚠️  Ayatana 安装失败，尝试传统版本"
+            sudo apt-get remove -y libayatana-appindicator3-dev 2>/dev/null || true
+            sudo apt-get install -y libappindicator3-dev || echo "❌ 应用指示器安装失败"
+          fi
           
           # 强制更新库缓存
           sudo ldconfig
@@ -248,10 +257,19 @@ jobs:
           sudo apt-get install -y \
             libssl-dev \
             libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            libappindicator3-dev \
             librsvg2-dev \
             patchelf
+          
+          # 处理应用指示器依赖冲突 - 优先使用现代的 Ayatana 版本
+          echo "=== 安装应用指示器依赖 ==="
+          if sudo apt-get install -y libayatana-appindicator3-dev; then
+            echo "✅ 使用 Ayatana 应用指示器"
+          else
+            echo "⚠️  Ayatana 安装失败，尝试传统版本"
+            # 清理可能的冲突包
+            sudo apt-get remove -y libayatana-appindicator3-dev 2>/dev/null || true
+            sudo apt-get install -y libappindicator3-dev || echo "❌ 应用指示器安装失败"
+          fi
           
           echo "=== 尝试安装 WebKit 开发包 ==="
           # 尝试安装 WebKit 依赖，支持多个版本的备用方案
@@ -264,18 +282,25 @@ jobs:
           fi
           
           echo "=== 安装其他图形和媒体库 ==="
+          # 分组安装，避免潜在冲突
           sudo apt-get install -y \
             libxdo-dev \
             libcairo2-dev \
             libpango1.0-dev \
             libatk1.0-dev \
-            libgdk-pixbuf-2.0-dev \
+            libgdk-pixbuf-2.0-dev || echo "⚠️ 部分图形库安装失败"
+          
+          sudo apt-get install -y \
             libsoup2.4-dev \
-            libjavascriptcoregtk-4.0-dev \
+            libjavascriptcoregtk-4.0-dev || echo "⚠️ 部分JavaScript库安装失败"
+          
+          sudo apt-get install -y \
             libjpeg-dev \
             libpng-dev \
             libtiff-dev \
-            libgif-dev \
+            libgif-dev || echo "⚠️ 部分图像库安装失败"
+          
+          sudo apt-get install -y \
             libx11-dev \
             libxext-dev \
             libxft-dev \
@@ -285,8 +310,10 @@ jobs:
             libxfixes-dev \
             libxrandr-dev \
             libxss-dev \
-            libgconf-2-4 \
-            libxss1
+            libxss1 || echo "⚠️ 部分X11库安装失败"
+          
+          sudo apt-get install -y \
+            libgconf-2-4 || echo "⚠️ GConf库安装失败，但不影响构建"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

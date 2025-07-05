@@ -5,7 +5,7 @@ import {
   CheckIcon,
   XCircleIcon
 } from '@heroicons/react/24/outline';
-import { CommandConfig, CommandParameter, ParameterInputResult, ParameterInputModalProps } from '../types';
+import { CommandParameter, ParameterInputResult, ParameterInputModalProps } from '../types';
 
 const ParameterInputModal: React.FC<ParameterInputModalProps> = ({
   isOpen,
@@ -80,7 +80,7 @@ const ParameterInputModal: React.FC<ParameterInputModalProps> = ({
       }
       
       // 正则验证
-      if (param.validation && value) {
+      if (param.validation && param.validation.pattern && value) {
         const pattern = new RegExp(param.validation.pattern);
         if (!pattern.test(value)) {
           newErrors[param.name] = param.validation.message || `${param.label} 格式不正确`;

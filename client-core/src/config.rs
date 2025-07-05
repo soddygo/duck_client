@@ -77,9 +77,9 @@ impl Default for AppConfig {
 
 impl AppConfig {
     /// 智能查找并加载配置文件
-    /// 按优先级查找：config.toml -> duck-client.toml -> .duck-client.toml
+    /// 按优先级查找：config.toml -> /app/config.toml
     pub fn find_and_load_config() -> Result<Self> {
-        let config_files = ["config.toml", "duck-client.toml", ".duck-client.toml"];
+        let config_files = ["config.toml", "/app/config.toml"];
 
         for config_file in &config_files {
             if Path::new(config_file).exists() {

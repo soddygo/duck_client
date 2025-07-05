@@ -3,9 +3,13 @@ import {
   CommandLineIcon, 
   TrashIcon,
   DocumentTextIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  ChevronDownIcon,
+  PauseIcon,
+  PlayIcon,
+  ChartBarIcon
 } from '@heroicons/react/24/outline';
-import { FileSystemManager, DialogManager } from '../utils/tauri';
+import { DialogManager } from '../utils/tauri';
 
 interface LogEntry {
   id: string;
@@ -20,12 +24,18 @@ interface TerminalWindowProps {
   logs: LogEntry[];
   onClearLogs: () => void;
   isEnabled: boolean;
+  totalLogCount: number;           // 总日志数量统计
+  maxLogEntries: number;           // 最大日志条目数
+  onExportLogs: () => Promise<boolean>; // 导出日志函数
 }
 
 const TerminalWindow: React.FC<TerminalWindowProps> = ({ 
   logs, 
   onClearLogs, 
-  isEnabled 
+  isEnabled,
+  totalLogCount,
+  maxLogEntries,
+  onExportLogs
 }) => {
   const [autoScroll, setAutoScroll] = useState(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -43,32 +53,28 @@ const TerminalWindow: React.FC<TerminalWindowProps> = ({
     if (containerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
       const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
-      setAutoScroll(isAtBottom);
+      
+      // 只有在用户手动滚动时才暂停自动滚动
+      if (!isAtBottom && autoScroll) {
+        setAutoScroll(false);
+      }
+    }
+  };
+
+  // 手动滚动到底部
+  const scrollToBottom = () => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      setAutoScroll(true); // 重新启用自动滚动
     }
   };
 
   // 导出日志
   const exportLogs = async () => {
     try {
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      const filename = `duck-cli-logs-${timestamp}.txt`;
-      
-      const logContent = logs.map(log => {
-        const prefix = `[${log.timestamp}] [${log.type.toUpperCase()}]`;
-        if (log.type === 'command') {
-          return `${prefix} $ ${log.command} ${log.args?.join(' ') || ''}`;
-        }
-        return `${prefix} ${log.message}`;
-      }).join('\n');
-
-      const savedPath = await DialogManager.saveFile('导出日志', filename);
-      if (savedPath) {
-        const success = await FileSystemManager.writeTextFile(savedPath, logContent);
-        if (success) {
-          await DialogManager.showMessage('成功', '日志已导出', 'info');
-        } else {
-          await DialogManager.showMessage('错误', '日志导出失败', 'error');
-        }
+      const success = await onExportLogs();
+      if (success) {
+        console.log('日志导出成功');
       }
     } catch (error) {
       console.error('Export logs failed:', error);
@@ -76,39 +82,14 @@ const TerminalWindow: React.FC<TerminalWindowProps> = ({
     }
   };
 
-  // 获取日志条目样式
-  const getLogEntryStyle = (type: string) => {
-    const baseClasses = "flex items-start space-x-2 py-1 px-2 rounded text-xs font-mono";
-    
-    switch (type) {
-      case 'command':
-        return `${baseClasses} bg-gray-100 border-l-4 border-blue-400`;
-      case 'success':
-        return `${baseClasses} text-green-700`;
-      case 'error':
-        return `${baseClasses} text-red-700 bg-red-50`;
-      case 'warning':
-        return `${baseClasses} text-yellow-700 bg-yellow-50`;
-      default:
-        return `${baseClasses} text-gray-700`;
-    }
+  // 获取内存使用情况
+  const getMemoryUsage = () => {
+    const currentLogs = logs.length;
+    const percentage = Math.round((currentLogs / maxLogEntries) * 100);
+    return { currentLogs, percentage };
   };
 
-  // 获取类型图标
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'command':
-        return <CommandLineIcon className="h-3 w-3 text-blue-500 mt-0.5 flex-shrink-0" />;
-      case 'success':
-        return <div className="h-3 w-3 bg-green-500 rounded-full mt-0.5 flex-shrink-0"></div>;
-      case 'error':
-        return <div className="h-3 w-3 bg-red-500 rounded-full mt-0.5 flex-shrink-0"></div>;
-      case 'warning':
-        return <div className="h-3 w-3 bg-yellow-500 rounded-full mt-0.5 flex-shrink-0"></div>;
-      default:
-        return <div className="h-3 w-3 bg-gray-400 rounded-full mt-0.5 flex-shrink-0"></div>;
-    }
-  };
+  const { currentLogs, percentage } = getMemoryUsage();
 
   return (
     <div className="bg-white border-t border-gray-200 flex flex-col h-full">
@@ -122,22 +103,44 @@ const TerminalWindow: React.FC<TerminalWindowProps> = ({
               工作目录无效
             </span>
           )}
-          <span className="text-xs text-gray-500">
-            ({logs.length} 条记录)
-          </span>
+          
+          {/* 日志统计信息 */}
+          <div className="flex items-center space-x-2 text-xs text-gray-500">
+            <span className="flex items-center space-x-1">
+              <ChartBarIcon className="h-3 w-3" />
+              <span>显示: {currentLogs}</span>
+            </span>
+            <span>总计: {totalLogCount}</span>
+            <span className={`px-2 py-1 rounded ${
+              percentage > 90 ? 'bg-red-100 text-red-700' :
+              percentage > 70 ? 'bg-yellow-100 text-yellow-700' :
+              'bg-green-100 text-green-700'
+            }`}>
+              缓冲区: {percentage}%
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* 自动滚动开关 */}
-          <label className="flex items-center space-x-1 text-xs text-gray-600">
-            <input
-              type="checkbox"
-              checked={autoScroll}
-              onChange={(e) => setAutoScroll(e.target.checked)}
-              className="h-3 w-3 text-blue-600 rounded"
-            />
-            <span>自动滚动</span>
-          </label>
+          {/* 自动滚动按钮 */}
+          <button
+            onClick={scrollToBottom}
+            disabled={logs.length === 0}
+            className={`flex items-center space-x-1 px-2 py-1 rounded text-xs transition-colors ${
+              autoScroll 
+                ? 'bg-green-100 text-green-700 hover:bg-green-200' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+            title={autoScroll ? "自动滚动已开启，点击滚动到底部" : "自动滚动已暂停，点击恢复并滚动到底部"}
+          >
+            {autoScroll ? (
+              <PlayIcon className="h-3 w-3" />
+            ) : (
+              <PauseIcon className="h-3 w-3" />
+            )}
+            <ChevronDownIcon className="h-3 w-3" />
+            <span>{autoScroll ? "自动滚动" : "手动模式"}</span>
+          </button>
 
           {/* 导出日志 */}
           <button
@@ -174,6 +177,9 @@ const TerminalWindow: React.FC<TerminalWindowProps> = ({
               <DocumentTextIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p className="text-sm">暂无日志信息</p>
               <p className="text-xs mt-1">执行操作后会在此显示输出</p>
+              <p className="text-xs mt-2 text-gray-400">
+                💡 日志管理: 最大 {maxLogEntries} 条，超出时自动覆盖最早记录
+              </p>
             </div>
           </div>
         ) : (
@@ -209,22 +215,6 @@ const TerminalWindow: React.FC<TerminalWindowProps> = ({
             <div ref={logsEndRef} />
           </div>
         )}
-      </div>
-
-      {/* 状态栏 */}
-      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <div className="flex items-center space-x-4">
-            <span>就绪</span>
-            {!autoScroll && (
-              <span className="text-orange-500">● 手动滚动模式</span>
-            )}
-          </div>
-          <div className="flex items-center space-x-2">
-            <span>终端</span>
-            <div className={`h-2 w-2 rounded-full ${isEnabled ? 'bg-green-500' : 'bg-red-500'}`}></div>
-          </div>
-        </div>
       </div>
     </div>
   );

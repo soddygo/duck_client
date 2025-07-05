@@ -137,6 +137,14 @@ pub struct PackageInfo {
     pub hash: String,
     pub signature: String,
     pub size: u64,
+    /// 下载方式标识: "direct" 表示直接使用URL下载，"api" 表示使用API接口下载
+    #[serde(default = "default_download_method")]
+    pub download_method: String,
+}
+
+/// 默认下载方式
+fn default_download_method() -> String {
+    "api".to_string()
 }
 
 /// 客户端更新清单响应
@@ -392,19 +400,33 @@ impl ApiClient {
             .config
             .get_endpoint_url(&self.config.endpoints.docker_download_full);
 
+        self.download_service_update_from_url(&url, save_path).await
+    }
+
+    /// 从指定URL下载Docker服务更新包
+    pub async fn download_service_update_from_url<P: AsRef<Path>>(&self, url: &str, save_path: P) -> Result<()> {
+        self.download_service_update_from_url_with_auth(url, save_path, true).await
+    }
+
+    /// 从指定URL下载Docker服务更新包（支持认证控制）
+    pub async fn download_service_update_from_url_with_auth<P: AsRef<Path>>(&self, url: &str, save_path: P, use_auth: bool) -> Result<()> {
         info!("开始下载Docker服务更新包: {}", url);
 
-        // 优先使用AuthenticatedClient进行请求（自动处理认证）
-        let response = if let Some(ref auth_client) = self.authenticated_client {
-            match auth_client.get(&url).await {
-                Ok(request_builder) => auth_client.send(request_builder, &url).await?,
+        // 根据是否需要认证决定使用哪种客户端
+        let response = if use_auth && self.authenticated_client.is_some() {
+            // 使用认证客户端（API下载）
+            let auth_client = self.authenticated_client.as_ref().unwrap();
+            match auth_client.get(url).await {
+                Ok(request_builder) => auth_client.send(request_builder, url).await?,
                 Err(e) => {
                     warn!("使用AuthenticatedClient失败，回退到普通请求: {}", e);
-                    self.build_request(&url).send().await?
+                    self.build_request(url).send().await?
                 }
             }
         } else {
-            self.build_request(&url).send().await?
+            // 使用普通客户端（直接URL下载）
+            info!("使用普通HTTP客户端下载");
+            self.build_request(url).send().await?
         };
 
         if !response.status().is_success() {
@@ -865,29 +887,44 @@ impl ApiClient {
             }
         }
 
-        // 5. 构建下载URL（包含版本参数）
-        let mut download_url = self
-            .config
-            .get_endpoint_url(&self.config.endpoints.docker_download_full);
+        // 5. 根据下载方式构建下载URL
+        let download_url = match manifest.packages.full.download_method.as_str() {
+            "direct" => {
+                // 直接使用服务器返回的URL（OSS等外部存储）
+                info!("📥 使用直接下载方式 (外部存储)");
+                manifest.packages.full.url.clone()
+            }
+            "api" | _ => {
+                // 使用API接口下载（默认方式）
+                info!("📥 使用API接口下载方式");
+                let mut url = self
+                    .config
+                    .get_endpoint_url(&self.config.endpoints.docker_download_full);
 
-        if let Some(v) = version {
-            download_url = format!("{download_url}?version={v}");
-        }
+                if let Some(v) = version {
+                    url = format!("{url}?version={v}");
+                }
+                url
+            }
+        };
 
         info!("📥 开始下载服务更新包...");
+        info!("   下载方式: {}", manifest.packages.full.download_method);
         info!("   源地址: {}", download_url);
         info!("   目标路径: {}", download_path.display());
         info!("   预期文件大小: {} bytes", manifest.packages.full.size);
 
-        // 6. 执行下载 - 使用带进度的下载方法
+        // 6. 执行下载 - 根据下载方式使用正确的认证设置
+        let use_auth = manifest.packages.full.download_method != "direct";
+        
         if let Some(callback) = progress_callback {
             // 使用带进度回调的下载
             info!("🚀 开始带进度的下载...");
-            self.download_with_progress(&download_url, download_path, callback).await?;
+            self.download_with_progress_internal(&download_url, download_path, callback, use_auth).await?;
         } else {
             // 使用普通下载方法
             info!("🚀 开始普通下载...");
-            self.download_service_update(download_path).await?;
+            self.download_service_update_from_url_with_auth(&download_url, download_path, use_auth).await?;
         }
 
         info!("🎉 服务更新包下载完成!");
@@ -918,6 +955,20 @@ impl ApiClient {
     where
         F: Fn(DownloadProgress) + Send + Sync + 'static,
     {
+        self.download_with_progress_internal(url, target_path, progress_callback, true).await
+    }
+
+    /// 带进度回调的下载函数（内部实现，支持是否使用认证）
+    async fn download_with_progress_internal<F>(
+        &self,
+        url: &str,
+        target_path: &Path,
+        progress_callback: F,
+        use_auth: bool,
+    ) -> Result<()>
+    where
+        F: Fn(DownloadProgress) + Send + Sync + 'static,
+    {
         let callback = Arc::new(progress_callback);
         
         // 解析文件名
@@ -943,8 +994,10 @@ impl ApiClient {
         
         info!("🔍 开始下载: {}", url);
         
-        // 开始下载 - 使用认证客户端
-        let mut response = if let Some(ref auth_client) = self.authenticated_client {
+        // 开始下载 - 根据是否需要认证决定使用哪种客户端
+        let mut response = if use_auth && self.authenticated_client.is_some() {
+            // 使用认证客户端（API下载）
+            let auth_client = self.authenticated_client.as_ref().unwrap();
             match auth_client.get(url).await {
                 Ok(request_builder) => auth_client.send(request_builder, url).await?,
                 Err(e) => {
@@ -954,6 +1007,8 @@ impl ApiClient {
                 }
             }
         } else {
+            // 使用普通客户端（直接URL下载）
+            info!("使用普通HTTP客户端下载");
             self.build_request(url).send().await
                 .map_err(|e| DuckError::Api(format!("开始下载失败: {}", e)))?
         };

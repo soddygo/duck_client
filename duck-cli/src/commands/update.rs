@@ -93,8 +93,11 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool, check: bool)
                     Ok(_) => {
                         info!("✅ 强制下载完成!");
                         info!("   文件位置: {}", download_path.display());
+                        info!("   下载版本: {}", target_version);
+                        info!("   当前部署版本: {}", app.config.versions.docker_service);
                         info!("📝 下一步操作:");
                         info!("   运行 'duck-cli docker-service deploy' 来部署服务");
+                        info!("   部署成功后将自动更新配置文件中的版本号");
                         return Ok(());
                     }
                     Err(e) => {
@@ -145,8 +148,11 @@ pub async fn run_upgrade(app: &mut CliApp, full: bool, force: bool, check: bool)
                 Ok(_) => {
                     info!("✅ 服务包已准备就绪!");
                     info!("   文件位置: {}", download_path.display());
+                    info!("   下载版本: {}", target_version);
+                    info!("   当前部署版本: {}", app.config.versions.docker_service);
                     info!("📝 下一步操作:");
                     info!("   运行 'duck-cli docker-service deploy' 来部署服务");
+                    info!("   部署成功后将自动更新配置文件中的版本号");
                 }
                 Err(client_core::error::DuckError::Api(ref msg))
                     if msg.contains("401") || msg.contains("Unauthorized") =>

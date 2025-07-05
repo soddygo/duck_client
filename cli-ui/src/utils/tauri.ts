@@ -91,11 +91,17 @@ export class DialogManager {
   /**
    * 选择目录
    */
-  static async selectDirectory(title = '选择工作目录'): Promise<string | null> {
+  static async selectDirectory(): Promise<string | null> {
     try {
-      return await invoke('select_directory');
+      const result = await openDialog({
+        directory: true,
+        multiple: false,
+        title: '选择工作目录'
+      });
+
+      return result as string | null;
     } catch (error) {
-      console.error('Directory selection failed:', error);
+      console.error('Select directory failed:', error);
       return null;
     }
   }

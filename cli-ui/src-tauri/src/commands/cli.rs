@@ -36,6 +36,9 @@ pub async fn execute_duck_cli_sidecar(
         cmd = cmd.current_dir(dir);
     }
     
+    // 设置GUI模式环境变量，禁用duck-cli的tracing日志输出
+    cmd = cmd.env("DUCK_GUI_MODE", "1");
+    
     let (mut rx, mut _child) = cmd.spawn()
         .map_err(|e| format!("执行命令失败: {}", e))?;
     
@@ -92,6 +95,9 @@ pub async fn execute_duck_cli_system(
     if let Some(dir) = working_dir {
         cmd = cmd.current_dir(dir);
     }
+    
+    // 设置GUI模式环境变量，禁用duck-cli的tracing日志输出
+    cmd = cmd.env("DUCK_GUI_MODE", "1");
     
     let output = cmd.output().await
         .map_err(|e| format!("执行系统命令失败: {}", e))?;

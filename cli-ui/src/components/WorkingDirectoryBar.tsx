@@ -55,7 +55,7 @@ const WorkingDirectoryBar: React.FC<WorkingDirectoryBarProps> = ({ onDirectoryCh
   // 选择目录
   const selectDirectory = async () => {
     try {
-      const selectedPath = await DialogManager.selectDirectory('选择 Duck CLI 工作目录');
+      const selectedPath = await DialogManager.selectDirectory();
       
       if (selectedPath) {
         setCurrentDirectory(selectedPath);

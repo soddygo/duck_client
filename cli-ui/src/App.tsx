@@ -1,11 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import WorkingDirectoryBar from './components/WorkingDirectoryBar';
 import OperationPanel from './components/OperationPanel';
 import TerminalWindow from './components/TerminalWindow';
-import WelcomeSetupModal from './components/WelcomeSetupModal';
-import { LogEntry } from './types';
-import { ConfigManager } from './utils/tauri';
+import { LogEntry, DEFAULT_LOG_CONFIG, LogConfig } from './types';
+import { ConfigManager, DialogManager, FileSystemManager } from './utils/tauri';
 import './App.css';
 
 function App() {
@@ -13,15 +12,126 @@ function App() {
   const [workingDirectory, setWorkingDirectory] = useState<string | null>(null);
   const [isDirectoryValid, setIsDirectoryValid] = useState(false);
   
-  // 日志状态
+  // 日志状态 - 使用循环缓冲区
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logConfig] = useState<LogConfig>(DEFAULT_LOG_CONFIG);
+  const [totalLogCount, setTotalLogCount] = useState(0); // 总日志数量统计
+  const [isInitialized, setIsInitialized] = useState(false); // 初始化状态标记
   
   // 当前执行状态
   const [isExecuting, setIsExecuting] = useState(false);
+  
+  // 使用 useRef 避免循环依赖
+  const logsRef = useRef<LogEntry[]>([]);
+  const lastLogTimeRef = useRef<number>(0);
 
-  // 首次使用引导状态
-  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  // 同步 logs 状态到 ref
+  useEffect(() => {
+    logsRef.current = logs;
+  }, [logs]);
+
+  // 智能日志管理 - 循环缓冲区实现
+  const manageLogBuffer = useCallback((newLogs: LogEntry[]) => {
+    setLogs(currentLogs => {
+      const allLogs = [...currentLogs, ...newLogs];
+      
+      // 检查是否需要清理
+      if (allLogs.length > logConfig.maxEntries) {
+        const excessCount = allLogs.length - logConfig.maxEntries;
+        const trimCount = Math.max(excessCount, logConfig.trimBatchSize);
+        
+        // 保留最新的日志条目
+        const trimmedLogs = allLogs.slice(trimCount);
+        
+        console.log(`日志缓冲区清理: 删除 ${trimCount} 条旧记录, 保留 ${trimmedLogs.length} 条`);
+        
+        return trimmedLogs;
+      }
+      
+      return allLogs;
+    });
+  }, [logConfig.maxEntries, logConfig.trimBatchSize]);
+
+  // 智能去重逻辑 - 使用 ref 避免依赖 logs 状态
+  const shouldSkipDuplicate = useCallback((newMessage: string, newType: LogEntry['type']) => {
+    const currentLogs = logsRef.current;
+    if (currentLogs.length === 0) return false;
+    
+    // 检查最近5条日志
+    const recentLogs = currentLogs.slice(-5);
+    const isDuplicate = recentLogs.some(log => 
+      log.message === newMessage && 
+      log.type === newType &&
+      (Date.now() - parseInt(log.id)) < 1000 // 1秒内的重复（使用ID中的时间戳）
+    );
+    
+    return isDuplicate;
+  }, []);
+
+  // 添加日志条目 - 使用循环缓冲区
+  const addLogEntry = useCallback((
+    type: LogEntry['type'], 
+    message: string, 
+    command?: string, 
+    args?: string[]
+  ) => {
+    // 过滤空消息
+    if (!message.trim() && type !== 'command') return;
+    
+    // 简单的时间限制去重（避免过于频繁的日志）
+    const now = Date.now();
+    if (now - lastLogTimeRef.current < 10) { // 10ms 内的重复调用
+      return;
+    }
+    lastLogTimeRef.current = now;
+    
+    // 智能去重
+    if (shouldSkipDuplicate(message, type)) return;
+    
+    const entry: LogEntry = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      timestamp: new Date().toLocaleTimeString(),
+      type,
+      message,
+      command,
+      args
+    };
+    
+    // 更新统计
+    setTotalLogCount(prev => prev + 1);
+    
+    // 使用循环缓冲区管理
+    manageLogBuffer([entry]);
+  }, [shouldSkipDuplicate, manageLogBuffer]);
+
+  // 导出所有日志
+  const exportAllLogs = useCallback(async () => {
+    try {
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const filename = `duck-cli-logs-${timestamp}.txt`;
+      
+      const logContent = logs.map(log => {
+        const prefix = `[${log.timestamp}] [${log.type.toUpperCase()}]`;
+        if (log.type === 'command') {
+          return `${prefix} $ ${log.command} ${log.args?.join(' ') || ''}`;
+        }
+        return `${prefix} ${log.message}`;
+      }).join('\n');
+
+      const savedPath = await DialogManager.saveFile('导出日志', filename);
+      if (savedPath) {
+        const success = await FileSystemManager.writeTextFile(savedPath, logContent);
+        if (success) {
+          await DialogManager.showMessage('成功', '日志已导出', 'info');
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Export logs failed:', error);
+      return false;
+    }
+  }, [logs]);
 
   // 设置Tauri事件监听器
   useEffect(() => {
@@ -36,9 +146,14 @@ function App() {
           const output = event.payload as string;
           if (output.trim()) {
             // 将输出按行分割并添加到日志
-            const lines = output.split('\n').filter(line => line.trim());
+            const lines = output.split('\n')
+              .filter(line => line.trim())
+              .map(line => line.trim())
+              .filter(line => line.length > 0);
+            
+            // 使用addLogEntry确保去重逻辑
             lines.forEach(line => {
-              addLogEntry('info', line.trim());
+              addLogEntry('info', line);
             });
           }
         });
@@ -48,9 +163,14 @@ function App() {
           const error = event.payload as string;
           if (error.trim()) {
             // 将错误按行分割并添加到日志
-            const lines = error.split('\n').filter(line => line.trim());
+            const lines = error.split('\n')
+              .filter(line => line.trim())
+              .map(line => line.trim())
+              .filter(line => line.length > 0);
+            
+            // 使用addLogEntry确保去重逻辑
             lines.forEach(line => {
-              addLogEntry('error', line.trim());
+              addLogEntry('error', line);
             });
           }
         });
@@ -73,7 +193,6 @@ function App() {
         console.log('Tauri事件监听器已设置');
       } catch (error) {
         console.error('设置事件监听器失败:', error);
-        addLogEntry('error', `事件监听器设置失败: ${error}`);
       }
     };
 
@@ -85,7 +204,7 @@ function App() {
       if (unlistenError) unlistenError();
       if (unlistenComplete) unlistenComplete();
     };
-  }, []);
+  }, [addLogEntry, manageLogBuffer]);
 
   // 处理工作目录变化
   const handleDirectoryChange = useCallback((directory: string | null, isValid: boolean) => {
@@ -98,26 +217,7 @@ function App() {
     } else if (directory && !isValid) {
       addLogEntry('error', `工作目录无效: ${directory}`);
     }
-  }, []);
-
-  // 添加日志条目
-  const addLogEntry = useCallback((
-    type: LogEntry['type'], 
-    message: string, 
-    command?: string, 
-    args?: string[]
-  ) => {
-    const entry: LogEntry = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      timestamp: new Date().toLocaleTimeString(),
-      type,
-      message,
-      command,
-      args
-    };
-    
-    setLogs(prev => [...prev, entry]);
-  }, []);
+  }, [addLogEntry]);
 
   // 处理命令执行
   const handleCommandExecute = useCallback((command: string, args: string[]) => {
@@ -136,52 +236,81 @@ function App() {
   // 清除日志
   const handleClearLogs = useCallback(() => {
     setLogs([]);
+    setTotalLogCount(0);
     addLogEntry('info', '日志已清除');
   }, [addLogEntry]);
 
-  // 处理欢迎弹窗完成
-  const handleWelcomeComplete = useCallback((directory: string) => {
-    setWorkingDirectory(directory);
-    setShowWelcomeModal(false);
-    addLogEntry('success', `工作目录设置完成: ${directory}`);
-    addLogEntry('info', '现在可以开始使用 Duck CLI 功能了');
-  }, [addLogEntry]);
-
-  // 处理欢迎弹窗跳过
-  const handleWelcomeSkip = useCallback(() => {
-    setShowWelcomeModal(false);
-    addLogEntry('warning', '已跳过工作目录设置');
-    addLogEntry('info', '您可以随时点击顶部的"选择目录"按钮进行设置');
-  }, [addLogEntry]);
-
-  // 应用初始化
+  // 应用初始化 - 只执行一次
   useEffect(() => {
+    if (isInitialized) return;
+
     const initializeApp = async () => {
-      addLogEntry('info', 'Duck CLI GUI 已启动');
+      console.log('开始初始化应用...');
+      
+      // 使用直接的状态更新避免循环
+      const initEntry: LogEntry = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        timestamp: new Date().toLocaleTimeString(),
+        type: 'info',
+        message: '🚀 Duck CLI GUI 已启动'
+      };
+      
+      const configEntry: LogEntry = {
+        id: (Date.now() + 1).toString() + Math.random().toString(36).substr(2, 9),
+        timestamp: new Date().toLocaleTimeString(),
+        type: 'info',
+        message: `📊 日志管理: 最大 ${logConfig.maxEntries} 条，自动循环覆盖旧记录`
+      };
+      
+      setLogs([initEntry, configEntry]);
+      setTotalLogCount(2);
       
       try {
         // 检查是否已有保存的工作目录
         const savedDirectory = await ConfigManager.getWorkingDirectory();
         
         if (savedDirectory) {
-          addLogEntry('info', `加载保存的工作目录: ${savedDirectory}`);
+          const dirEntry: LogEntry = {
+            id: (Date.now() + 2).toString() + Math.random().toString(36).substr(2, 9),
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'info',
+            message: `📁 加载保存的工作目录: ${savedDirectory}`
+          };
+          
+          setLogs(prev => [...prev, dirEntry]);
+          setTotalLogCount(prev => prev + 1);
           setWorkingDirectory(savedDirectory);
-          // 工作目录验证会在 WorkingDirectoryBar 组件中进行
         } else {
-          addLogEntry('info', '未发现保存的工作目录设置');
-          setShowWelcomeModal(true);
+          const noDirEntry: LogEntry = {
+            id: (Date.now() + 3).toString() + Math.random().toString(36).substr(2, 9),
+            timestamp: new Date().toLocaleTimeString(),
+            type: 'info',
+            message: '❓ 未发现保存的工作目录设置'
+          };
+          
+          setLogs(prev => [...prev, noDirEntry]);
+          setTotalLogCount(prev => prev + 1);
         }
       } catch (error) {
         console.error('初始化失败:', error);
-        addLogEntry('error', '应用初始化失败，请重新设置工作目录');
-        setShowWelcomeModal(true);
-      } finally {
-        setIsInitialLoad(false);
+        
+        const errorEntry: LogEntry = {
+          id: (Date.now() + 4).toString() + Math.random().toString(36).substr(2, 9),
+          timestamp: new Date().toLocaleTimeString(),
+          type: 'error',
+          message: '❌ 应用初始化失败，请重新设置工作目录'
+        };
+        
+        setLogs(prev => [...prev, errorEntry]);
+        setTotalLogCount(prev => prev + 1);
       }
+      
+      setIsInitialized(true);
+      console.log('应用初始化完成');
     };
 
     initializeApp();
-  }, [addLogEntry]);
+  }, [isInitialized, logConfig.maxEntries]);
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
@@ -206,6 +335,9 @@ function App() {
             logs={logs}
             onClearLogs={handleClearLogs}
             isEnabled={isDirectoryValid}
+            totalLogCount={totalLogCount}
+            maxLogEntries={logConfig.maxEntries}
+            onExportLogs={exportAllLogs}
           />
         </div>
       </div>
@@ -217,13 +349,6 @@ function App() {
           <span className="text-sm font-medium">正在执行命令...</span>
         </div>
       )}
-
-      {/* 首次使用引导弹窗 */}
-      <WelcomeSetupModal
-        isOpen={showWelcomeModal}
-        onComplete={handleWelcomeComplete}
-        onSkip={handleWelcomeSkip}
-      />
     </div>
   );
 }

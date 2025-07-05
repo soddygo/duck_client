@@ -28,7 +28,7 @@ const WelcomeSetupModal: React.FC<WelcomeSetupModalProps> = ({
   // 选择目录
   const handleSelectDirectory = async () => {
     try {
-      const directory = await DialogManager.selectDirectory('选择 Duck CLI 工作目录');
+      const directory = await DialogManager.selectDirectory();
       if (directory) {
         setSelectedDirectory(directory);
         await validateDirectory(directory);

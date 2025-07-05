@@ -40,32 +40,57 @@ const TerminalWindow: React.FC<TerminalWindowProps> = ({
   const [autoScroll, setAutoScroll] = useState(true);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const userInteractedRef = useRef(false);  // 跟踪用户是否主动交互
+  const isAutoScrollingRef = useRef(false); // 跟踪是否正在自动滚动
 
   // 自动滚动到底部
   useEffect(() => {
     if (autoScroll && logsEndRef.current) {
+      isAutoScrollingRef.current = true;
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      // 短暂延迟后重置自动滚动标记
+      setTimeout(() => {
+        isAutoScrollingRef.current = false;
+      }, 100);
     }
   }, [logs, autoScroll]);
 
   // 检测用户是否手动滚动
   const handleScroll = () => {
+    // 如果正在自动滚动，忽略这次滚动事件
+    if (isAutoScrollingRef.current) {
+      return;
+    }
+    
     if (containerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
       const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
       
-      // 只有在用户手动滚动时才暂停自动滚动
-      if (!isAtBottom && autoScroll) {
+      // 只有在用户真正交互并且不在底部时才暂停自动滚动
+      if (!isAtBottom && autoScroll && userInteractedRef.current) {
         setAutoScroll(false);
       }
     }
   };
 
+  // 检测用户开始交互
+  const handleUserInteraction = () => {
+    userInteractedRef.current = true;
+    // 短暂延迟后重置交互标记，允许自动滚动恢复
+    setTimeout(() => {
+      userInteractedRef.current = false;
+    }, 1000);
+  };
+
   // 手动滚动到底部
   const scrollToBottom = () => {
     if (logsEndRef.current) {
+      isAutoScrollingRef.current = true;
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
       setAutoScroll(true); // 重新启用自动滚动
+      setTimeout(() => {
+        isAutoScrollingRef.current = false;
+      }, 100);
     }
   };
 
@@ -168,6 +193,9 @@ const TerminalWindow: React.FC<TerminalWindowProps> = ({
       <div 
         ref={containerRef}
         onScroll={handleScroll}
+        onMouseDown={handleUserInteraction}
+        onWheel={handleUserInteraction}
+        onKeyDown={handleUserInteraction}
         className="flex-1 overflow-y-auto p-4 bg-gray-900 text-green-400 font-mono text-sm"
         style={{ minHeight: '300px' }}
       >

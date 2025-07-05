@@ -867,6 +867,12 @@ impl ApiClient {
         // 3. 检查是否为外链文件（hash为"external"）
         let is_external_file = manifest.packages.full.hash.to_lowercase() == "external";
         
+        info!("🔍 下载方式判断:");
+        info!("   原始URL: {}", manifest.packages.full.url);
+        info!("   Hash值: {}", manifest.packages.full.hash);
+        info!("   是否外链: {}", is_external_file);
+        info!("   配置的base_url: {}", self.config.base_url);
+        
         if is_external_file {
             info!("📦 检测到外链文件，跳过本地文件验证");
             // 外链文件始终需要下载，不进行本地文件检查
@@ -910,6 +916,7 @@ impl ApiClient {
                 let mut url = manifest.packages.full.url.clone();
                 if let Some(v) = version {
                     url = format!("{url}?version={v}");
+                    info!("   添加版本参数后的URL: {}", url);
                 }
                 (url, true)
             } else {
@@ -924,16 +931,19 @@ impl ApiClient {
                 .config
                 .get_endpoint_url(&self.config.endpoints.docker_download_full);
 
+            info!("   构建的API接口URL: {}", url);
             if let Some(v) = version {
                 url = format!("{url}?version={v}");
+                info!("   添加版本参数后的URL: {}", url);
             }
             (url, true)
         };
 
         info!("📥 开始下载服务更新包...");
         info!("   下载方式: {}", if use_auth { "API接口" } else { "直接下载" });
-        info!("   源地址: {}", download_url);
+        info!("   最终下载URL: {}", download_url);
         info!("   目标路径: {}", download_path.display());
+        info!("   使用认证: {}", use_auth);
         if manifest.packages.full.size > 0 {
             info!("   预期文件大小: {} bytes", manifest.packages.full.size);
         } else {

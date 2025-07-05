@@ -185,34 +185,47 @@ jobs:
           if [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" ]]; then
             echo "=== 设置 ARM64 交叉编译环境 ==="
             
-            # 添加 ARM64 架构支持
-            sudo dpkg --add-architecture arm64 >/dev/null 2>&1
+            # 强制使用 cross 工具避免包管理器问题
+            echo "⚠️  由于 GitHub Actions ARM64 包管理器问题，直接使用 cross 工具"
+            echo "USE_CROSS_COMPILE=true" >> $GITHUB_ENV
             
-            # 更新包列表（允许失败）
-            if ! sudo apt-get update >/dev/null 2>&1; then
-              echo "⚠️  ARM64 包列表更新失败，尝试使用现有缓存"
+            # 尝试添加 ARM64 架构支持（允许失败）
+            echo "=== 尝试添加 ARM64 架构支持 ==="
+            if sudo dpkg --add-architecture arm64 >/dev/null 2>&1; then
+              echo "✅ ARM64 架构添加成功"
+            else
+              echo "⚠️  ARM64 架构添加失败，继续使用 cross 工具"
             fi
             
-            # 安装 ARM64 交叉编译工具（允许失败）
-            echo "=== 安装 ARM64 交叉编译工具链 ==="
+            # 尝试更新包列表（允许失败）
+            echo "=== 尝试更新 ARM64 包列表 ==="
+            if sudo apt-get update >/dev/null 2>&1; then
+              echo "✅ 包列表更新成功"
+            else
+              echo "⚠️  包列表更新失败，继续使用 cross 工具"
+            fi
+            
+            # 尝试安装 ARM64 交叉编译工具（允许失败）
+            echo "=== 尝试安装 ARM64 交叉编译工具链 ==="
             if sudo apt-get install -y gcc-aarch64-linux-gnu >/dev/null 2>&1; then
               echo "✅ ARM64 交叉编译工具链安装成功"
               echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+              # 即使工具链安装成功，仍然使用cross工具避免其他问题
+              echo "🔧 为了确保稳定性，仍使用 cross 工具进行构建"
             else
-              echo "⚠️  ARM64 交叉编译工具链安装失败，使用 cross 工具"
+              echo "⚠️  ARM64 交叉编译工具链安装失败，确认使用 cross 工具"
             fi
             
-            # 尝试安装 ARM64 开发包（允许失败）
-            echo "=== 尝试安装 ARM64 开发包（可选） ==="
-            if sudo apt-get install -y libglib2.0-dev:arm64 >/dev/null 2>&1; then
-              echo "✅ ARM64 GLib 包安装成功"
-              echo "PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
-              echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
-              echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
+            # 尝试安装 ARM64 开发包（允许失败，不影响构建）
+            echo "=== 尝试安装 ARM64 开发包 ==="
+            set +e  # 临时禁用 exit on error
+            sudo apt-get install -y libglib2.0-dev:arm64 >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+              echo "✅ ARM64 GLib 包安装成功（将使用 cross 工具构建）"
             else
-              echo "⚠️  ARM64 GLib 包安装失败，将使用 cross 工具进行交叉编译"
-              echo "USE_CROSS_COMPILE=true" >> $GITHUB_ENV
+              echo "⚠️  ARM64 GLib 包安装失败（预期结果，将使用 cross 工具构建）"
             fi
+            set -e  # 重新启用 exit on error
           fi
           
           # 验证 GLib 安装
@@ -242,33 +255,29 @@ jobs:
           if [[ "${{ matrix.platform.os }}" == "ubuntu-latest" ]]; then
             if [[ "${{ matrix.platform.target }}" == "x86_64-unknown-linux-gnu" ]]; then
               export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:$PKG_CONFIG_PATH"
+              export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
+              export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
+              
+              # 验证 glib 依赖
+              echo "=== 验证 glib 依赖 ==="
+              pkg-config --exists glib-2.0 && echo "✅ glib-2.0 available" || echo "❌ glib-2.0 not found"
             elif [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-              # 仅在成功安装 ARM64 开发包时设置交叉编译环境
-              if [[ "$USE_CROSS_COMPILE" != "true" ]]; then
-                export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH"
-                export PKG_CONFIG_ALLOW_CROSS=1
-                export PKG_CONFIG_SYSROOT_DIR=/
-              fi
+              echo "=== ARM64 构建使用 cross 工具，跳过本地环境变量设置 ==="
             fi
-            
-            # 添加通用的 pkg-config 设置
-            export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
-            export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
-            
-            # 验证 glib 是否可用
-            echo "=== 验证 glib 依赖 ==="
-            pkg-config --exists glib-2.0 && echo "✅ glib-2.0 available" || echo "❌ glib-2.0 not found"
           fi
           
           # 选择构建方法
-          if [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" && "$USE_CROSS_COMPILE" == "true" ]]; then
+          if [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" ]]; then
             echo "=== 使用 cross 工具进行 ARM64 交叉编译 ==="
+            echo "目标架构: ${{ matrix.platform.target }}"
             cross build --release --target ${{ matrix.platform.target }} -p duck-cli
           elif [ "${{ matrix.platform.cross }}" = "true" ]; then
             echo "=== 使用 cross 工具进行交叉编译 ==="
+            echo "目标架构: ${{ matrix.platform.target }}"
             cross build --release --target ${{ matrix.platform.target }} -p duck-cli
           else
             echo "=== 本地编译 for ${{ matrix.platform.target }} ==="
+            echo "目标架构: ${{ matrix.platform.target }}"
             cargo build --release --target ${{ matrix.platform.target }} -p duck-cli
           fi
         shell: bash

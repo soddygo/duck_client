@@ -79,6 +79,15 @@ jobs:
             sudo apt-get install -y libwebkit2gtk-4.1-dev || echo "❌ WebKit 安装失败，继续..."
           fi
           
+          # 安装 libsoup-3.0 (Tauri 2.0 需要)
+          echo "=== 安装 libsoup-3.0 ==="
+          if sudo apt-get install -y libsoup-3.0-dev; then
+            echo "✅ libsoup-3.0-dev 安装成功"
+          else
+            echo "⚠️ libsoup-3.0-dev 安装失败，尝试备用方案"
+            sudo apt-get install -y libsoup2.4-dev || echo "❌ libsoup 安装失败"
+          fi
+          
           sudo apt-get install -y \
             librsvg2-dev \
             patchelf
@@ -106,9 +115,16 @@ jobs:
           pkg-config --exists gobject-2.0 && echo "✅ gobject-2.0 found" || echo "❌ gobject-2.0 not found"
           pkg-config --exists gio-2.0 && echo "✅ gio-2.0 found" || echo "❌ gio-2.0 not found"
           
+          # 验证 Tauri 2.0 关键依赖
+          echo "=== Tauri 2.0 关键依赖验证 ==="
+          pkg-config --exists libsoup-3.0 && echo "✅ libsoup-3.0 found" || echo "❌ libsoup-3.0 not found"
+          pkg-config --exists webkit2gtk-4.0 && echo "✅ webkit2gtk-4.0 found" || echo "❌ webkit2gtk-4.0 not found"
+          pkg-config --exists webkit2gtk-4.1 && echo "✅ webkit2gtk-4.1 found" || echo "❌ webkit2gtk-4.1 not found"
+          
           # 显示版本信息
-          echo "=== GLib 版本信息 ==="
+          echo "=== 依赖版本信息 ==="
           pkg-config --modversion glib-2.0 gobject-2.0 gio-2.0 2>/dev/null || echo "❌ version check failed"
+          pkg-config --modversion libsoup-3.0 2>/dev/null || echo "⚠️ libsoup-3.0 version check failed"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -244,9 +260,16 @@ jobs:
           pkg-config --exists gobject-2.0 && echo "✅ gobject-2.0 found" || echo "❌ gobject-2.0 not found"
           pkg-config --exists gio-2.0 && echo "✅ gio-2.0 found" || echo "❌ gio-2.0 not found"
           
+          # 验证 Tauri 2.0 关键依赖
+          echo "=== Tauri 2.0 关键依赖验证 ==="
+          pkg-config --exists libsoup-3.0 && echo "✅ libsoup-3.0 found" || echo "❌ libsoup-3.0 not found"
+          pkg-config --exists webkit2gtk-4.0 && echo "✅ webkit2gtk-4.0 found" || echo "❌ webkit2gtk-4.0 not found"
+          pkg-config --exists webkit2gtk-4.1 && echo "✅ webkit2gtk-4.1 found" || echo "❌ webkit2gtk-4.1 not found"
+          
           # 显示版本信息
-          echo "=== GLib 版本信息 ==="
+          echo "=== 依赖版本信息 ==="
           pkg-config --modversion glib-2.0 gobject-2.0 gio-2.0 2>/dev/null || echo "❌ version check failed"
+          pkg-config --modversion libsoup-3.0 2>/dev/null || echo "⚠️ libsoup-3.0 version check failed"
           
           # 手动验证关键的 .pc 文件
           echo "=== 验证主机架构 .pc 文件 ==="
@@ -290,8 +313,16 @@ jobs:
             libatk1.0-dev \
             libgdk-pixbuf-2.0-dev || echo "⚠️ 部分图形库安装失败"
           
+          # 安装 libsoup-3.0 (Tauri 2.0 需要)
+          echo "=== 安装 libsoup-3.0 ==="
+          if sudo apt-get install -y libsoup-3.0-dev; then
+            echo "✅ libsoup-3.0-dev 安装成功"
+          else
+            echo "⚠️ libsoup-3.0-dev 安装失败，尝试备用方案"
+            sudo apt-get install -y libsoup2.4-dev || echo "❌ libsoup 安装失败"
+          fi
+          
           sudo apt-get install -y \
-            libsoup2.4-dev \
             libjavascriptcoregtk-4.0-dev || echo "⚠️ 部分JavaScript库安装失败"
           
           sudo apt-get install -y \
@@ -366,6 +397,12 @@ jobs:
             libglib2.0-dev:arm64 \
             2>/dev/null || echo "⚠️  ARM64 GLib 包安装失败，将使用主机架构的头文件"
           
+          # 尝试安装 ARM64 的 libsoup-3.0
+          echo "=== 安装 ARM64 libsoup-3.0 ==="
+          sudo apt-get install -y \
+            libsoup-3.0-dev:arm64 \
+            2>/dev/null || echo "⚠️  ARM64 libsoup-3.0 包安装失败，将使用主机架构的库"
+          
           # 设置交叉编译环境变量
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
@@ -406,10 +443,13 @@ jobs:
             pkg-config --exists glib-2.0 && echo "✅ glib-2.0 available" || echo "❌ glib-2.0 not found"
             pkg-config --exists gobject-2.0 && echo "✅ gobject-2.0 available" || echo "❌ gobject-2.0 not found"
             pkg-config --exists gio-2.0 && echo "✅ gio-2.0 available" || echo "❌ gio-2.0 not found"
+            pkg-config --exists libsoup-3.0 && echo "✅ libsoup-3.0 available" || echo "❌ libsoup-3.0 not found"
             
             # 测试关键库的编译标志
             pkg-config --cflags glib-2.0 gobject-2.0 gio-2.0 2>/dev/null || echo "❌ pkg-config cflags failed"
             pkg-config --libs glib-2.0 gobject-2.0 gio-2.0 2>/dev/null || echo "❌ pkg-config libs failed"
+            pkg-config --cflags libsoup-3.0 2>/dev/null || echo "❌ libsoup-3.0 cflags failed"
+            pkg-config --libs libsoup-3.0 2>/dev/null || echo "❌ libsoup-3.0 libs failed"
           fi
           
           # 只构建 duck-cli 模块，避免其他模块的依赖问题

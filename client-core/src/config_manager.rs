@@ -498,7 +498,7 @@ impl ConfigManager {
             for update in &updates {
                 let value_json = serde_json::to_string(&update.value)
                     .map_err(|e| duckdb::Error::InvalidParameterName(format!("JSON序列化失败: {}", e)))?;
-                
+
                 conn.execute(
                     "UPDATE app_config SET config_value = ?, updated_at = CURRENT_TIMESTAMP WHERE config_key = ?",
                     [&value_json, &update.key]

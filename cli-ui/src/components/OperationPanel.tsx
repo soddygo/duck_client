@@ -13,6 +13,9 @@ import {
   Cog6ToothIcon
 } from '@heroicons/react/24/outline';
 import { DuckCliManager, UpdateManager, DialogManager } from '../utils/tauri';
+import ParameterInputModal from './ParameterInputModal';
+import { getCommandConfig, needsParameterInput } from '../config/commandConfigs';
+import { CommandConfig, ParameterInputResult } from '../types';
 
 interface OperationPanelProps {
   workingDirectory: string | null;
@@ -26,9 +29,10 @@ interface ActionButton {
   title: string;
   description: string;
   icon: React.ReactNode;
-  action: () => Promise<void>;
+  action: (parameters?: ParameterInputResult) => Promise<void>;
   variant: 'primary' | 'secondary' | 'success' | 'warning' | 'danger';
   disabled?: boolean;
+  commandId?: string; // 对应的命令ID，用于参数输入
 }
 
 const OperationPanel: React.FC<OperationPanelProps> = ({
@@ -38,17 +42,38 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
   onLogMessage
 }) => {
   const [executingActions, setExecutingActions] = useState<Set<string>>(new Set());
+  const [parameterModalOpen, setParameterModalOpen] = useState(false);
+  const [currentCommand, setCurrentCommand] = useState<{
+    actionId: string;
+    config: CommandConfig;
+    actionFn: (parameters?: ParameterInputResult) => Promise<void>;
+  } | null>(null);
 
   // 检查是否禁用（工作目录无效）
   const isDisabled = !workingDirectory || !isDirectoryValid;
 
   // 执行操作的包装函数
-  const executeAction = async (actionId: string, actionFn: () => Promise<void>) => {
+  const executeAction = async (actionId: string, actionFn: (parameters?: ParameterInputResult) => Promise<void>, commandId?: string) => {
     if (isDisabled) {
       await DialogManager.showMessage('警告', '请先设置有效的工作目录', 'warning');
       return;
     }
 
+    // 检查是否需要参数输入
+    if (commandId && needsParameterInput(commandId)) {
+      const config = getCommandConfig(commandId);
+      if (config) {
+        setCurrentCommand({
+          actionId,
+          config,
+          actionFn
+        });
+        setParameterModalOpen(true);
+        return;
+      }
+    }
+
+    // 直接执行命令（无参数）
     setExecutingActions(prev => new Set(prev).add(actionId));
     
     try {
@@ -64,6 +89,75 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
     }
   };
 
+  // 处理参数输入确认
+  const handleParameterConfirm = async (parameters: ParameterInputResult) => {
+    if (!currentCommand) return;
+    
+    setParameterModalOpen(false);
+    setExecutingActions(prev => new Set(prev).add(currentCommand.actionId));
+    
+    try {
+      await currentCommand.actionFn(parameters);
+    } catch (error) {
+      onLogMessage(`操作失败: ${error}`, 'error');
+    } finally {
+      setExecutingActions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentCommand.actionId);
+        return newSet;
+      });
+      setCurrentCommand(null);
+    }
+  };
+
+  // 处理参数输入取消
+  const handleParameterCancel = () => {
+    setParameterModalOpen(false);
+    setCurrentCommand(null);
+  };
+
+  // 构建命令行参数
+  const buildCommandArgs = (baseArgs: string[], parameters: ParameterInputResult, positionalParams: string[] = []): string[] => {
+    const args = [...baseArgs];
+    
+    // 处理位置参数（如 backup_id, container_name 等）
+    positionalParams.forEach(paramName => {
+      const value = parameters[paramName];
+      if (value !== undefined && value !== null && value !== '') {
+        args.push(value.toString());
+      }
+    });
+    
+    // 处理选项参数
+    for (const [key, value] of Object.entries(parameters)) {
+      // 跳过位置参数，它们已经处理过了
+      if (positionalParams.includes(key)) continue;
+      
+      if (value === undefined || value === null || value === '') continue;
+      
+      if (typeof value === 'boolean') {
+        if (value) {
+          args.push(`--${key}`);
+        }
+      } else if (Array.isArray(value)) {
+        value.forEach(v => {
+          args.push(`--${key}`, v);
+        });
+      } else {
+        // 特殊处理：某些参数名需要转换
+        const paramName = key === 'args' ? '' : `--${key}`;
+        if (paramName) {
+          args.push(paramName, value.toString());
+        } else {
+          // 对于 args 参数，直接添加值（用于 ducker 命令）
+          args.push(value.toString());
+        }
+      }
+    }
+    
+    return args;
+  };
+
   // 定义所有操作按钮
   const actionButtons: ActionButton[] = [
     {
@@ -72,9 +166,15 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       description: '初始化 Duck CLI 项目',
       icon: <RocketLaunchIcon className="h-5 w-5" />,
       variant: 'primary',
-      action: async () => {
+      commandId: 'init',
+      action: async (parameters?: ParameterInputResult) => {
         onLogMessage('开始初始化项目...', 'info');
-        onCommandExecute('duck-cli', ['init']);
+        
+        // 构建命令参数
+        const baseArgs = ['init'];
+        const args = parameters ? buildCommandArgs(baseArgs, parameters, []) : baseArgs;
+        
+        onCommandExecute('duck-cli', args);
         
         const result = await DuckCliManager.initialize(workingDirectory!);
         if (result.success) {
@@ -90,9 +190,16 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       description: '下载 Docker 服务镜像',
       icon: <CloudArrowDownIcon className="h-5 w-5" />,
       variant: 'secondary',
-      action: async () => {
+      commandId: 'upgrade',
+      action: async (parameters?: ParameterInputResult) => {
         onLogMessage('开始下载服务...', 'info');
-        onCommandExecute('duck-cli', ['upgrade', '--full']);
+        
+        // 默认使用全量下载，除非用户指定了其他参数
+        const defaultParams = { full: true, ...parameters };
+        const baseArgs = ['upgrade'];
+        const args = buildCommandArgs(baseArgs, defaultParams, []);
+        
+        onCommandExecute('duck-cli', args);
         
         const result = await DuckCliManager.upgradeService(workingDirectory!, true);
         if (result.success) {
@@ -108,9 +215,15 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       description: '自动升级并部署服务',
       icon: <ArrowUpTrayIcon className="h-5 w-5" />,
       variant: 'primary',
-      action: async () => {
+      commandId: 'auto-upgrade-deploy',
+      action: async (parameters?: ParameterInputResult) => {
         onLogMessage('开始一键部署...', 'info');
-        onCommandExecute('duck-cli', ['auto-upgrade-deploy', 'run']);
+        
+        // 构建命令参数
+        const baseArgs = ['auto-upgrade-deploy', 'run'];
+        const args = parameters ? buildCommandArgs(baseArgs, parameters, []) : baseArgs;
+        
+        onCommandExecute('duck-cli', args);
         
         const result = await DuckCliManager.autoUpgradeDeploy(workingDirectory!);
         if (result.success) {
@@ -180,9 +293,19 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       description: '检查服务更新',
       icon: <CheckBadgeIcon className="h-5 w-5" />,
       variant: 'secondary',
-      action: async () => {
+      commandId: 'check-update',
+      action: async (parameters?: ParameterInputResult) => {
         onLogMessage('检查更新...', 'info');
-        onCommandExecute('duck-cli', ['check-update', 'check']);
+        
+        // 构建命令参数
+        const action = parameters?.action || 'check';
+        const baseArgs = ['check-update', action];
+        const filteredParams = parameters ? {...parameters} : {};
+        delete filteredParams.action; // 移除action参数，它已经作为子命令使用
+        
+        const args = Object.keys(filteredParams).length > 0 ? buildCommandArgs(baseArgs, filteredParams, []) : baseArgs;
+        
+        onCommandExecute('duck-cli', args);
         
         const result = await DuckCliManager.checkCliUpdate(workingDirectory!);
         if (result.success) {
@@ -198,9 +321,15 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
       description: '升级 Docker 服务',
       icon: <WrenchScrewdriverIcon className="h-5 w-5" />,
       variant: 'primary',
-      action: async () => {
+      commandId: 'upgrade',
+      action: async (parameters?: ParameterInputResult) => {
         onLogMessage('升级服务...', 'info');
-        onCommandExecute('duck-cli', ['upgrade']);
+        
+        // 构建命令参数
+        const baseArgs = ['upgrade'];
+        const args = parameters ? buildCommandArgs(baseArgs, parameters, []) : baseArgs;
+        
+        onCommandExecute('duck-cli', args);
         
         const result = await DuckCliManager.upgradeService(workingDirectory!);
         if (result.success) {
@@ -331,7 +460,7 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
           return (
             <button
               key={button.id}
-              onClick={() => executeAction(button.id, button.action)}
+              onClick={() => executeAction(button.id, button.action, button.commandId)}
               disabled={isButtonDisabled}
               className={getButtonStyle(button.variant, isButtonDisabled, isExecuting)}
               title={button.description}
@@ -368,6 +497,14 @@ const OperationPanel: React.FC<OperationPanelProps> = ({
           </div>
         </div>
       )}
+
+      {/* 参数输入模态框 */}
+      <ParameterInputModal
+        isOpen={parameterModalOpen}
+        commandConfig={currentCommand?.config || null}
+        onConfirm={handleParameterConfirm}
+        onCancel={handleParameterCancel}
+      />
     </div>
   );
 };

@@ -41,4 +41,47 @@ export interface CommandResult {
   success: boolean;
   output: string;
   error?: string;
+}
+
+// 参数类型定义
+export interface CommandParameter {
+  name: string;           // 参数名称
+  label: string;          // 显示标签
+  type: 'text' | 'number' | 'boolean' | 'select' | 'multiselect';
+  required?: boolean;     // 是否必填
+  defaultValue?: any;     // 默认值
+  placeholder?: string;   // 占位符
+  description?: string;   // 参数说明
+  options?: Array<{       // 选择类型的选项
+    value: string;
+    label: string;
+  }>;
+  min?: number;          // 数字类型的最小值
+  max?: number;          // 数字类型的最大值
+  validation?: {         // 验证规则
+    pattern?: string;
+    message?: string;
+  };
+}
+
+// 命令配置定义
+export interface CommandConfig {
+  id: string;
+  name: string;
+  description: string;
+  parameters: CommandParameter[];
+  examples?: string[];    // 使用示例
+}
+
+// 参数输入结果
+export interface ParameterInputResult {
+  [key: string]: any;
+}
+
+// 参数输入模态框属性
+export interface ParameterInputModalProps {
+  isOpen: boolean;
+  commandConfig: CommandConfig | null;
+  onConfirm: (parameters: ParameterInputResult) => void;
+  onCancel: () => void;
 } 

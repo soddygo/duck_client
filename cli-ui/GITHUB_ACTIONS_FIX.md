@@ -130,5 +130,30 @@ Tauri 应用需要 WebKit 和 GTK 生态系统：
   - **GIO**: 现代 I/O 和应用程序框架
 - **Cairo/Pango**: 图形和文本渲染
 
-## 日期
-2024-07-05 - GitHub Actions 构建问题修复完成 
+## 更新日志
+
+### 2024-07-05 - 第三轮修复：完整的 Tauri 2.0 依赖
+**问题**: 即使安装了 GLib 相关依赖，仍然出现 `glib-2.0 not found` 错误
+
+**新策略**:
+1. **分步骤安装**: 先安装基础工具，再安装 GLib 系统，最后安装完整依赖
+2. **验证机制**: 每个步骤后验证安装状态
+3. **调试信息**: 详细的错误诊断和路径检查
+4. **完整覆盖**: 安装所有可能的 Tauri 2.0 依赖
+
+**新增依赖**:
+- libxdo-dev (X11 窗口操作)
+- 图形库: libjpeg-dev, libpng-dev, libtiff-dev, libgif-dev
+- X11 系统: libx11-dev, libxext-dev, libxft-dev, libxinerama-dev
+- 窗口管理: libxcursor-dev, libxrender-dev, libxfixes-dev, libxrandr-dev
+- 系统服务: libxss-dev, libgconf-2-4, libxss1
+
+### 2024-07-05 - 第二轮修复：GObject 系统
+**问题**: `gobject-2.0` 依赖缺失
+
+**解决方案**: 添加 libgobject-2.0-dev 和 libgio-2.0-dev
+
+### 2024-07-05 - 第一轮修复：glib-2.0 缺失
+**问题**: `glib-2.0` 依赖缺失
+
+**解决方案**: 添加 libglib2.0-dev 和相关依赖 

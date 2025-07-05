@@ -56,10 +56,9 @@ jobs:
             pkg-config
           
           # 安装 GLib 和相关系统库
+          # 注意：gobject-2.0 和 gio-2.0 功能都包含在 libglib2.0-dev 中
           sudo apt-get install -y \
             libglib2.0-dev \
-            libgobject-2.0-dev \
-            libgio-2.0-dev \
             libglib2.0-0 \
             libglib2.0-data \
             libglib2.0-bin \
@@ -204,10 +203,9 @@ jobs:
           fi
           
           # 安装 GLib 和相关系统库 (完整包含所有必需的 dev 包)
+          # 注意：gobject-2.0 和 gio-2.0 功能都包含在 libglib2.0-dev 中
           sudo apt-get install -y \
             libglib2.0-dev \
-            libgobject-2.0-dev \
-            libgio-2.0-dev \
             libglib2.0-0 \
             libglib2.0-data \
             libglib2.0-bin \
@@ -315,10 +313,9 @@ jobs:
           
           # 尝试安装 ARM64 的 GLib 开发包
           echo "=== 安装 ARM64 GLib 依赖 ==="
+          # 注意：gobject-2.0 和 gio-2.0 功能都包含在 libglib2.0-dev 中
           sudo apt-get install -y \
             libglib2.0-dev:arm64 \
-            libgobject-2.0-dev:arm64 \
-            libgio-2.0-dev:arm64 \
             2>/dev/null || echo "⚠️  ARM64 GLib 包安装失败，将使用主机架构的头文件"
           
           # 设置交叉编译环境变量

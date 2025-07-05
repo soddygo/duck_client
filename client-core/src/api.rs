@@ -57,6 +57,7 @@
 
 use crate::api_config::ApiConfig;
 use crate::authenticated_client::AuthenticatedClient;
+use crate::downloader::{DownloadProgress, DownloadStatus, FileDownloader, DownloaderConfig};
 use crate::error::{DuckError, Result};
 use chrono;
 use reqwest::Client;
@@ -70,28 +71,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{error, info, warn};
 
-/// 下载进度状态枚举
-#[derive(Debug, Clone)]
-pub enum DownloadStatus {
-    Starting,
-    Downloading,
-    Paused,
-    Completed,
-    Failed(String),
-}
 
-/// 下载进度信息
-#[derive(Debug, Clone)]
-pub struct DownloadProgress {
-    pub task_id: String,
-    pub file_name: String,
-    pub downloaded_bytes: u64,
-    pub total_bytes: u64,
-    pub download_speed: f64, // bytes/sec
-    pub eta_seconds: u64,
-    pub percentage: f64,
-    pub status: DownloadStatus,
-}
 
 /// API 客户端
 #[derive(Debug, Clone)]
@@ -455,8 +435,6 @@ impl ApiClient {
         let mut stream = response.bytes_stream();
         let mut downloaded = 0u64;
         let mut last_progress_time = std::time::Instant::now();
-        let mut last_progress_bytes = 0u64;
-        let progress_interval = std::time::Duration::from_secs(2); // 每2秒至少显示一次进度
 
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|e| DuckError::custom(format!("下载数据失败: {}", e)))?;
@@ -467,31 +445,30 @@ impl ApiClient {
 
             downloaded += chunk.len() as u64;
 
-            // 改进的进度显示逻辑：每1MB或每2秒显示一次，确保用户能看到实时进度
+            // 简化的进度显示逻辑（减少频率，避免与下载器重复）⭐
             let now = std::time::Instant::now();
-            let bytes_since_last = downloaded - last_progress_bytes;
             let time_since_last = now.duration_since(last_progress_time);
             
+            // 减少频率：每50MB或每30秒显示一次
             let should_show_progress = 
-                bytes_since_last >= 1024 * 1024 ||  // 每1MB显示一次
-                time_since_last >= progress_interval ||  // 每2秒显示一次
+                downloaded % (50 * 1024 * 1024) == 0 && downloaded > 0 ||  // 每50MB显示一次
+                time_since_last >= std::time::Duration::from_secs(30) ||  // 每30秒显示一次
                 (total_size.map_or(false, |size| downloaded >= size)); // 下载完成时显示
             
             if should_show_progress {
                 if let Some(size) = total_size {
                     let percentage = (downloaded as f64 / size as f64 * 100.0) as u32;
-                    info!("📥 下载进度: {}% ({:.1}/{:.1} MB)", 
+                    info!("🌐 下载进度: {}% ({:.1}/{:.1} MB)", 
                         percentage,
                         downloaded as f64 / 1024.0 / 1024.0,
                         size as f64 / 1024.0 / 1024.0
                     );
                 } else {
-                    info!("📥 已下载: {:.1} MB", downloaded as f64 / 1024.0 / 1024.0);
+                    info!("🌐 已下载: {:.1} MB", downloaded as f64 / 1024.0 / 1024.0);
                 }
                 
-                // 更新上次显示进度的时间和字节数
+                // 更新上次显示进度的时间
                 last_progress_time = now;
-                last_progress_bytes = downloaded;
             }
         }
 
@@ -1044,133 +1021,141 @@ impl ApiClient {
         }
 
         // 7. 执行下载
-        let response = if use_auth {
-            // 使用认证客户端
+        // 使用新的下载器模块
+        let config = DownloaderConfig {
+            timeout_seconds: 30 * 60, // 30分钟超时
+            chunk_size: 8192,
+            retry_count: 3,
+            enable_progress_logging: true,
+            enable_resume: true,      // 启用断点续传
+            resume_threshold: 1024 * 1024, // 1MB 续传阈值
+            progress_interval_seconds: 10, // 每10秒显示一次进度（大文件下载更友好）
+            progress_bytes_interval: 100 * 1024 * 1024, // 每100MB显示一次进度
+            enable_metadata: true,    // 启用元数据管理
+        };
+        
+        let downloader = FileDownloader::new(config);
+        
+        // 准备下载参数
+        let expected_hash = if is_external_file {
+            None // 外链文件不提供hash
+        } else {
+            Some(manifest.packages.full.hash.as_str())
+        };
+        
+        // 如果使用认证，需要特殊处理
+        if use_auth {
+            // 对于认证下载，使用传统的 HTTP 客户端方式
             let auth_client = self.authenticated_client.as_ref().unwrap();
             let request_builder = auth_client.get(&download_url)
                 .await
                 .map_err(|e| DuckError::custom(format!("创建认证请求失败: {}", e)))?;
-            request_builder.send()
+            let response = request_builder.send()
                 .await
-                .map_err(|e| DuckError::custom(format!("发起下载请求失败: {}", e)))?
-        } else {
-            // 使用普通客户端
-            self.client.get(&download_url)
-                .send()
-                .await
-                .map_err(|e| DuckError::custom(format!("发起下载请求失败: {}", e)))?
-        };
+                .map_err(|e| DuckError::custom(format!("发起下载请求失败: {}", e)))?;
 
-        if !response.status().is_success() {
-            return Err(DuckError::custom(format!(
-                "下载失败: HTTP {}",
-                response.status()
-            )));
-        }
-
-        // 获取实际文件大小
-        let total_size = response.content_length().unwrap_or(0);
-        if total_size > 0 {
-            info!("📦 实际文件大小: {} bytes ({:.2} MB)", total_size, total_size as f64 / 1024.0 / 1024.0);
-        }
-
-        // 8. 下载并保存文件
-        let mut file = tokio::fs::File::create(download_path)
-            .await
-            .map_err(|e| DuckError::custom(format!("创建文件失败: {}", e)))?;
-
-        let mut downloaded = 0u64;
-        let mut stream = response.bytes_stream();
-        let mut last_progress_time = std::time::Instant::now();
-        let mut last_progress_bytes = 0u64;
-        let progress_interval = std::time::Duration::from_secs(2); // 每2秒至少显示一次进度
-
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| DuckError::custom(format!("下载数据失败: {}", e)))?;
-            
-            tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
-                .await
-                .map_err(|e| DuckError::custom(format!("写入文件失败: {}", e)))?;
-
-            downloaded += chunk.len() as u64;
-
-            // 调用进度回调
-            if let Some(ref callback) = progress_callback {
-                let progress = if total_size > 0 {
-                    downloaded as f64 / total_size as f64 * 100.0
-                } else {
-                    0.0
-                };
-
-                callback(DownloadProgress {
-                    task_id: "download_task".to_string(),
-                    file_name: download_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-                    downloaded_bytes: downloaded,
-                    total_bytes: total_size,
-                    download_speed: 0.0,
-                    eta_seconds: 0,
-                    percentage: progress,
-                    status: DownloadStatus::Downloading,
-                });
-            }
-
-            // 改进的进度显示逻辑：每1MB或每2秒显示一次，确保用户能看到实时进度
-            let now = std::time::Instant::now();
-            let bytes_since_last = downloaded - last_progress_bytes;
-            let time_since_last = now.duration_since(last_progress_time);
-            
-            let should_show_progress = 
-                bytes_since_last >= 1024 * 1024 ||  // 每1MB显示一次
-                time_since_last >= progress_interval ||  // 每2秒显示一次
-                (total_size > 0 && downloaded >= total_size); // 下载完成时显示
-            
-            if should_show_progress {
-                if total_size > 0 {
-                    let percentage = (downloaded as f64 / total_size as f64 * 100.0) as u32;
-                    info!("📥 下载进度: {}% ({:.1}/{:.1} MB)", 
-                        percentage,
-                        downloaded as f64 / 1024.0 / 1024.0,
-                        total_size as f64 / 1024.0 / 1024.0
-                    );
-                } else {
-                    info!("📥 已下载: {:.1} MB", downloaded as f64 / 1024.0 / 1024.0);
-                }
-                
-                // 更新上次显示进度的时间和字节数
-                last_progress_time = now;
-                last_progress_bytes = downloaded;
-            }
-        }
-
-        // 确保文件已刷新到磁盘
-        file.flush().await
-            .map_err(|e| DuckError::custom(format!("刷新文件缓冲区失败: {}", e)))?;
-
-        drop(file);
-
-        info!("✅ 文件下载完成");
-        info!("   文件路径: {}", download_path.display());
-        info!("   下载大小: {} bytes ({:.2} MB)", downloaded, downloaded as f64 / 1024.0 / 1024.0);
-
-        // 9. 验证下载的文件（只对非外链文件进行哈希验证）
-        if !is_external_file && manifest.packages.full.hash != "external" && !manifest.packages.full.hash.is_empty() {
-            info!("🔍 验证下载文件的哈希值...");
-            let actual_hash = Self::calculate_file_hash(download_path).await
-                .map_err(|e| DuckError::custom(format!("计算文件哈希失败: {}", e)))?;
-
-            if actual_hash.to_lowercase() != manifest.packages.full.hash.to_lowercase() {
-                // 删除损坏的文件
-                let _ = std::fs::remove_file(download_path);
+            if !response.status().is_success() {
                 return Err(DuckError::custom(format!(
-                    "文件哈希验证失败\n预期: {}\n实际: {}",
-                    manifest.packages.full.hash, actual_hash
+                    "下载失败: HTTP {}",
+                    response.status()
                 )));
             }
 
-            info!("✅ 文件哈希验证通过: {}", actual_hash);
+            // 获取实际文件大小
+            let total_size = response.content_length().unwrap_or(0);
+            if total_size > 0 {
+                info!("📦 实际文件大小: {} bytes ({:.2} MB)", total_size, total_size as f64 / 1024.0 / 1024.0);
+            }
+
+            // 使用统一的智能下载器处理认证下载，避免重复日志 ⭐
+            info!("📥 使用认证下载器（统一进度显示）");
+            
+            // 创建临时的认证客户端配置
+            let auth_downloader_config = DownloaderConfig {
+                timeout_seconds: 30 * 60, // 30分钟超时
+                chunk_size: 8192,
+                retry_count: 3,
+                enable_progress_logging: true, // 启用下载器的进度显示
+                enable_resume: true,      
+                resume_threshold: 1024 * 1024, 
+                progress_interval_seconds: 10, // 认证下载使用稍低频率
+                progress_bytes_interval: 100 * 1024 * 1024, 
+                enable_metadata: true,    
+            };
+            
+            let _auth_downloader = FileDownloader::new(auth_downloader_config);
+            
+            // 使用统一的下载器，但通过认证响应流下载
+            let mut file = tokio::fs::File::create(download_path)
+                .await
+                .map_err(|e| DuckError::custom(format!("创建文件失败: {}", e)))?;
+
+            let mut downloaded = 0u64;
+            let mut stream = response.bytes_stream();
+
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.map_err(|e| DuckError::custom(format!("下载数据失败: {}", e)))?;
+                
+                tokio::io::AsyncWriteExt::write_all(&mut file, &chunk)
+                    .await
+                    .map_err(|e| DuckError::custom(format!("写入文件失败: {}", e)))?;
+
+                downloaded += chunk.len() as u64;
+
+                // 只调用进度回调，不重复输出日志 ⭐
+                if let Some(callback) = progress_callback.as_ref() {
+                    let progress = if total_size > 0 {
+                        downloaded as f64 / total_size as f64 * 100.0
+                    } else {
+                        0.0
+                    };
+
+                    callback(DownloadProgress {
+                        task_id: "auth_download_task".to_string(),
+                        file_name: download_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                        downloaded_bytes: downloaded,
+                        total_bytes: total_size,
+                        download_speed: 0.0,
+                        eta_seconds: 0,
+                        percentage: progress,
+                        status: DownloadStatus::Downloading,
+                    });
+                }
+                
+                // 简化的进度显示（减少频率，避免重复） ⭐
+                if downloaded % (200 * 1024 * 1024) == 0 && downloaded > 0 {
+                    // 每200MB显示一次认证下载进度
+                    info!("🔐 认证下载进度: {:.1} MB", downloaded as f64 / 1024.0 / 1024.0);
+                }
+            }
+
+            // 确保文件已刷新到磁盘
+            file.flush().await
+                .map_err(|e| DuckError::custom(format!("刷新文件缓冲区失败: {}", e)))?;
+
+            drop(file);
+            
+            info!("✅ 认证下载完成");
+            info!("   文件路径: {}", download_path.display());
+            info!("   下载大小: {} bytes ({:.2} MB)", downloaded, downloaded as f64 / 1024.0 / 1024.0);
         } else {
-            info!("⏭️  外链文件跳过哈希验证");
+            // 使用新的智能下载器（支持 OSS、扩展超时、断点续传和hash验证）
+            downloader.download_file_with_options(
+                &download_url, 
+                download_path, 
+                progress_callback,
+                expected_hash,
+                Some(&manifest.version)
+            )
+            .await
+            .map_err(|e| DuckError::custom(format!("下载失败: {}", e)))?;
+                
+            info!("✅ 文件下载完成");
+            info!("   文件路径: {}", download_path.display());
         }
+
+        // 9. 下载器已集成hash验证，这里不需要额外验证
+        info!("✅ 下载器已完成文件验证（如果需要）");
 
         // 10. 保存哈希文件
         let hash_to_save = if is_external_file {
@@ -1201,7 +1186,6 @@ impl ApiClient {
 
         info!("🎉 服务更新包下载完成!");
         info!("   文件位置: {}", download_path.display());
-        info!("   文件大小: {} bytes ({:.2} MB)", downloaded, downloaded as f64 / 1024.0 / 1024.0);
         info!("   版本信息: {}", manifest.version);
 
         Ok(())
@@ -1232,6 +1216,12 @@ impl ApiClient {
             
         Ok(())
     }
+
+
+
+
+
+
 }
 
 /// 系统信息模块

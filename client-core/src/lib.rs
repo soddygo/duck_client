@@ -9,6 +9,7 @@ pub mod container;
 pub mod database;
 pub mod database_manager;
 pub mod db;
+pub mod downloader;
 pub mod error;
 pub mod sql_diff;
 pub mod upgrade;

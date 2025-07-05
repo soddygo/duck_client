@@ -54,18 +54,16 @@ function App() {
     });
   }, [logConfig.maxEntries, logConfig.trimBatchSize]);
 
-  // 智能去重逻辑 - 使用 ref 避免依赖 logs 状态
+  // 轻量级去重逻辑 - 只检查连续重复
   const shouldSkipDuplicate = useCallback((newMessage: string, newType: LogEntry['type']) => {
     const currentLogs = logsRef.current;
     if (currentLogs.length === 0) return false;
     
-    // 只检查最后一条日志，避免连续重复
+    // 只检查最后一条日志，避免连续重复（极端情况的保护）
     const lastLog = currentLogs[currentLogs.length - 1];
-    const isDuplicate = lastLog && 
+    return lastLog && 
       lastLog.message === newMessage && 
       lastLog.type === newType;
-    
-    return isDuplicate;
   }, []);
 
   // 添加日志条目 - 使用循环缓冲区
@@ -126,7 +124,14 @@ function App() {
     }
   }, [logs]);
 
-  // 设置Tauri事件监听器
+  // 设置Tauri事件监听器 - 使用ref避免重复注册
+  const addLogEntryRef = useRef(addLogEntry);
+  
+  // 同步最新的addLogEntry函数到ref
+  useEffect(() => {
+    addLogEntryRef.current = addLogEntry;
+  }, [addLogEntry]);
+
   useEffect(() => {
     let unlistenOutput: any;
     let unlistenError: any;
@@ -138,8 +143,8 @@ function App() {
         unlistenOutput = await listen('cli-output', (event) => {
           const output = event.payload as string;
           if (output.trim()) {
-            // 直接添加整个输出块，避免过度分割
-            addLogEntry('info', output.trim());
+            // 使用ref访问最新的addLogEntry，避免重复注册
+            addLogEntryRef.current('info', output.trim());
           }
         });
 
@@ -147,8 +152,8 @@ function App() {
         unlistenError = await listen('cli-error', (event) => {
           const error = event.payload as string;
           if (error.trim()) {
-            // 直接添加整个错误块，避免过度分割
-            addLogEntry('error', error.trim());
+            // 使用ref访问最新的addLogEntry，避免重复注册
+            addLogEntryRef.current('error', error.trim());
           }
         });
 
@@ -158,16 +163,16 @@ function App() {
           setIsExecuting(false);
           
           if (exitCode === 0) {
-            addLogEntry('success', `命令执行完成 (退出码: ${exitCode})`);
+            addLogEntryRef.current('success', `命令执行完成 (退出码: ${exitCode})`);
           } else {
-            addLogEntry('error', `命令执行失败 (退出码: ${exitCode})`);
+            addLogEntryRef.current('error', `命令执行失败 (退出码: ${exitCode})`);
           }
           
           // 添加分隔线
-          addLogEntry('info', '─'.repeat(50));
+          addLogEntryRef.current('info', '─'.repeat(50));
         });
 
-        console.log('Tauri事件监听器已设置');
+        console.log('Tauri事件监听器已设置（仅一次）');
       } catch (error) {
         console.error('设置事件监听器失败:', error);
       }
@@ -180,8 +185,9 @@ function App() {
       if (unlistenOutput) unlistenOutput();
       if (unlistenError) unlistenError();
       if (unlistenComplete) unlistenComplete();
+      console.log('Tauri事件监听器已清理');
     };
-  }, [addLogEntry]);
+  }, []); // ✅ 空依赖数组，确保只注册一次
 
   // 处理工作目录变化
   const handleDirectoryChange = useCallback(async (directory: string | null, isValid: boolean) => {

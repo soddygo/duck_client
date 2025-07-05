@@ -64,6 +64,10 @@ tar = { workspace = true }
 # 哈希计算
 sha2 = { workspace = true }
 
+# OSS 依赖
+# aliyun-oss-rust-sdk = { version = "0.2.1", features = ["blocking"] }
+# url = "2.5.0"
+
 # Optional dependency
 indicatif = { workspace = true, optional = true }
 

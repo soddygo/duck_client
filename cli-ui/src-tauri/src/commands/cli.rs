@@ -144,16 +144,31 @@ pub async fn execute_duck_cli_smart(
 ) -> Result<CommandResult, String> {
     // 优先使用Sidecar方式
     match execute_duck_cli_sidecar(app.clone(), args.clone(), working_dir.clone()).await {
-        Ok(result) => Ok(result),
+        Ok(result) => {
+            // Sidecar成功，直接返回结果（已发送事件）
+            Ok(result)
+        },
         Err(sidecar_error) => {
             println!("Sidecar执行失败，尝试系统命令: {sidecar_error}");
 
+            // 发送降级通知
+            let _ = app.emit("cli-output", "⚠️ Sidecar方式失败，使用系统命令...");
+
             // 降级到系统命令
             match execute_duck_cli_system(app.clone(), args, working_dir).await {
-                Ok(result) => Ok(result),
-                Err(system_error) => Err(format!(
-                    "所有CLI执行方式都失败 - Sidecar: {sidecar_error} | System: {system_error}"
-                )),
+                Ok(result) => {
+                    // System成功，返回结果（已发送事件）
+                    Ok(result)
+                },
+                Err(system_error) => {
+                    // 发送失败通知
+                    let _ = app.emit("cli-error", "❌ 所有CLI执行方式都失败");
+                    let _ = app.emit("cli-complete", -1);
+                    
+                    Err(format!(
+                        "所有CLI执行方式都失败 - Sidecar: {sidecar_error} | System: {system_error}"
+                    ))
+                }
             }
         }
     }

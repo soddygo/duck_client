@@ -139,9 +139,10 @@ jobs:
       - name: Install Linux dependencies
         if: matrix.platform.os == 'ubuntu-latest'
         run: |
+          echo "=== 更新 apt 源 ==="
           sudo apt-get update
           
-          # 安装基础开发工具
+          echo "=== 安装基础开发工具 ==="
           sudo apt-get install -y \
             curl \
             wget \
@@ -151,7 +152,7 @@ jobs:
             m4 \
             pkg-config
           
-          # 安装 GLib 和相关系统库
+          echo "=== 安装 GLib 和相关系统库 ==="
           # 注意：gobject-2.0 和 gio-2.0 功能都包含在 libglib2.0-dev 中
           sudo apt-get install -y \
             libglib2.0-dev \
@@ -170,6 +171,7 @@ jobs:
           
           # 为交叉编译设置环境变量
           if [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+            echo "=== 设置 ARM64 交叉编译环境 ==="
             # 安装 ARM64 交叉编译工具和库
             # 注意：gobject-2.0 和 gio-2.0 功能都包含在 libglib2.0-dev 中
             sudo apt-get install -y \

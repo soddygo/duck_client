@@ -43,9 +43,10 @@ jobs:
 
       - name: Install Linux dependencies for Rust check
         run: |
+          echo "=== 更新 apt 源 ==="
           sudo apt-get update
           
-          # 安装基础开发工具
+          echo "=== 安装基础开发工具 ==="
           sudo apt-get install -y \
             curl \
             wget \
@@ -55,7 +56,7 @@ jobs:
             m4 \
             pkg-config
           
-          # 安装 GLib 和相关系统库
+          echo "=== 安装 GLib 和相关系统库 ==="
           # 注意：gobject-2.0 和 gio-2.0 功能都包含在 libglib2.0-dev 中
           sudo apt-get install -y \
             libglib2.0-dev \
@@ -66,11 +67,19 @@ jobs:
             glib-networking-common \
             glib-networking-services
           
-          # 安装其他必要的系统依赖
+          echo "=== 安装其他必要的系统依赖 ==="
+          # 分别安装以便更好地调试错误
+          sudo apt-get install -y libssl-dev
+          sudo apt-get install -y libgtk-3-dev
+          
+          # 尝试安装 WebKit，如果失败则使用备用方案
+          echo "=== 尝试安装 WebKit 开发包 ==="
+          if ! sudo apt-get install -y libwebkit2gtk-4.0-dev; then
+            echo "⚠️  libwebkit2gtk-4.0-dev 安装失败，尝试备用包名"
+            sudo apt-get install -y libwebkit2gtk-4.1-dev || echo "❌ WebKit 安装失败，继续..."
+          fi
+          
           sudo apt-get install -y \
-            libssl-dev \
-            libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
@@ -235,15 +244,27 @@ jobs:
           ls -la /usr/lib/x86_64-linux-gnu/pkgconfig/ | grep -E "(glib|gobject|gio)" | head -5 || echo "❌ x86_64 pc files not found"
           
           # 安装完整的 Tauri 依赖
+          echo "=== 安装核心 Tauri 依赖 ==="
           sudo apt-get install -y \
             libssl-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
-            libwebkit2gtk-4.0-dev \
-            libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
-            patchelf \
+            patchelf
+          
+          echo "=== 尝试安装 WebKit 开发包 ==="
+          # 尝试安装 WebKit 依赖，支持多个版本的备用方案
+          if sudo apt-get install -y libwebkit2gtk-4.0-dev; then
+            echo "✅ libwebkit2gtk-4.0-dev 安装成功"
+          elif sudo apt-get install -y libwebkit2gtk-4.1-dev; then
+            echo "✅ libwebkit2gtk-4.1-dev 安装成功 (备用方案)"
+          else
+            echo "❌ WebKit 开发包安装失败，尝试继续..."
+          fi
+          
+          echo "=== 安装其他图形和媒体库 ==="
+          sudo apt-get install -y \
             libxdo-dev \
             libcairo2-dev \
             libpango1.0-dev \

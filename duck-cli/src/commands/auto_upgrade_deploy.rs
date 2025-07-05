@@ -249,7 +249,7 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
     // 创建升级任务记录
     let task = client_core::config_manager::AutoUpgradeTask {
         task_id: uuid::Uuid::new_v4().to_string(),
-        task_name: format!("delayed_upgrade_{}", time),
+        task_name: format!("delayed_upgrade_{time}"),
         schedule_time: scheduled_at,
         upgrade_type: "delayed".to_string(),
         target_version: None, // 最新版本
@@ -260,7 +260,7 @@ pub async fn schedule_delayed_deploy(app: &mut CliApp, time: u32, unit: &str) ->
         updated_at: chrono::Utc::now(),
     };
 
-    let _task_id = {
+    {
         let config_manager =
             client_core::config_manager::ConfigManager::new_with_database(app.database.clone());
         config_manager.create_auto_upgrade_task(&task).await?

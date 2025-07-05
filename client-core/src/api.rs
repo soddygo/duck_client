@@ -1089,7 +1089,7 @@ impl ApiClient {
                     self.build_request(url)
                         .send()
                         .await
-                        .map_err(|e| DuckError::Api(format!("开始下载失败: {}", e)))?
+                        .map_err(|e| DuckError::Api(format!("开始下载失败: {e}")))?
                 }
             }
         } else {
@@ -1098,7 +1098,7 @@ impl ApiClient {
             self.build_request(url)
                 .send()
                 .await
-                .map_err(|e| DuckError::Api(format!("开始下载失败: {}", e)))?
+                .map_err(|e| DuckError::Api(format!("开始下载失败: {e}")))?
         };
 
         // 检查GET请求状态
@@ -1128,12 +1128,12 @@ impl ApiClient {
         if let Some(parent) = target_path.parent() {
             tokio::fs::create_dir_all(parent)
                 .await
-                .map_err(|e| DuckError::Custom(format!("创建目录失败: {}", e)))?;
+                .map_err(|e| DuckError::Custom(format!("创建目录失败: {e}")))?;
         }
 
         let mut file = tokio::fs::File::create(target_path)
             .await
-            .map_err(|e| DuckError::Custom(format!("创建文件失败: {}", e)))?;
+            .map_err(|e| DuckError::Custom(format!("创建文件失败: {e}")))?;
         let mut downloaded = 0u64;
         let start_time = std::time::Instant::now();
         let mut last_update = start_time;
@@ -1144,11 +1144,11 @@ impl ApiClient {
         while let Some(chunk) = response
             .chunk()
             .await
-            .map_err(|e| DuckError::Api(format!("下载数据失败: {}", e)))?
+            .map_err(|e| DuckError::Api(format!("下载数据失败: {e}")))?
         {
             file.write_all(&chunk)
                 .await
-                .map_err(|e| DuckError::Custom(format!("写入文件失败: {}", e)))?;
+                .map_err(|e| DuckError::Custom(format!("写入文件失败: {e}")))?;
             downloaded += chunk.len() as u64;
 
             let now = std::time::Instant::now();
@@ -1184,7 +1184,7 @@ impl ApiClient {
         // 确保文件被刷新到磁盘
         file.flush()
             .await
-            .map_err(|e| DuckError::Custom(format!("刷新文件失败: {}", e)))?;
+            .map_err(|e| DuckError::Custom(format!("刷新文件失败: {e}")))?;
 
         info!("📊 下载完成统计:");
         info!(

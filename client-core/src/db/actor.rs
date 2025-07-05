@@ -4,7 +4,7 @@ use duckdb::{Connection, params};
 use serde_json;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use super::messages::{AppStateRecord, DbMessage, DownloadTaskRecord, UserActionRecord};
 use super::models::{BackupRecord, ScheduledTask};
@@ -494,7 +494,7 @@ impl DuckDbActor {
         downloaded_size: Option<i64>,
         error_message: Option<&str>,
     ) -> Result<()> {
-        let sql = if let Some(size) = downloaded_size {
+        if let Some(size) = downloaded_size {
             if let Some(error) = error_message {
                 self.connection.execute(
                     "UPDATE download_tasks SET status = ?, downloaded_size = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -695,8 +695,7 @@ impl DuckDbActor {
             format!(
                 "SELECT id, action_type, action_description, action_params, status, result_message, 
                  started_at, completed_at, duration_seconds, client_version, platform_info 
-                 FROM user_actions ORDER BY started_at DESC LIMIT {}",
-                limit
+                 FROM user_actions ORDER BY started_at DESC LIMIT {limit}"
             )
         } else {
             "SELECT id, action_type, action_description, action_params, status, result_message, 

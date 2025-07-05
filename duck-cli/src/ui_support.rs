@@ -105,13 +105,11 @@ where
     let callback = Arc::new(progress_callback);
 
     // 初始化步骤
-    let steps = vec![
-        ("downloading", "正在准备初始化环境..."),
+    let steps = [("downloading", "正在准备初始化环境..."),
         ("extracting", "正在创建配置文件和目录结构..."),
         ("loading", "正在初始化DuckDB数据库..."),
         ("starting", "正在注册客户端..."),
-        ("configuring", "正在完成初始化设置..."),
-    ];
+        ("configuring", "正在完成初始化设置...")];
 
     let total_steps = steps.len();
 
@@ -208,7 +206,7 @@ where
     let callback = Arc::new(progress_callback);
 
     // 解析文件名
-    let file_name = url.split('/').last().unwrap_or("unknown_file");
+    let file_name = url.split('/').next_back().unwrap_or("unknown_file");
     let task_id = format!("download_{}", chrono::Utc::now().timestamp());
 
     // 创建HTTP客户端
@@ -348,7 +346,7 @@ fn get_memory_info() -> (u64, u64) {
         use std::process::Command;
 
         let output = Command::new("sysctl")
-            .args(&["hw.memsize"])
+            .args(["hw.memsize"])
             .output()
             .unwrap_or_else(|_| std::process::Output {
                 stdout: b"hw.memsize: 8589934592".to_vec(),
@@ -416,7 +414,7 @@ fn get_docker_version() -> Option<String> {
     use std::process::Command;
 
     Command::new("docker")
-        .args(&["--version"])
+        .args(["--version"])
         .output()
         .ok()
         .and_then(|output| {
@@ -435,7 +433,7 @@ fn get_disk_space() -> DiskSpace {
         use std::process::Command;
 
         let output = Command::new("df")
-            .args(&["-h", "."])
+            .args(["-h", "."])
             .output()
             .unwrap_or_else(|_| {
                 std::process::Output {
@@ -499,7 +497,7 @@ async fn get_all_services() -> Vec<ServiceStatus> {
 
     // 模拟获取Docker容器状态
     let output = Command::new("docker")
-        .args(&[
+        .args([
             "ps",
             "--format",
             "table {{.Names}}\t{{.Status}}\t{{.Ports}}",

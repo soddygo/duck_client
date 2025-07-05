@@ -35,7 +35,7 @@ pub async fn select_directory(app: AppHandle) -> Result<Option<String>, String> 
         Some(path) => {
             // FilePath 类型需要转换为字符串
             let path_str = path.to_string();
-            println!("用户选择的目录: {}", path_str);
+            println!("用户选择的目录: {path_str}");
             Ok(Some(path_str))
         }
         None => {
@@ -142,20 +142,20 @@ pub async fn set_working_directory(app: AppHandle, path: String) -> Result<(), S
     let config_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("获取应用数据目录失败: {}", e))?;
+        .map_err(|e| format!("获取应用数据目录失败: {e}"))?;
 
     // 确保配置目录存在
     if !config_dir.exists() {
-        fs::create_dir_all(&config_dir).map_err(|e| format!("创建配置目录失败: {}", e))?;
+        fs::create_dir_all(&config_dir).map_err(|e| format!("创建配置目录失败: {e}"))?;
     }
 
     let config_file = config_dir.join("working_directory.json");
     let config_json =
-        serde_json::to_string_pretty(&config).map_err(|e| format!("序列化配置失败: {}", e))?;
+        serde_json::to_string_pretty(&config).map_err(|e| format!("序列化配置失败: {e}"))?;
 
-    fs::write(&config_file, &config_json).map_err(|e| format!("保存配置文件失败: {}", e))?;
+    fs::write(&config_file, &config_json).map_err(|e| format!("保存配置文件失败: {e}"))?;
 
-    println!("工作目录已设置为: {}", path);
+    println!("工作目录已设置为: {path}");
     Ok(())
 }
 
@@ -165,7 +165,7 @@ pub async fn get_working_directory(app: AppHandle) -> Result<Option<String>, Str
     let config_dir = app
         .path()
         .app_data_dir()
-        .map_err(|e| format!("获取应用数据目录失败: {}", e))?;
+        .map_err(|e| format!("获取应用数据目录失败: {e}"))?;
 
     let config_file = config_dir.join("working_directory.json");
 
@@ -174,10 +174,10 @@ pub async fn get_working_directory(app: AppHandle) -> Result<Option<String>, Str
     }
 
     let config_content =
-        fs::read_to_string(&config_file).map_err(|e| format!("读取配置文件失败: {}", e))?;
+        fs::read_to_string(&config_file).map_err(|e| format!("读取配置文件失败: {e}"))?;
 
     let config: WorkingDirectoryConfig =
-        serde_json::from_str(&config_content).map_err(|e| format!("解析配置文件失败: {}", e))?;
+        serde_json::from_str(&config_content).map_err(|e| format!("解析配置文件失败: {e}"))?;
 
     // 验证保存的目录是否仍然有效
     let validation = validate_working_directory(app.clone(), config.path.clone()).await?;

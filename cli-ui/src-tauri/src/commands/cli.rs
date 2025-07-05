@@ -27,7 +27,7 @@ pub async fn execute_duck_cli_sidecar(
 
     let mut cmd = shell
         .sidecar("duck-cli")
-        .map_err(|e| format!("创建sidecar命令失败: {}", e))?;
+        .map_err(|e| format!("创建sidecar命令失败: {e}"))?;
 
     if !args.is_empty() {
         cmd = cmd.args(&args);
@@ -40,7 +40,7 @@ pub async fn execute_duck_cli_sidecar(
     // 设置GUI模式环境变量，禁用duck-cli的tracing日志输出
     cmd = cmd.env("DUCK_GUI_MODE", "1");
 
-    let (mut rx, mut _child) = cmd.spawn().map_err(|e| format!("执行命令失败: {}", e))?;
+    let (mut rx, mut _child) = cmd.spawn().map_err(|e| format!("执行命令失败: {e}"))?;
 
     let mut stdout = String::new();
     let mut stderr = String::new();
@@ -102,7 +102,7 @@ pub async fn execute_duck_cli_system(
     let output = cmd
         .output()
         .await
-        .map_err(|e| format!("执行系统命令失败: {}", e))?;
+        .map_err(|e| format!("执行系统命令失败: {e}"))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -136,14 +136,13 @@ pub async fn execute_duck_cli_smart(
     match execute_duck_cli_sidecar(app.clone(), args.clone(), working_dir.clone()).await {
         Ok(result) => Ok(result),
         Err(sidecar_error) => {
-            println!("Sidecar执行失败，尝试系统命令: {}", sidecar_error);
+            println!("Sidecar执行失败，尝试系统命令: {sidecar_error}");
 
             // 降级到系统命令
             match execute_duck_cli_system(app.clone(), args, working_dir).await {
                 Ok(result) => Ok(result),
                 Err(system_error) => Err(format!(
-                    "所有CLI执行方式都失败 - Sidecar: {} | System: {}",
-                    sidecar_error, system_error
+                    "所有CLI执行方式都失败 - Sidecar: {sidecar_error} | System: {system_error}"
                 )),
             }
         }
@@ -177,7 +176,7 @@ pub async fn get_cli_version(app: AppHandle) -> Result<CliVersion, String> {
             }
         }
         Err(error) => {
-            println!("获取CLI版本失败: {}", error);
+            println!("获取CLI版本失败: {error}");
             Ok(CliVersion {
                 version: "unavailable".to_string(),
                 available: false,

@@ -83,7 +83,7 @@ impl DatabaseManager {
             let conn = memory_conn.lock().await;
             Ok(conn.try_clone()?)
         } else {
-            Err(crate::DuckError::Custom("数据库配置无效".to_string()).into())
+            Err(crate::DuckError::Custom("数据库配置无效".to_string()))
         }
     }
 
@@ -143,7 +143,7 @@ impl DatabaseManager {
             if let Some(ref memory_conn) = self.config.memory_connection {
                 // 内存数据库：使用共享连接
                 let conn = memory_conn.lock().await;
-                match operation(&*conn) {
+                match operation(&conn) {
                     Ok(result) => {
                         debug!("内存数据库写操作成功");
                         return Ok(result);
@@ -289,9 +289,9 @@ impl DatabaseManager {
         let mut in_string = false;
         let mut in_json = false;
         let mut brace_count = 0;
-        let mut chars = sql.chars().peekable();
+        let chars = sql.chars().peekable();
 
-        while let Some(ch) = chars.next() {
+        for ch in chars {
             match ch {
                 '\'' | '"' => {
                     current_statement.push(ch);
@@ -617,7 +617,7 @@ mod tests {
                     .write_with_retry(|conn| {
                         conn.execute(
                             "INSERT INTO concurrent_test (id, value) VALUES (?, ?)",
-                            [&i.to_string(), &format!("value_{}", i)],
+                            [&i.to_string(), &format!("value_{i}")],
                         )?;
                         Ok(())
                     })
@@ -659,32 +659,32 @@ mod tests {
         println!("=== 初始化前 ===");
         // 检查表是否存在
         let tables = manager.debug_list_tables().await.unwrap();
-        println!("初始化前的表: {:?}", tables);
+        println!("初始化前的表: {tables:?}");
 
         println!("=== 开始初始化 ===");
         // 现在手动初始化
         let init_result = manager.initialize_schema().await;
-        println!("初始化结果: {:?}", init_result);
+        println!("初始化结果: {init_result:?}");
 
         if init_result.is_ok() {
             println!("=== 初始化成功，检查表 ===");
             let tables_after = manager.debug_list_tables().await.unwrap();
-            println!("初始化后的表: {:?}", tables_after);
+            println!("初始化后的表: {tables_after:?}");
 
             // 检查app_config表是否存在
             let app_config_exists = manager.debug_table_exists("app_config").await.unwrap();
-            println!("app_config表存在: {}", app_config_exists);
+            println!("app_config表存在: {app_config_exists}");
         } else {
             println!("=== 初始化失败，尝试手动创建简单表 ===");
             let result = manager.debug_execute_sql(
                 "CREATE TABLE app_config (config_key VARCHAR PRIMARY KEY, config_value JSON NOT NULL)"
             ).await;
-            println!("手动创建app_config表的结果: {:?}", result);
+            println!("手动创建app_config表的结果: {result:?}");
 
             if result.is_ok() {
                 let app_config_exists_after =
                     manager.debug_table_exists("app_config").await.unwrap();
-                println!("创建后app_config表存在: {}", app_config_exists_after);
+                println!("创建后app_config表存在: {app_config_exists_after}");
             }
         }
     }
@@ -782,7 +782,7 @@ mod tests {
 
             if let Err(e) = result {
                 println!("❌ 语句 {} 执行失败: {}", i + 1, e);
-                println!("失败的语句: {}", trimmed);
+                println!("失败的语句: {trimmed}");
                 break;
             } else {
                 println!("✅ 语句 {} 执行成功", i + 1);

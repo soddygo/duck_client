@@ -217,7 +217,7 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
     info!(
         "   🗂️  解压策略: {}",
         if has_docker_root {
-            format!("移除顶层目录 '{}'", docker_root_prefix)
+            format!("移除顶层目录 '{docker_root_prefix}'")
         } else {
             "直接解压到docker目录".to_string()
         }
@@ -252,7 +252,7 @@ pub async fn extract_docker_service(zip_path: &std::path::Path) -> Result<()> {
         let target_path = if has_docker_root && file_name.starts_with(&docker_root_prefix) {
             // 移除顶层目录前缀
             let relative_path = file_name
-                .strip_prefix(&format!("{}/", docker_root_prefix))
+                .strip_prefix(&format!("{docker_root_prefix}/"))
                 .unwrap_or(&file_name);
             output_dir.join(relative_path)
         } else {

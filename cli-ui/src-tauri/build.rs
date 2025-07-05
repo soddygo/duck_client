@@ -30,8 +30,7 @@ fn ensure_duck_cli_binary() {
         binary_path.display()
     );
     println!(
-        "cargo:warning=Auto-building duck-cli for target: {}",
-        target_triple
+        "cargo:warning=Auto-building duck-cli for target: {target_triple}"
     );
 
     // 自动构建 duck-cli
@@ -70,20 +69,19 @@ fn get_target_triple() -> String {
 
 fn get_binary_name(target_triple: &str) -> String {
     if target_triple.contains("windows") {
-        format!("duck-cli-{}.exe", target_triple)
+        format!("duck-cli-{target_triple}.exe")
     } else {
-        format!("duck-cli-{}", target_triple)
+        format!("duck-cli-{target_triple}")
     }
 }
 
 fn build_duck_cli(target_triple: &str) -> bool {
     println!(
-        "cargo:warning=Building duck-cli with: cargo build --release -p duck-cli --target {}",
-        target_triple
+        "cargo:warning=Building duck-cli with: cargo build --release -p duck-cli --target {target_triple}"
     );
 
     let mut cmd = Command::new("cargo");
-    cmd.args(&[
+    cmd.args([
         "build",
         "--release",
         "-p",
@@ -111,7 +109,7 @@ fn build_duck_cli(target_triple: &str) -> bool {
             false
         }
         Err(e) => {
-            println!("cargo:warning=Failed to execute cargo build: {}", e);
+            println!("cargo:warning=Failed to execute cargo build: {e}");
             false
         }
     }
@@ -143,7 +141,7 @@ fn copy_binary_to_sidecar_location(target_triple: &str, binary_name: &str) {
 
     // 确保目标目录存在
     if let Err(e) = std::fs::create_dir_all(dest_dir) {
-        println!("cargo:warning=Failed to create binaries directory: {}", e);
+        println!("cargo:warning=Failed to create binaries directory: {e}");
         return;
     }
 
@@ -157,7 +155,7 @@ fn copy_binary_to_sidecar_location(target_triple: &str, binary_name: &str) {
             );
         }
         Err(e) => {
-            println!("cargo:warning=Failed to copy binary: {}", e);
+            println!("cargo:warning=Failed to copy binary: {e}");
             println!("cargo:warning=Source: {}", source_path.display());
             println!("cargo:warning=Dest: {}", dest_path.display());
         }

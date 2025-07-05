@@ -2,7 +2,7 @@ use crate::DatabaseManager;
 use crate::database::Database;
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -184,14 +184,13 @@ impl ConfigManager {
 
                         // 解析JSON值
                         let value: Value = serde_json::from_str(&value_str).map_err(|e| {
-                            duckdb::Error::InvalidParameterName(format!("JSON解析失败: {}", e))
+                            duckdb::Error::InvalidParameterName(format!("JSON解析失败: {e}"))
                         })?;
 
                         let default_value = if let Some(default_str) = default_str {
                             Some(serde_json::from_str(&default_str).map_err(|e| {
                                 duckdb::Error::InvalidParameterName(format!(
-                                    "默认值JSON解析失败: {}",
-                                    e
+                                    "默认值JSON解析失败: {e}"
                                 ))
                             })?)
                         } else {
@@ -200,8 +199,7 @@ impl ConfigManager {
 
                         let config_type = ConfigType::from_str(&type_str).ok_or_else(|| {
                             duckdb::Error::InvalidParameterName(format!(
-                                "无效的配置类型: {}",
-                                type_str
+                                "无效的配置类型: {type_str}"
                             ))
                         })?;
 
@@ -412,16 +410,16 @@ impl ConfigManager {
             let cache = self.cache.read().await;
             if let Some(config) = cache.get(key) {
                 if !config.is_user_editable {
-                    return Err(crate::DuckError::Custom(format!("配置项 {} 不可编辑", key)).into());
+                    return Err(crate::DuckError::Custom(format!("配置项 {key} 不可编辑")));
                 }
                 config.is_user_editable
             } else {
-                return Err(crate::DuckError::Custom(format!("配置项 {} 不存在", key)).into());
+                return Err(crate::DuckError::Custom(format!("配置项 {key} 不存在")));
             }
         };
 
         if !is_editable {
-            return Err(crate::DuckError::Custom(format!("配置项 {} 不可编辑", key)).into());
+            return Err(crate::DuckError::Custom(format!("配置项 {key} 不可编辑")));
         }
 
         // 验证类型
@@ -433,10 +431,8 @@ impl ConfigManager {
         if let Some(expected_type) = expected_type {
             if !self.validate_value_type(&value, &expected_type) {
                 return Err(crate::DuckError::Custom(format!(
-                    "配置项 {} 的值类型不匹配，期望 {:?}，实际 {:?}",
-                    key, expected_type, value
-                ))
-                .into());
+                    "配置项 {key} 的值类型不匹配，期望 {expected_type:?}，实际 {value:?}"
+                )));
             }
         }
 
@@ -473,8 +469,7 @@ impl ConfigManager {
                     return Err(crate::DuckError::Custom(format!(
                         "配置项 {} 不可编辑",
                         update.key
-                    ))
-                    .into());
+                    )));
                 }
 
                 // 验证类型
@@ -483,12 +478,11 @@ impl ConfigManager {
                     return Err(crate::DuckError::Custom(format!(
                         "配置项 {} 的值类型不匹配",
                         update.key
-                    ))
-                    .into());
+                    )));
                 }
             } else {
                 return Err(
-                    crate::DuckError::Custom(format!("配置项 {} 不存在", update.key)).into(),
+                    crate::DuckError::Custom(format!("配置项 {} 不存在", update.key)),
                 );
             }
         }
@@ -497,7 +491,7 @@ impl ConfigManager {
         self.db.batch_write_with_retry(|conn| {
             for update in &updates {
                 let value_json = serde_json::to_string(&update.value)
-                    .map_err(|e| duckdb::Error::InvalidParameterName(format!("JSON序列化失败: {}", e)))?;
+                    .map_err(|e| duckdb::Error::InvalidParameterName(format!("JSON序列化失败: {e}")))?;
 
                 conn.execute(
                     "UPDATE app_config SET config_value = ?, updated_at = CURRENT_TIMESTAMP WHERE config_key = ?",
@@ -527,18 +521,18 @@ impl ConfigManager {
             let cache = self.cache.read().await;
             if let Some(config) = cache.get(key) {
                 if !config.is_user_editable {
-                    return Err(crate::DuckError::Custom(format!("配置项 {} 不可编辑", key)).into());
+                    return Err(crate::DuckError::Custom(format!("配置项 {key} 不可编辑")));
                 }
                 config.default_value.clone()
             } else {
-                return Err(crate::DuckError::Custom(format!("配置项 {} 不存在", key)).into());
+                return Err(crate::DuckError::Custom(format!("配置项 {key} 不存在")));
             }
         };
 
         if let Some(default_value) = default_value {
             self.update_config(key, default_value).await
         } else {
-            Err(crate::DuckError::Custom(format!("配置项 {} 没有默认值", key)).into())
+            Err(crate::DuckError::Custom(format!("配置项 {key} 没有默认值")))
         }
     }
 
@@ -660,7 +654,7 @@ impl ConfigManager {
 task.target_version.as_deref().unwrap_or(""),
                     &task.status,
                     &task.progress.map(|p| p.to_string()).unwrap_or_default(),
-                    &task.error_message.as_deref().unwrap_or(""),
+                    task.error_message.as_deref().unwrap_or(""),
                     &task.created_at.to_rfc3339(),
                     &task.updated_at.to_rfc3339(),
                 ]
@@ -832,7 +826,7 @@ pub struct AutoBackupConfig {
 mod tests {
     use super::*;
     use crate::DatabaseManager;
-    use serde_json::json;
+    
 
     async fn create_test_config_manager() -> ConfigManager {
         let db = DatabaseManager::new_memory().await.unwrap();
@@ -876,7 +870,7 @@ mod tests {
         // 获取首次运行配置
         let first_run = manager.get_bool("app.first_run").await.unwrap();
         assert!(first_run.is_some());
-        assert_eq!(first_run.unwrap(), true);
+        assert!(first_run.unwrap());
     }
 
     #[tokio::test]

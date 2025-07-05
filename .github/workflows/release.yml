@@ -136,6 +136,61 @@ jobs:
         with:
           targets: ${{ matrix.platform.target }}
 
+      - name: Install Linux dependencies
+        if: matrix.platform.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          
+          # 安装基础开发工具
+          sudo apt-get install -y \
+            curl \
+            wget \
+            file \
+            build-essential \
+            libc6-dev \
+            m4 \
+            pkg-config
+          
+          # 安装 GLib 和相关系统库
+          sudo apt-get install -y \
+            libglib2.0-dev \
+            libgobject-2.0-dev \
+            libgio-2.0-dev \
+            libglib2.0-0 \
+            libglib2.0-data \
+            libglib2.0-bin \
+            glib-networking \
+            glib-networking-common \
+            glib-networking-services
+          
+          # 强制更新 pkg-config 缓存
+          sudo ldconfig
+          
+          # 设置 PKG_CONFIG_PATH 环境变量
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          
+          # 为交叉编译设置环境变量
+          if [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+            # 安装 ARM64 交叉编译工具和库
+            sudo apt-get install -y \
+              gcc-aarch64-linux-gnu \
+              libglib2.0-dev:arm64 \
+              libgobject-2.0-dev:arm64 \
+              libgio-2.0-dev:arm64
+            
+            # 设置交叉编译环境变量
+            echo "PKG_CONFIG_PATH_aarch64_unknown_linux_gnu=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+            echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+            echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
+            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          fi
+          
+          # 验证 GLib 安装
+          echo "=== GLib 验证 ==="
+          pkg-config --exists glib-2.0 && echo "✅ glib-2.0 found" || echo "❌ glib-2.0 not found"
+          pkg-config --exists gobject-2.0 && echo "✅ gobject-2.0 found" || echo "❌ gobject-2.0 not found"
+          pkg-config --exists gio-2.0 && echo "✅ gio-2.0 found" || echo "❌ gio-2.0 not found"
+
       - name: Install cross (for cross compilation)
         if: matrix.platform.cross
         run: |
@@ -154,6 +209,28 @@ jobs:
 
       - name: Build binary
         run: |
+          # 设置环境变量 (针对 Linux 构建)
+          if [[ "${{ matrix.platform.os }}" == "ubuntu-latest" ]]; then
+            if [[ "${{ matrix.platform.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+              export PKG_CONFIG_PATH="/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig:/usr/lib/pkgconfig:$PKG_CONFIG_PATH"
+            elif [[ "${{ matrix.platform.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+              export PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig:$PKG_CONFIG_PATH"
+              export PKG_CONFIG_ALLOW_CROSS=1
+              export PKG_CONFIG_SYSROOT_DIR=/
+            fi
+            
+            # 添加通用的 pkg-config 设置
+            export PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1
+            export PKG_CONFIG_ALLOW_SYSTEM_LIBS=1
+            
+            # 验证 glib 是否可用
+            echo "=== 构建前验证 glib ==="
+            pkg-config --exists glib-2.0 && echo "✅ glib-2.0 available" || echo "❌ glib-2.0 not found"
+            pkg-config --cflags glib-2.0 || echo "❌ glib-2.0 cflags failed"
+            pkg-config --libs glib-2.0 || echo "❌ glib-2.0 libs failed"
+          fi
+          
+          # 构建二进制文件
           if [ "${{ matrix.platform.cross }}" = "true" ]; then
             echo "Cross compiling for ${{ matrix.platform.target }}"
             cross build --release --target ${{ matrix.platform.target }} -p duck-cli
